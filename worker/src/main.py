@@ -69,16 +69,19 @@ def request_job(controller_url: str, timeout: int = 30) -> Optional[dict]:
         Job configuration dictionary, or None if no jobs available or error occurred
     """
     try:
-        # First test connection
-        test_response = requests.get(
-            f"{controller_url}/api/worker/test",
-            timeout=10
-        )
-        if test_response.status_code == 200:
-            test_data = test_response.json()
-            print(f"✓ Connection test successful: {test_data.get('message', 'OK')}")
-        else:
-            print(f"⚠ Connection test returned status {test_response.status_code}")
+        # First test connection (optional, don't fail if it doesn't work)
+        try:
+            test_response = requests.get(
+                f"{controller_url}/api/worker/test",
+                timeout=5
+            )
+            if test_response.status_code == 200:
+                test_data = test_response.json()
+                print(f"✓ Connection test successful: {test_data.get('message', 'OK')}")
+            else:
+                print(f"⚠ Connection test returned status {test_response.status_code} (continuing anyway)")
+        except Exception as test_error:
+            print(f"⚠ Connection test failed: {test_error} (continuing anyway)")
         
         # Now request job
         response = requests.post(

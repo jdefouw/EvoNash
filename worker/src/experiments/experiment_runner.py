@@ -249,11 +249,33 @@ class ExperimentRunner:
                     print(f"Warning: Stop check callback failed: {e}")
                     # Continue execution even if stop check fails
             
-            if (gen + 1) % 100 == 0:
-                print(f"Generation {gen + 1}/{self.config.max_generations}: "
-                      f"Avg Elo: {stats['avg_elo']:.2f}, "
-                      f"Peak Elo: {stats['peak_elo']:.2f}, "
-                      f"Entropy: {stats['policy_entropy']:.4f}")
+            # Print statistics every generation (with more detail every 10th)
+            if (gen + 1) % 10 == 0 or gen == 0:
+                print(f"\n{'='*80}")
+                print(f"Generation {gen + 1}/{self.config.max_generations}")
+                print(f"{'='*80}")
+                print(f"  Elo Ratings:")
+                print(f"    Average: {stats.get('avg_elo', 0):.2f}")
+                print(f"    Peak:    {stats.get('peak_elo', 0):.2f}")
+                print(f"    Min:     {stats.get('min_elo', 0):.2f}")
+                print(f"    Std Dev: {stats.get('std_elo', 0):.2f}")
+                print(f"  Fitness:")
+                print(f"    Average: {stats.get('avg_fitness', 0):.2f}")
+                print(f"    Min:     {stats.get('min_fitness', 0):.2f}")
+                print(f"    Max:     {stats.get('max_fitness', 0):.2f}")
+                print(f"  Policy Metrics:")
+                print(f"    Entropy:        {stats.get('policy_entropy', 0):.4f}")
+                print(f"    Entropy Var:    {stats.get('entropy_variance', 0):.4f}")
+                print(f"    Diversity:      {stats.get('population_diversity', 0):.4f}")
+                print(f"  Evolution:")
+                print(f"    Mutation Rate:  {stats.get('mutation_rate', 0):.4f}")
+                print(f"{'='*80}\n")
+            elif (gen + 1) % 1 == 0:  # Every generation, show brief stats
+                print(f"Gen {gen + 1:5d}/{self.config.max_generations} | "
+                      f"Avg Elo: {stats.get('avg_elo', 0):7.2f} | "
+                      f"Peak: {stats.get('peak_elo', 0):7.2f} | "
+                      f"Entropy: {stats.get('policy_entropy', 0):.4f} | "
+                      f"Div: {stats.get('population_diversity', 0):.4f}")
         
         if stopped:
             print("Experiment stopped by user")

@@ -197,14 +197,28 @@ class WorkerService:
                 self.logger.info(f"Experiment completed successfully")
             self.logger.info(f"CSV data saved to: {results['csv_path']}")
             
-            # Final stats
+            # Final stats summary
             final_stats = results.get('final_stats', {})
             if final_stats:
-                self.logger.info(
-                    f"Final stats - Avg Elo: {final_stats.get('avg_elo', 0):.2f}, "
-                    f"Peak Elo: {final_stats.get('peak_elo', 0):.2f}, "
-                    f"Entropy: {final_stats.get('policy_entropy', 0):.4f}"
-                )
+                self.logger.info("=" * 80)
+                self.logger.info("FINAL EXPERIMENT STATISTICS")
+                self.logger.info("=" * 80)
+                self.logger.info(f"  Elo Ratings:")
+                self.logger.info(f"    Average: {final_stats.get('avg_elo', 0):.2f}")
+                self.logger.info(f"    Peak:    {final_stats.get('peak_elo', 0):.2f}")
+                self.logger.info(f"    Min:     {final_stats.get('min_elo', 0):.2f}")
+                self.logger.info(f"    Std Dev: {final_stats.get('std_elo', 0):.2f}")
+                self.logger.info(f"  Fitness:")
+                self.logger.info(f"    Average: {final_stats.get('avg_fitness', 0):.2f}")
+                self.logger.info(f"    Min:     {final_stats.get('min_fitness', 0):.2f}")
+                self.logger.info(f"    Max:     {final_stats.get('max_fitness', 0):.2f}")
+                self.logger.info(f"  Policy Metrics:")
+                self.logger.info(f"    Entropy:        {final_stats.get('policy_entropy', 0):.4f}")
+                self.logger.info(f"    Entropy Var:    {final_stats.get('entropy_variance', 0):.4f}")
+                self.logger.info(f"    Diversity:      {final_stats.get('population_diversity', 0):.4f}")
+                self.logger.info(f"  Evolution:")
+                self.logger.info(f"    Mutation Rate:  {final_stats.get('mutation_rate', 0):.4f}")
+                self.logger.info("=" * 80)
             
             self.status = 'idle'
             self.current_job = None
