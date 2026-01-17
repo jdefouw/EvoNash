@@ -1,3 +1,7 @@
+# NOTE: PyTorch with CUDA must be installed separately using:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+# The default pip install torch installs CPU-only version
+# For other CUDA versions, see: https://pytorch.org/get-started/locally/
 torch>=2.0.0
 numpy>=1.24.0
 pandas>=2.0.0
