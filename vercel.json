@@ -1,12 +1,7 @@
 {
   "buildCommand": "cd web && npm install && npm run build",
   "outputDirectory": "web/.next",
+  "installCommand": "cd web && npm install",
   "framework": "nextjs",
-  "rootDirectory": "web",
-  "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "@supabase_url",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase_anon_key",
-    "SUPABASE_URL": "@supabase_url",
-    "SUPABASE_SERVICE_ROLE_KEY": "@supabase_service_role_key"
-  }
+  "rootDirectory": "web"
 }
