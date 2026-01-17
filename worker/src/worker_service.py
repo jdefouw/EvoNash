@@ -100,6 +100,8 @@ class WorkerService:
         """
         def upload_callback(generation_stats: Dict):
             """Upload single generation stats to controller."""
+            gen_num = generation_stats.get('generation', 'unknown')
+            self.logger.info(f"📤 Uploading generation {gen_num} stats to controller...")
             success = upload_generation_stats(
                 self.controller_url,
                 job_id,
@@ -109,11 +111,9 @@ class WorkerService:
                 retry_delay=self.retry_delay
             )
             if success:
-                gen_num = generation_stats.get('generation', 'unknown')
-                self.logger.debug(f"Uploaded generation {gen_num} stats")
+                self.logger.info(f"✅ Successfully uploaded generation {gen_num} stats")
             else:
-                gen_num = generation_stats.get('generation', 'unknown')
-                self.logger.warning(f"Failed to upload generation {gen_num} stats")
+                self.logger.warning(f"⚠️ Failed to upload generation {gen_num} stats after retries")
         
         return upload_callback
     
@@ -209,13 +209,28 @@ class WorkerService:
                 stop_check_callback=stop_check_callback
             )
             
+            self.logger.info("=" * 80)
+            self.logger.info("🔄 Starting experiment execution...")
+            self.logger.info("=" * 80)
+            
             results = runner.run_experiment()
             
             if results.get('stopped', False):
-                self.logger.info(f"Experiment stopped by user")
+                self.logger.info("=" * 80)
+                self.logger.info("⏹ Experiment stopped by user")
+                self.logger.info("=" * 80)
             else:
-                self.logger.info(f"Experiment completed successfully")
-            self.logger.info(f"CSV data saved to: {results['csv_path']}")
+                self.logger.info("=" * 80)
+                self.logger.info("✅ Experiment completed successfully")
+                self.logger.info("=" * 80)
+            
+            self.logger.info(f"📁 CSV data saved to: {results['csv_path']}")
+            
+            # Log summary of uploaded generations
+            all_stats = results.get('all_stats', [])
+            if all_stats:
+                self.logger.info(f"📊 Total generations processed: {len(all_stats)}")
+                self.logger.info(f"📤 All generations should have been uploaded incrementally")
             
             # Final stats summary
             final_stats = results.get('final_stats', {})

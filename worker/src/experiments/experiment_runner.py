@@ -211,9 +211,13 @@ class ExperimentRunner:
         # Upload immediately if callback provided (incremental upload)
         if self.upload_callback:
             try:
+                print(f"\n[GENERATION {self.current_generation}] Uploading stats to controller...")
                 self.upload_callback(stats)
+                print(f"[GENERATION {self.current_generation}] ✓ Upload complete")
             except Exception as e:
-                print(f"Warning: Upload callback failed: {e}")
+                print(f"[GENERATION {self.current_generation}] ✗ Upload callback failed: {e}")
+                import traceback
+                traceback.print_exc()
                 # Continue execution even if upload fails
         
         # Evolve to next generation

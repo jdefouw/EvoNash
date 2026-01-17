@@ -142,12 +142,15 @@ def upload_generation_stats(
     Returns:
         True if upload successful, False otherwise
     """
+    gen_num = generation_stats.get('generation', 'unknown')
     payload = {
         "job_id": job_id,
         "experiment_id": experiment_id,
         "generation_stats": generation_stats,
         "matches": []  # Empty for now, would contain match results
     }
+    
+    print(f"[UPLOAD] Uploading generation {gen_num} stats for experiment {experiment_id}...")
     
     for attempt in range(max_retries):
         try:
@@ -157,14 +160,28 @@ def upload_generation_stats(
                 timeout=30
             )
             response.raise_for_status()
+            result = response.json()
+            print(f"[UPLOAD] ✓ Successfully uploaded generation {gen_num} (generation_id: {result.get('generation_id', 'unknown')})")
             return True
         except requests.exceptions.RequestException as e:
             if attempt < max_retries - 1:
                 delay = retry_delay * (2 ** attempt)  # Exponential backoff
-                print(f"Upload failed (attempt {attempt + 1}/{max_retries}), retrying in {delay:.1f}s: {e}")
+                print(f"[UPLOAD] ✗ Upload failed (attempt {attempt + 1}/{max_retries}), retrying in {delay:.1f}s: {e}")
+                if hasattr(e, 'response') and e.response is not None:
+                    try:
+                        error_detail = e.response.json()
+                        print(f"[UPLOAD]   Error details: {error_detail}")
+                    except:
+                        print(f"[UPLOAD]   Response text: {e.response.text[:200]}")
                 time.sleep(delay)
             else:
-                print(f"Upload failed after {max_retries} attempts: {e}")
+                print(f"[UPLOAD] ✗ Upload failed after {max_retries} attempts: {e}")
+                if hasattr(e, 'response') and e.response is not None:
+                    try:
+                        error_detail = e.response.json()
+                        print(f"[UPLOAD]   Final error details: {error_detail}")
+                    except:
+                        print(f"[UPLOAD]   Final response text: {e.response.text[:200]}")
                 return False
     
     return False

@@ -9,6 +9,8 @@ export async function POST(request: NextRequest) {
     
     const { job_id, experiment_id, generation_stats, matches } = body
     
+    console.log(`[RESULTS] Received upload request for experiment ${experiment_id}, job ${job_id}`)
+    
     if (!experiment_id || !generation_stats) {
       return NextResponse.json(
         { error: 'Missing required fields' },
@@ -16,16 +18,32 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Get current generation number (increment from last)
-    const { data: lastGen } = await supabase
-      .from('generations')
-      .select('generation_number')
-      .eq('experiment_id', experiment_id)
-      .order('generation_number', { ascending: false })
-      .limit(1)
-      .single()
+    // Get current generation number - prefer the one from stats, fallback to incrementing from DB
+    let generation_number: number
     
-    const generation_number = lastGen ? lastGen.generation_number + 1 : 0
+    if (generation_stats.generation !== undefined && generation_stats.generation !== null) {
+      // Use generation number directly from stats (most reliable)
+      generation_number = generation_stats.generation
+      console.log(`[RESULTS] Using generation number from stats: ${generation_number}`)
+    } else {
+      // Fallback: increment from last generation in database
+      const { data: lastGenData } = await supabase
+        .from('generations')
+        .select('generation_number')
+        .eq('experiment_id', experiment_id)
+        .order('generation_number', { ascending: false })
+        .limit(1)
+      
+      if (lastGenData && lastGenData.length > 0) {
+        generation_number = lastGenData[0].generation_number + 1
+        console.log(`[RESULTS] Incremented generation number from DB: ${generation_number}`)
+      } else {
+        generation_number = 0
+        console.log(`[RESULTS] No existing generations, starting at 0`)
+      }
+    }
+    
+    console.log(`[RESULTS] Uploading generation ${generation_number} for experiment ${experiment_id}`)
     
     // Insert generation stats
     const { data: generation, error: genError } = await supabase
@@ -51,8 +69,11 @@ export async function POST(request: NextRequest) {
       .single()
     
     if (genError) {
+      console.error(`[RESULTS] Error inserting generation ${generation_number} for experiment ${experiment_id}:`, genError)
       return NextResponse.json({ error: genError.message }, { status: 500 })
     }
+    
+    console.log(`[RESULTS] Successfully saved generation ${generation_number} (ID: ${generation.id}) for experiment ${experiment_id}`)
     
     // Insert matches if provided
     if (matches && matches.length > 0) {
@@ -77,11 +98,21 @@ export async function POST(request: NextRequest) {
       .eq('id', experiment_id)
       .single()
     
-    if (experiment && generation_number >= experiment.max_generations - 1) {
-      await supabase
-        .from('experiments')
-        .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
-        .eq('id', experiment_id)
+    if (experiment) {
+      // Check if this is the last generation (generation numbers are 0-indexed)
+      // If max_generations is 100, we have generations 0-99, so last is generation 99
+      const is_last_generation = generation_number >= experiment.max_generations - 1
+      
+      if (is_last_generation) {
+        console.log(`[RESULTS] Last generation (${generation_number}) reached, marking experiment as COMPLETED`)
+        await supabase
+          .from('experiments')
+          .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
+          .eq('id', experiment_id)
+      } else {
+        const remaining = experiment.max_generations - generation_number - 1
+        console.log(`[RESULTS] Generation ${generation_number} saved, ${remaining} generations remaining`)
+      }
     }
     
     return NextResponse.json({ success: true, generation_id: generation.id })
