@@ -4,17 +4,20 @@ import { Generation, Match } from '@/types/protocol'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createServerClient()
-    const { searchParams } = new URL(request.url)
+    const experimentId = params.id
     
-    // Handle both sync and async params (Next.js 13+ vs 15+)
-    const resolvedParams = await Promise.resolve(params)
-    const experimentId = resolvedParams.id
+    if (!experimentId) {
+      console.error('[LIVE] Missing experiment ID in params')
+      return NextResponse.json({ error: 'Missing experiment ID' }, { status: 400 })
+    }
     
     console.log(`[LIVE] Fetching live data for experiment: ${experimentId}`)
+    
+    const supabase = await createServerClient()
+    const { searchParams } = new URL(request.url)
     
     // Get optional timestamp for incremental updates
     const sinceTimestamp = searchParams.get('since')
@@ -27,8 +30,17 @@ export async function GET(
       .eq('id', experimentId)
       .single()
     
-    if (expError || !experiment) {
-      console.error(`[LIVE] Experiment not found: ${experimentId}`, expError)
+    if (expError) {
+      console.error(`[LIVE] Database error for experiment ${experimentId}:`, expError)
+      // Return 500 for database errors, not 404
+      return NextResponse.json({ 
+        error: 'Database error', 
+        details: expError.message 
+      }, { status: 500 })
+    }
+    
+    if (!experiment) {
+      console.error(`[LIVE] Experiment not found: ${experimentId}`)
       return NextResponse.json({ error: 'Experiment not found' }, { status: 404 })
     }
     
@@ -95,9 +107,13 @@ export async function GET(
     
     return NextResponse.json(response)
   } catch (error) {
-    console.error('Error in live endpoint:', error)
+    console.error('[LIVE] Unexpected error in live endpoint:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     return NextResponse.json(
-      { error: 'Failed to fetch live data' },
+      { 
+        error: 'Failed to fetch live data',
+        details: errorMessage 
+      },
       { status: 500 }
     )
   }
