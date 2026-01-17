@@ -59,6 +59,7 @@ export interface JobRequest {
 export interface JobResult {
   job_id: string;
   experiment_id: string;
+  generation_id?: string; // Optional, will be set by API if not provided
   matches: Match[];
   generation_stats: GenerationStats;
 }

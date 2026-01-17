@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update generation stats
-    if (result.generation_stats) {
+    if (result.generation_stats && result.generation_id) {
       const { error: genError } = await supabaseAdmin
         .from('generations')
         .update({
