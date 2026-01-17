@@ -261,34 +261,33 @@ export default function ExperimentDetailPage() {
               <button
                 onClick={async (e) => {
                   e.preventDefault()
-                  console.log('Start button clicked, current status:', experiment.status) // Debug log
-                  if (experiment.status === 'RUNNING' || experiment.status === 'STOPPED' || experiment.status === 'COMPLETED') {
+                  if (experiment.status === 'RUNNING' || experiment.status === 'COMPLETED') {
                     alert(`Cannot start experiment with status: ${experiment.status}`)
                     return
                   }
                   try {
-                    console.log('Calling start endpoint...') // Debug log
                     const response = await fetch(`/api/experiments/${experimentId}/start`, { method: 'POST' })
-                    console.log('Start response status:', response.status) // Debug log
                     if (response.ok) {
                       const data = await response.json()
-                      console.log('Start response data:', data) // Debug log
-                      window.location.reload()
+                      setExperiment({ ...experiment, status: 'PENDING' })
+                      alert(data.message || 'Experiment queued for GPU worker. Worker will pick it up within 30 seconds.')
+                      // Refresh after a short delay to show updated status
+                      setTimeout(() => {
+                        window.location.reload()
+                      }, 1000)
                     } else {
                       const error = await response.json()
-                      console.error('Start error:', error) // Debug log
-                      alert(`Failed to start experiment: ${error.error || 'Unknown error'}`)
+                      alert(`Failed to queue experiment: ${error.error || 'Unknown error'}`)
                     }
                   } catch (error) {
-                    console.error('Start exception:', error) // Debug log
-                    alert(`Failed to start experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
+                    alert(`Failed to queue experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
                   }
                 }}
                 className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={experiment.status === 'RUNNING' || experiment.status === 'STOPPED' || experiment.status === 'COMPLETED'}
-                title={experiment.status === 'RUNNING' ? 'Experiment is already running' : experiment.status === 'STOPPED' ? 'Experiment was stopped' : experiment.status === 'COMPLETED' ? 'Experiment is completed' : 'Start experiment on GPU worker'}
+                disabled={experiment.status === 'RUNNING' || experiment.status === 'COMPLETED'}
+                title={experiment.status === 'RUNNING' ? 'Experiment is already running' : experiment.status === 'COMPLETED' ? 'Experiment is completed' : 'Queue experiment for GPU worker'}
               >
-                {experiment.status === 'RUNNING' ? 'Running...' : experiment.status === 'STOPPED' ? 'Stopped' : experiment.status === 'COMPLETED' ? 'Completed' : 'Start Experiment'}
+                {experiment.status === 'RUNNING' ? 'Running...' : experiment.status === 'PENDING' ? 'Queued for Worker' : experiment.status === 'COMPLETED' ? 'Completed' : 'Start Experiment'}
               </button>
               {experiment.status === 'RUNNING' && (
                 <button

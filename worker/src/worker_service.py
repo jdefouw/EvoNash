@@ -153,7 +153,13 @@ class WorkerService:
             self.logger.error("Invalid job: missing experiment_config")
             return
         
-        self.logger.info(f"Processing job {job_id} for experiment {experiment_id}")
+        self.logger.info("=" * 80)
+        self.logger.info(f"🎯 JOB RECEIVED - Starting Processing")
+        self.logger.info("=" * 80)
+        self.logger.info(f"Job ID:     {job_id}")
+        self.logger.info(f"Experiment: {experiment_id}")
+        self.logger.info("=" * 80)
+        
         self.status = 'processing'
         self.current_job = job
         
@@ -162,7 +168,7 @@ class WorkerService:
             from .main import check_experiment_status
             current_status = check_experiment_status(self.controller_url, experiment_id)
             if current_status == 'STOPPED':
-                self.logger.info(f"Experiment {experiment_id} is already STOPPED, skipping")
+                self.logger.warning(f"⚠ Experiment {experiment_id} is already STOPPED, skipping")
                 self.status = 'idle'
                 self.current_job = None
                 return
@@ -170,10 +176,24 @@ class WorkerService:
             # Create ExperimentConfig from job
             config = ExperimentManager.load_from_dict(experiment_config)
             
-            self.logger.info(f"Experiment: {config.experiment_name}")
-            self.logger.info(f"Mutation mode: {config.mutation_mode}")
-            self.logger.info(f"Max generations: {config.max_generations}")
-            self.logger.info(f"Population size: {config.population_size}")
+            self.logger.info("=" * 80)
+            self.logger.info("📋 EXPERIMENT CONFIGURATION")
+            self.logger.info("=" * 80)
+            self.logger.info(f"  Name:            {config.experiment_name}")
+            self.logger.info(f"  Group:           {config.experiment_group}")
+            self.logger.info(f"  Mutation Mode:   {config.mutation_mode}")
+            if config.mutation_mode == 'STATIC':
+                self.logger.info(f"  Mutation Rate:   {config.mutation_rate}")
+            else:
+                self.logger.info(f"  Mutation Base:   {config.mutation_base}")
+            self.logger.info(f"  Population Size: {config.population_size:,}")
+            self.logger.info(f"  Max Generations: {config.max_generations:,}")
+            self.logger.info(f"  Random Seed:     {config.random_seed}")
+            self.logger.info(f"  Selection Press: {config.selection_pressure}")
+            self.logger.info(f"  Max Possible Elo: {config.max_possible_elo}")
+            self.logger.info("=" * 80)
+            self.logger.info("🚀 STARTING EXPERIMENT ON GPU")
+            self.logger.info("=" * 80)
             
             # Create upload callback for incremental uploads
             upload_callback = self._create_upload_callback(job_id, experiment_id)
