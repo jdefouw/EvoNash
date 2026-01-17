@@ -6,6 +6,10 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerClient()
     
+    // Log worker poll attempt
+    const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+    console.log(`[QUEUE] Worker poll from ${clientIp} at ${new Date().toISOString()}`)
+    
     // Find a PENDING experiment
     const { data: experiment, error: fetchError } = await supabase
       .from('experiments')
@@ -15,11 +19,14 @@ export async function POST(request: NextRequest) {
       .single()
     
     if (fetchError || !experiment) {
+      console.log(`[QUEUE] No PENDING experiments available`)
       return NextResponse.json(
         { error: 'No pending experiments available' },
         { status: 404 }
       )
     }
+    
+    console.log(`[QUEUE] Found PENDING experiment: ${experiment.id} - ${experiment.experiment_name}`)
     
     // Update status to RUNNING
     const { error: updateError } = await supabase

@@ -69,6 +69,18 @@ def request_job(controller_url: str, timeout: int = 30) -> Optional[dict]:
         Job configuration dictionary, or None if no jobs available or error occurred
     """
     try:
+        # First test connection
+        test_response = requests.get(
+            f"{controller_url}/api/worker/test",
+            timeout=10
+        )
+        if test_response.status_code == 200:
+            test_data = test_response.json()
+            print(f"✓ Connection test successful: {test_data.get('message', 'OK')}")
+        else:
+            print(f"⚠ Connection test returned status {test_response.status_code}")
+        
+        # Now request job
         response = requests.post(
             f"{controller_url}/api/queue",
             json={},
@@ -77,25 +89,31 @@ def request_job(controller_url: str, timeout: int = 30) -> Optional[dict]:
         
         if response.status_code == 404:
             # No jobs available - this is normal
+            print(f"ℹ No pending experiments available (404)")
             return None
         
         response.raise_for_status()
-        return response.json()
+        job_data = response.json()
+        print(f"✓ Received job: {job_data.get('experiment_id', 'unknown')}")
+        return job_data
         
     except requests.exceptions.Timeout:
-        print(f"Timeout requesting job from {controller_url}")
+        print(f"✗ Timeout requesting job from {controller_url}")
         return None
     except requests.exceptions.ConnectionError as e:
-        print(f"Connection error requesting job: {e}")
+        print(f"✗ Connection error requesting job: {e}")
+        print(f"  Check that {controller_url} is reachable and correct")
         return None
     except requests.exceptions.HTTPError as e:
-        print(f"HTTP error requesting job: {e}")
+        print(f"✗ HTTP error requesting job: {e}")
+        if hasattr(e.response, 'text'):
+            print(f"  Response: {e.response.text}")
         return None
     except requests.exceptions.RequestException as e:
-        print(f"Error requesting job: {e}")
+        print(f"✗ Error requesting job: {e}")
         return None
     except Exception as e:
-        print(f"Unexpected error requesting job: {e}")
+        print(f"✗ Unexpected error requesting job: {e}")
         return None
 
 

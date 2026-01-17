@@ -85,6 +85,11 @@ export default function ExperimentsPage() {
                   GPU Worker: {workerStatus.connected ? 'Connected' : 'Not Connected'}
                   {workerStatus.pending_count > 0 && ` • ${workerStatus.pending_count} pending`}
                 </span>
+                {!workerStatus.connected && workerStatus.pending_count > 0 && (
+                  <span className="text-yellow-600 dark:text-yellow-400 text-xs">
+                    (Worker should pick up pending experiments automatically)
+                  </span>
+                )}
               </div>
             )}
           </div>

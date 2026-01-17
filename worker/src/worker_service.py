@@ -241,16 +241,18 @@ class WorkerService:
         while self.running:
             try:
                 # Request job from controller
+                self.logger.info(f"Polling {self.controller_url}/api/queue for jobs...")
                 job = request_job(self.controller_url, timeout=30)
                 
                 if job:
                     consecutive_errors = 0
+                    self.logger.info(f"✓ Job received, processing...")
                     self.process_job(job)
                 else:
                     # No job available - this is normal, not an error
                     consecutive_errors = 0
                     if self.status == 'idle':
-                        self.logger.debug(f"No jobs available, polling again in {self.poll_interval}s")
+                        self.logger.info(f"ℹ No pending experiments, polling again in {self.poll_interval}s")
                     time.sleep(self.poll_interval)
                 
             except KeyboardInterrupt:

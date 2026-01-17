@@ -29,11 +29,27 @@ export async function GET() {
       return NextResponse.json({ error: pendingError.message }, { status: 500 })
     }
     
+    // Get all status counts for diagnostics
+    const { data: statusCounts, error: countError } = await supabase
+      .from('experiments')
+      .select('status')
+    
+    const counts = statusCounts?.reduce((acc: Record<string, number>, exp: any) => {
+      acc[exp.status] = (acc[exp.status] || 0) + 1
+      return acc
+    }, {}) || {}
+    
     return NextResponse.json({
       worker_connected: runningExperiments && runningExperiments.length > 0,
       running_experiments: runningExperiments || [],
       pending_experiments: pendingExperiments || [],
-      pending_count: pendingExperiments?.length || 0
+      pending_count: pendingExperiments?.length || 0,
+      status_counts: counts,
+      message: pendingExperiments && pendingExperiments.length > 0 
+        ? `${pendingExperiments.length} experiment(s) waiting for worker`
+        : runningExperiments && runningExperiments.length > 0
+        ? 'Worker is active (processing experiments)'
+        : 'No pending experiments - worker will poll every 30 seconds'
     })
   } catch (error) {
     return NextResponse.json(
