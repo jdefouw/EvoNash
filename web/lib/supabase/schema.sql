@@ -2,11 +2,45 @@
 -- PostgreSQL schema for scientific experiment tracking
 -- Includes TimescaleDB hypertable for time-series optimization
 
--- Create enums
-CREATE TYPE experiment_group_type AS ENUM ('CONTROL', 'EXPERIMENTAL');
-CREATE TYPE mutation_mode_type AS ENUM ('STATIC', 'ADAPTIVE');
-CREATE TYPE experiment_status_type AS ENUM ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'STOPPED');
-CREATE TYPE match_type_enum AS ENUM ('self_play', 'benchmark');
+-- Create enums (only if they don't exist)
+DO $$ BEGIN
+    CREATE TYPE experiment_group_type AS ENUM ('CONTROL', 'EXPERIMENTAL');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE mutation_mode_type AS ENUM ('STATIC', 'ADAPTIVE');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE experiment_status_type AS ENUM ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+-- Add STOPPED to existing enum if it doesn't exist
+DO $$ 
+BEGIN
+    -- Check if 'STOPPED' value already exists in the enum
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_enum 
+        WHERE enumlabel = 'STOPPED' 
+        AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'experiment_status_type')
+    ) THEN
+        ALTER TYPE experiment_status_type ADD VALUE 'STOPPED';
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE match_type_enum AS ENUM ('self_play', 'benchmark');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- Experiments Table
 CREATE TABLE IF NOT EXISTS experiments (
