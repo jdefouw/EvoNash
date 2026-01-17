@@ -249,10 +249,19 @@ class ExperimentRunner:
                     print(f"Warning: Stop check callback failed: {e}")
                     # Continue execution even if stop check fails
             
-            # Print statistics every generation (with more detail every 10th)
+            # Print statistics every generation
+            # Brief stats every generation
+            progress_pct = ((gen + 1) / self.config.max_generations) * 100
+            print(f"[{progress_pct:5.1f}%] Gen {gen + 1:5d}/{self.config.max_generations} | "
+                  f"Avg Elo: {stats.get('avg_elo', 0):7.2f} | "
+                  f"Peak: {stats.get('peak_elo', 0):7.2f} | "
+                  f"Entropy: {stats.get('policy_entropy', 0):.4f} | "
+                  f"Div: {stats.get('population_diversity', 0):.4f}")
+            
+            # Detailed stats every 10 generations or first generation
             if (gen + 1) % 10 == 0 or gen == 0:
                 print(f"\n{'='*80}")
-                print(f"Generation {gen + 1}/{self.config.max_generations}")
+                print(f"📊 DETAILED STATISTICS - Generation {gen + 1}/{self.config.max_generations}")
                 print(f"{'='*80}")
                 print(f"  Elo Ratings:")
                 print(f"    Average: {stats.get('avg_elo', 0):.2f}")
@@ -270,12 +279,6 @@ class ExperimentRunner:
                 print(f"  Evolution:")
                 print(f"    Mutation Rate:  {stats.get('mutation_rate', 0):.4f}")
                 print(f"{'='*80}\n")
-            elif (gen + 1) % 1 == 0:  # Every generation, show brief stats
-                print(f"Gen {gen + 1:5d}/{self.config.max_generations} | "
-                      f"Avg Elo: {stats.get('avg_elo', 0):7.2f} | "
-                      f"Peak: {stats.get('peak_elo', 0):7.2f} | "
-                      f"Entropy: {stats.get('policy_entropy', 0):.4f} | "
-                      f"Div: {stats.get('population_diversity', 0):.4f}")
         
         if stopped:
             print("Experiment stopped by user")

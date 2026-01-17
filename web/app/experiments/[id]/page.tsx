@@ -56,24 +56,28 @@ export default function ExperimentDetailPage() {
         setExperiment({ ...experiment, status: data.experiment_status })
       }
 
-      // Update generations if new one arrived
-      if (data.generation && data.has_updates) {
+      // Always update latest generation if available (for progress display)
+      if (data.generation) {
         const newGen = data.generation
-        setLatestGeneration(newGen)
-        setGenerations(prev => {
-          // Check if this generation already exists
-          const exists = prev.some(g => g.generation_number === newGen.generation_number)
-          if (exists) {
-            // Update existing
-            return prev.map(g => 
-              g.generation_number === newGen.generation_number ? newGen : g
-            )
-          } else {
-            // Add new
-            return [...prev, newGen].sort((a, b) => a.generation_number - b.generation_number)
-          }
-        })
-        lastGenerationNumberRef.current = newGen.generation_number
+        const isNew = !lastGenerationNumberRef.current || newGen.generation_number > lastGenerationNumberRef.current
+        
+        if (isNew || data.has_updates) {
+          setLatestGeneration(newGen)
+          setGenerations(prev => {
+            // Check if this generation already exists
+            const exists = prev.some(g => g.generation_number === newGen.generation_number)
+            if (exists) {
+              // Update existing
+              return prev.map(g => 
+                g.generation_number === newGen.generation_number ? newGen : g
+              )
+            } else {
+              // Add new
+              return [...prev, newGen].sort((a, b) => a.generation_number - b.generation_number)
+            }
+          })
+          lastGenerationNumberRef.current = newGen.generation_number
+        }
       }
 
       // Update matches
@@ -152,9 +156,9 @@ export default function ExperimentDetailPage() {
       })
   }, [experimentId])
 
-  // Set up polling when experiment is running
+  // Set up polling when experiment is running or pending
   useEffect(() => {
-    if (!experiment || experiment.status !== 'RUNNING') {
+    if (!experiment || (experiment.status !== 'RUNNING' && experiment.status !== 'PENDING')) {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current)
         pollingIntervalRef.current = null
@@ -162,8 +166,9 @@ export default function ExperimentDetailPage() {
       return
     }
 
-    // Start polling every 1.5 seconds
-    pollingIntervalRef.current = setInterval(pollLiveData, 1500)
+    // Start polling every 1.5 seconds for RUNNING, every 3 seconds for PENDING
+    const pollInterval = experiment.status === 'RUNNING' ? 1500 : 3000
+    pollingIntervalRef.current = setInterval(pollLiveData, pollInterval)
     
     // Initial poll
     pollLiveData()
