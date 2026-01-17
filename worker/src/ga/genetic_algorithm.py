@@ -1,70 +1,27 @@
 """
 Genetic Algorithm implementation with STATIC and ADAPTIVE mutation modes.
+Implements Elo rating system and policy entropy calculation.
 """
 
 import numpy as np
 import torch
-import torch.nn as nn
 from typing import List, Tuple, Optional
+from ..simulation.agent import Agent, NeuralNetwork
 from ..experiments.experiment_manager import ExperimentConfig
 
 
-class NeuralNetwork(nn.Module):
-    """Neural network for game agent."""
-    
-    def __init__(self, input_size: int, hidden_layers: List[int], output_size: int):
-        super(NeuralNetwork, self).__init__()
-        layers = []
-        prev_size = input_size
-        
-        for hidden_size in hidden_layers:
-            layers.append(nn.Linear(prev_size, hidden_size))
-            layers.append(nn.ReLU())
-            prev_size = hidden_size
-        
-        layers.append(nn.Linear(prev_size, output_size))
-        self.network = nn.Sequential(*layers)
-    
-    def forward(self, x):
-        return self.network(x)
-    
-    def get_weights(self) -> np.ndarray:
-        """Get all weights as a flattened numpy array."""
-        weights = []
-        for param in self.parameters():
-            weights.append(param.data.cpu().numpy().flatten())
-        return np.concatenate(weights)
-    
-    def set_weights(self, weights: np.ndarray):
-        """Set weights from a flattened numpy array."""
-        idx = 0
-        for param in self.parameters():
-            size = param.data.numel()
-            param.data = torch.from_numpy(
-                weights[idx:idx+size].reshape(param.data.shape)
-            ).float()
-            idx += size
-
-
-class Agent:
-    """Represents a single agent in the population."""
-    
-    def __init__(
-        self,
-        network: NeuralNetwork,
-        elo_rating: float = 1500.0,
-        fitness_score: float = 0.0,
-        parent_elo: Optional[float] = None
-    ):
-        self.network = network
-        self.elo_rating = elo_rating
-        self.fitness_score = fitness_score
-        self.parent_elo = parent_elo
-        self.mutation_rate_applied: Optional[float] = None
-
-
 class GeneticAlgorithm:
-    """Genetic Algorithm with STATIC and ADAPTIVE mutation modes."""
+    """
+    Genetic Algorithm with STATIC and ADAPTIVE mutation modes.
+    
+    Features:
+    - Population initialization (N=1000)
+    - Selection: Top 20% (selection_pressure)
+    - Crossover: Uniform weight mixing
+    - Mutation: STATIC (ε=0.05) or ADAPTIVE (ε = Base × (1 - CurrentElo/MaxGlobalElo))
+    - Elo rating system
+    - Policy entropy calculation
+    """
     
     def __init__(self, config: ExperimentConfig, device: str = 'cuda'):
         """
@@ -82,9 +39,13 @@ class GeneticAlgorithm:
         torch.manual_seed(config.random_seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed(config.random_seed)
+            torch.cuda.manual_seed_all(config.random_seed)
+        import random
+        random.seed(config.random_seed)
         
         # Initialize population
         self.population: List[Agent] = []
+        self.max_global_elo = 1500.0  # Track max Elo for adaptive mutation
         self._initialize_population()
     
     def _initialize_population(self):
@@ -94,17 +55,74 @@ class GeneticAlgorithm:
         
         for i in range(self.config.population_size):
             network = NeuralNetwork(
-                arch['input_size'],
-                arch['hidden_layers'],
-                arch['output_size']
+                input_size=arch['input_size'],
+                hidden_size=arch['hidden_layers'][0],  # First hidden layer size
+                output_size=arch['output_size']
             ).to(self.device)
             
             # Initialize with random weights
             for param in network.parameters():
-                nn.init.normal_(param, mean=0.0, std=0.1)
+                torch.nn.init.normal_(param, mean=0.0, std=0.1)
             
-            agent = Agent(network)
+            agent = Agent(
+                agent_id=i,
+                network=network,
+                initial_energy=100.0,
+                device=self.device
+            )
+            agent.elo_rating = 1500.0
             self.population.append(agent)
+    
+    def calculate_elo_expectation(self, rating_a: float, rating_b: float) -> float:
+        """
+        Calculate Elo expectation: E_A = 1 / (1 + 10^((R_B - R_A) / 400))
+        
+        Args:
+            rating_a: Elo rating of agent A
+            rating_b: Elo rating of agent B
+            
+        Returns:
+            Expected score for agent A (0-1)
+        """
+        return 1.0 / (1.0 + 10.0 ** ((rating_b - rating_a) / 400.0))
+    
+    def update_elo(self, agent_a: Agent, agent_b: Agent, score_a: float, k_factor: float = 32.0):
+        """
+        Update Elo ratings after a match.
+        
+        Args:
+            agent_a: First agent
+            agent_b: Second agent
+            score_a: Score for agent A (1.0 for win, 0.5 for draw, 0.0 for loss)
+            k_factor: K-factor for Elo updates (default 32)
+        """
+        expected_a = self.calculate_elo_expectation(agent_a.elo_rating, agent_b.elo_rating)
+        expected_b = 1.0 - expected_a
+        
+        agent_a.elo_rating += k_factor * (score_a - expected_a)
+        agent_b.elo_rating += k_factor * ((1.0 - score_a) - expected_b)
+        
+        # Update max global Elo for adaptive mutation
+        self.max_global_elo = max(self.max_global_elo, agent_a.elo_rating, agent_b.elo_rating)
+    
+    def calculate_policy_entropy(self, agent: Agent, sample_inputs: torch.Tensor) -> float:
+        """
+        Calculate policy entropy: H(π) = -Σ π(a|s) log π(a|s)
+        
+        Args:
+            agent: Agent to calculate entropy for
+            sample_inputs: Sample input states (batch_size, input_size)
+            
+        Returns:
+            Average policy entropy
+        """
+        with torch.no_grad():
+            outputs = agent.network(sample_inputs)
+            # Apply softmax to get probability distribution
+            probs = torch.softmax(outputs, dim=1)
+            # Calculate entropy: -Σ p log p
+            entropy = -torch.sum(probs * torch.log(probs + 1e-10), dim=1)
+            return float(entropy.mean().item())
     
     def calculate_population_diversity(self) -> float:
         """
@@ -119,29 +137,35 @@ class GeneticAlgorithm:
         weights_list = [agent.network.get_weights() for agent in self.population]
         distances = []
         
-        for i in range(len(weights_list)):
-            for j in range(i + 1, len(weights_list)):
-                dist = np.linalg.norm(weights_list[i] - weights_list[j])
+        # Sample pairs to avoid O(n²) computation
+        sample_size = min(100, len(weights_list))
+        indices = np.random.choice(len(weights_list), size=sample_size, replace=False)
+        
+        for i in range(sample_size):
+            for j in range(i + 1, sample_size):
+                idx_i = indices[i]
+                idx_j = indices[j]
+                dist = np.linalg.norm(weights_list[idx_i] - weights_list[idx_j])
                 distances.append(dist)
         
         return np.mean(distances) if distances else 0.0
     
     def select_parents(self) -> List[Agent]:
         """
-        Select top k% of population based on fitness.
+        Select top k% of population based on fitness/elo.
         
         Returns:
             List of selected parent agents
         """
-        # Sort by fitness (descending)
+        # Sort by Elo rating (descending)
         sorted_population = sorted(
             self.population,
-            key=lambda a: a.fitness_score,
+            key=lambda a: a.elo_rating,
             reverse=True
         )
         
         # Select top k%
-        num_parents = int(len(self.population) * self.config.selection_pressure)
+        num_parents = max(1, int(len(self.population) * self.config.selection_pressure))
         return sorted_population[:num_parents]
     
     def crossover(self, parent_a: Agent, parent_b: Agent) -> Agent:
@@ -165,9 +189,9 @@ class GeneticAlgorithm:
         # Create new network
         arch = self.config.network_architecture
         network = NeuralNetwork(
-            arch['input_size'],
-            arch['hidden_layers'],
-            arch['output_size']
+            input_size=arch['input_size'],
+            hidden_size=arch['hidden_layers'][0],
+            output_size=arch['output_size']
         ).to(self.device)
         
         network.set_weights(offspring_weights)
@@ -175,7 +199,17 @@ class GeneticAlgorithm:
         # Use average of parent Elo ratings
         parent_elo = (parent_a.elo_rating + parent_b.elo_rating) / 2.0
         
-        return Agent(network, parent_elo=parent_elo, elo_rating=parent_elo)
+        # Create new agent
+        offspring = Agent(
+            agent_id=len(self.population),  # Temporary ID
+            network=network,
+            initial_energy=100.0,
+            device=self.device
+        )
+        offspring.elo_rating = parent_elo
+        offspring.parent_elo = parent_elo
+        
+        return offspring
     
     def mutate(self, agent: Agent) -> Agent:
         """
@@ -189,10 +223,13 @@ class GeneticAlgorithm:
         """
         # Calculate mutation rate
         if self.config.mutation_mode == 'STATIC':
-            mutation_rate = self.config.get_mutation_rate(0)  # Not used in STATIC
+            mutation_rate = self.config.mutation_rate or 0.05
         else:  # ADAPTIVE
             parent_elo = agent.parent_elo if agent.parent_elo is not None else agent.elo_rating
-            mutation_rate = self.config.get_mutation_rate(parent_elo)
+            base = self.config.mutation_base or 0.1
+            mutation_rate = base * (1.0 - parent_elo / self.config.max_possible_elo)
+            # Clamp to reasonable range
+            mutation_rate = np.clip(mutation_rate, 0.01, 0.2)
         
         agent.mutation_rate_applied = mutation_rate
         
@@ -216,7 +253,7 @@ class GeneticAlgorithm:
         new_population = []
         
         # Keep some elite (top performers)
-        elite_size = int(len(self.population) * 0.1)  # Top 10%
+        elite_size = max(1, int(len(self.population) * 0.1))  # Top 10%
         new_population.extend(parents[:elite_size])
         
         # Generate offspring
@@ -233,12 +270,19 @@ class GeneticAlgorithm:
             
             new_population.append(offspring)
         
+        # Update agent IDs
+        for i, agent in enumerate(new_population[:self.config.population_size]):
+            agent.id = i
+        
         self.population = new_population[:self.config.population_size]
     
-    def get_generation_stats(self) -> dict:
+    def get_generation_stats(self, sample_inputs: Optional[torch.Tensor] = None) -> dict:
         """
         Calculate statistics for current generation.
         
+        Args:
+            sample_inputs: Sample inputs for entropy calculation (optional)
+            
         Returns:
             Dictionary with generation statistics
         """
@@ -249,10 +293,28 @@ class GeneticAlgorithm:
             for agent in self.population
         ]
         
+        # Calculate policy entropy (average across population)
+        policy_entropies = []
+        if sample_inputs is not None:
+            for agent in self.population[:100]:  # Sample for performance
+                entropy = self.calculate_policy_entropy(agent, sample_inputs)
+                policy_entropies.append(entropy)
+        avg_policy_entropy = np.mean(policy_entropies) if policy_entropies else 0.0
+        
+        # Calculate entropy variance
+        entropy_variance = np.var(policy_entropies) if len(policy_entropies) > 1 else 0.0
+        
         return {
-            'avg_elo': np.mean(elo_ratings),
-            'peak_elo': np.max(elo_ratings),
-            'avg_fitness': np.mean(fitness_scores),
-            'mutation_rate': np.mean(mutation_rates) if mutation_rates else 0.0,
+            'avg_elo': float(np.mean(elo_ratings)),
+            'peak_elo': float(np.max(elo_ratings)),
+            'min_elo': float(np.min(elo_ratings)),
+            'std_elo': float(np.std(elo_ratings)),
+            'avg_fitness': float(np.mean(fitness_scores)),
+            'min_fitness': float(np.min(fitness_scores)),
+            'max_fitness': float(np.max(fitness_scores)),
+            'std_fitness': float(np.std(fitness_scores)),
+            'mutation_rate': float(np.mean(mutation_rates)) if mutation_rates else 0.0,
+            'policy_entropy': avg_policy_entropy,
+            'entropy_variance': entropy_variance,
             'population_diversity': self.calculate_population_diversity()
         }

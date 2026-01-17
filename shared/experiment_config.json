@@ -1,6 +1,6 @@
 {
-  "experiment_id": "",
-  "experiment_name": "Default Experiment",
+  "experiment_id": "00000000-0000-0000-0000-000000000000",
+  "experiment_name": "Example Experiment",
   "mutation_mode": "STATIC",
   "mutation_rate": 0.05,
   "mutation_base": 0.1,

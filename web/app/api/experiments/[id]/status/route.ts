@@ -1,37 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { createServerClient } from '@/lib/supabase/server'
 
-// GET /api/experiments/[id]/status - Get experiment status
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabaseAdmin = getSupabaseAdmin()
-    const { data, error } = await supabaseAdmin
+    const supabase = await createServerClient()
+    
+    const { data, error } = await supabase
       .from('experiments')
-      .select('id, status, created_at, completed_at')
+      .select('status')
       .eq('id', params.id)
       .single()
-
-    if (error) throw error
-
-    // Get latest generation to show progress
-    const { data: latestGen } = await supabaseAdmin
-      .from('generations')
-      .select('generation_number')
-      .eq('experiment_id', params.id)
-      .order('generation_number', { ascending: false })
-      .limit(1)
-      .single()
-
-    return NextResponse.json({
-      ...data,
-      current_generation: latestGen?.generation_number || 0
-    })
-  } catch (error: any) {
+    
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    
+    if (!data) {
+      return NextResponse.json({ error: 'Experiment not found' }, { status: 404 })
+    }
+    
+    return NextResponse.json({ status: data.status })
+  } catch (error) {
     return NextResponse.json(
-      { error: error.message },
+      { error: 'Failed to fetch experiment status' },
       { status: 500 }
     )
   }

@@ -1,6 +1,7 @@
 """
 CSV Logger for EvoNash experiments.
 Logs generation statistics to CSV files for statistical analysis.
+Includes variance, standard deviation, min/max for error bars.
 """
 
 import csv
@@ -8,6 +9,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
+import numpy as np
 
 
 class CSVLogger:
@@ -49,11 +51,16 @@ class CSVLogger:
                     'timestamp',
                     'avg_elo',
                     'peak_elo',
+                    'min_elo',
+                    'std_elo',
                     'policy_entropy',
                     'entropy_variance',
                     'mutation_rate',
                     'population_diversity',
-                    'avg_fitness'
+                    'avg_fitness',
+                    'min_fitness',
+                    'max_fitness',
+                    'std_fitness'
                 ])
         self.file_initialized = True
     
@@ -66,7 +73,12 @@ class CSVLogger:
         entropy_variance: float,
         mutation_rate: float,
         population_diversity: float,
-        avg_fitness: float
+        avg_fitness: float,
+        min_elo: Optional[float] = None,
+        std_elo: Optional[float] = None,
+        min_fitness: Optional[float] = None,
+        max_fitness: Optional[float] = None,
+        std_fitness: Optional[float] = None
     ):
         """
         Log generation statistics to CSV.
@@ -80,6 +92,11 @@ class CSVLogger:
             mutation_rate: Mutation rate used in this generation
             population_diversity: Average Euclidean distance between weight vectors
             avg_fitness: Average fitness score
+            min_elo: Minimum Elo rating (optional)
+            std_elo: Standard deviation of Elo ratings (optional)
+            min_fitness: Minimum fitness score (optional)
+            max_fitness: Maximum fitness score (optional)
+            std_fitness: Standard deviation of fitness scores (optional)
         """
         if not self.file_initialized:
             self._initialize_file()
@@ -93,11 +110,16 @@ class CSVLogger:
                 timestamp,
                 avg_elo,
                 peak_elo,
+                min_elo if min_elo is not None else '',
+                std_elo if std_elo is not None else '',
                 policy_entropy,
                 entropy_variance,
                 mutation_rate,
                 population_diversity,
-                avg_fitness
+                avg_fitness,
+                min_fitness if min_fitness is not None else '',
+                max_fitness if max_fitness is not None else '',
+                std_fitness if std_fitness is not None else ''
             ])
     
     def get_filepath(self) -> Path:

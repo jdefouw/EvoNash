@@ -1,11 +1,12 @@
 -- EvoNash Database Schema
 -- PostgreSQL schema for scientific experiment tracking
+-- Includes TimescaleDB hypertable for time-series optimization
 
 -- Create enums
 CREATE TYPE experiment_group_type AS ENUM ('CONTROL', 'EXPERIMENTAL');
 CREATE TYPE mutation_mode_type AS ENUM ('STATIC', 'ADAPTIVE');
 CREATE TYPE experiment_status_type AS ENUM ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED');
-CREATE TYPE match_type_enum AS ENUM ('self_play', 'benchmark', 'human_vs_ai');
+CREATE TYPE match_type_enum AS ENUM ('self_play', 'benchmark');
 
 -- Experiments Table
 CREATE TABLE IF NOT EXISTS experiments (
@@ -21,12 +22,12 @@ CREATE TABLE IF NOT EXISTS experiments (
     completed_at TIMESTAMP WITH TIME ZONE,
     mutation_rate FLOAT,
     mutation_base FLOAT,
-    max_possible_elo FLOAT,
-    selection_pressure FLOAT,
+    max_possible_elo FLOAT DEFAULT 2000.0,
+    selection_pressure FLOAT DEFAULT 0.2,
     network_architecture JSONB
 );
 
--- Generations Table
+-- Generations Table (TimescaleDB hypertable)
 CREATE TABLE IF NOT EXISTS generations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     experiment_id UUID NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
@@ -35,14 +36,24 @@ CREATE TABLE IF NOT EXISTS generations (
     population_size INTEGER NOT NULL,
     avg_fitness FLOAT,
     avg_elo FLOAT,
+    peak_elo FLOAT,
+    min_elo FLOAT,
+    std_elo FLOAT,
     policy_entropy FLOAT,
     entropy_variance FLOAT,
     win_rate_variance FLOAT,
     population_diversity FLOAT,
     mutation_rate FLOAT,
-    peak_elo FLOAT,
+    min_fitness FLOAT,
+    max_fitness FLOAT,
+    std_fitness FLOAT,
     UNIQUE(experiment_id, generation_number)
 );
+
+-- Convert generations to TimescaleDB hypertable
+-- Note: This requires TimescaleDB extension to be installed
+-- Run: CREATE EXTENSION IF NOT EXISTS timescaledb;
+SELECT create_hypertable('generations', 'created_at', if_not_exists => TRUE);
 
 -- Agents Table
 CREATE TABLE IF NOT EXISTS agents (
@@ -76,6 +87,7 @@ CREATE TABLE IF NOT EXISTS matches (
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_generations_experiment_id ON generations(experiment_id);
 CREATE INDEX IF NOT EXISTS idx_generations_experiment_generation ON generations(experiment_id, generation_number);
+CREATE INDEX IF NOT EXISTS idx_generations_created_at ON generations(created_at);
 CREATE INDEX IF NOT EXISTS idx_agents_experiment_id ON agents(experiment_id);
 CREATE INDEX IF NOT EXISTS idx_agents_generation_id ON agents(generation_id);
 CREATE INDEX IF NOT EXISTS idx_agents_experiment_generation ON agents(experiment_id, generation_id);

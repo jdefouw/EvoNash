@@ -1,75 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { createServerClient } from '@/lib/supabase/server'
 
-// GET /api/experiments/[id] - Get experiment by ID
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabaseAdmin = getSupabaseAdmin()
-    const { data, error } = await supabaseAdmin
+    const supabase = await createServerClient()
+    
+    const { data, error } = await supabase
       .from('experiments')
       .select('*')
       .eq('id', params.id)
       .single()
-
-    if (error) throw error
-
-    return NextResponse.json(data)
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    )
-  }
-}
-
-// PATCH /api/experiments/[id] - Update experiment
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const supabaseAdmin = getSupabaseAdmin()
-    const body = await request.json()
     
-    const { data, error } = await supabaseAdmin
-      .from('experiments')
-      .update(body)
-      .eq('id', params.id)
-      .select()
-      .single()
-
-    if (error) throw error
-
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    
+    if (!data) {
+      return NextResponse.json({ error: 'Experiment not found' }, { status: 404 })
+    }
+    
     return NextResponse.json(data)
-  } catch (error: any) {
+  } catch (error) {
     return NextResponse.json(
-      { error: error.message },
+      { error: 'Failed to fetch experiment' },
       { status: 500 }
     )
   }
 }
 
-// DELETE /api/experiments/[id] - Delete experiment
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabaseAdmin = getSupabaseAdmin()
-    const { error } = await supabaseAdmin
+    const supabase = await createServerClient()
+    
+    const { error } = await supabase
       .from('experiments')
       .delete()
       .eq('id', params.id)
-
-    if (error) throw error
-
+    
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error) {
     return NextResponse.json(
-      { error: error.message },
+      { error: 'Failed to delete experiment' },
       { status: 500 }
     )
   }

@@ -1,32 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { createServerClient } from '@/lib/supabase/server'
 
-// GET /api/generations?experiment_id=xxx - Get generations for experiment
 export async function GET(request: NextRequest) {
   try {
-    const supabaseAdmin = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
-    const experimentId = searchParams.get('experiment_id')
-
-    if (!experimentId) {
-      return NextResponse.json(
-        { error: 'experiment_id is required' },
-        { status: 400 }
-      )
-    }
-
-    const { data, error } = await supabaseAdmin
+    const experiment_id = searchParams.get('experiment_id')
+    
+    const supabase = await createServerClient()
+    
+    let query = supabase
       .from('generations')
       .select('*')
-      .eq('experiment_id', experimentId)
       .order('generation_number', { ascending: true })
-
-    if (error) throw error
-
-    return NextResponse.json(data)
-  } catch (error: any) {
+    
+    if (experiment_id) {
+      query = query.eq('experiment_id', experiment_id)
+    }
+    
+    const { data, error } = await query
+    
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    
+    return NextResponse.json(data || [])
+  } catch (error) {
     return NextResponse.json(
-      { error: error.message },
+      { error: 'Failed to fetch generations' },
       { status: 500 }
     )
   }

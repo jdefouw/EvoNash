@@ -1,59 +1,129 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ErrorBar } from 'recharts'
 
 interface StatisticalSignificanceProps {
-  controlMean: number
-  experimentalMean: number
-  controlStd: number
-  experimentalStd: number
-  pValue: number
+  experimentId: string
 }
 
-export default function StatisticalSignificance({
-  controlMean,
-  experimentalMean,
-  controlStd,
-  experimentalStd,
-  pValue
-}: StatisticalSignificanceProps) {
-  const data = [
+interface AnalysisData {
+  final_avg_elo: number
+  final_peak_elo: number
+  convergence_generation: number | null
+  avg_elo_trend: number[]
+  entropy_trend: number[]
+}
+
+export default function StatisticalSignificance({ experimentId }: StatisticalSignificanceProps) {
+  const [analysis, setAnalysis] = useState<AnalysisData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch(`/api/experiments/${experimentId}/analysis`)
+      .then(res => res.json())
+      .then(data => {
+        setAnalysis(data)
+        setLoading(false)
+      })
+      .catch(err => {
+        console.error('Error fetching analysis:', err)
+        setLoading(false)
+      })
+  }, [experimentId])
+
+  if (loading) {
+    return (
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="text-center py-8">
+          <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Loading analysis...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!analysis) {
+    return (
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
+        <p className="text-gray-600 dark:text-gray-400">No analysis data available</p>
+      </div>
+    )
+  }
+
+  // Calculate statistics from trend data
+  const avgEloMean = analysis.avg_elo_trend.length > 0
+    ? analysis.avg_elo_trend.reduce((a, b) => a + b, 0) / analysis.avg_elo_trend.length
+    : 0
+  
+  const avgEloStd = analysis.avg_elo_trend.length > 1
+    ? Math.sqrt(
+        analysis.avg_elo_trend.reduce((sum, val) => sum + Math.pow(val - avgEloMean, 2), 0) /
+        (analysis.avg_elo_trend.length - 1)
+      )
+    : 0
+
+  const chartData = [
     {
-      group: 'Control',
-      mean: controlMean,
-      std: controlStd
-    },
-    {
-      group: 'Experimental',
-      mean: experimentalMean,
-      std: experimentalStd
+      name: 'Final Performance',
+      avgElo: analysis.final_avg_elo || 0,
+      peakElo: analysis.final_peak_elo || 0,
+      stdDev: avgEloStd
     }
   ]
 
-  const isSignificant = pValue < 0.05
-
   return (
-    <div className="p-6 border rounded-lg bg-white dark:bg-gray-800">
-      <h2 className="text-xl font-semibold mb-4">Statistical Significance</h2>
-      <div className="mb-4">
-        <p className="text-sm text-gray-600">
-          p-value: <span className={`font-semibold ${isSignificant ? 'text-green-600' : 'text-red-600'}`}>
-            {pValue.toFixed(4)} {isSignificant && '*'}
-          </span>
-        </p>
-      </div>
-      <ResponsiveContainer width="100%" height={400}>
-        <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="group" />
-          <YAxis label={{ value: 'Average Elo Rating', angle: -90, position: 'insideLeft' }} />
-          <Tooltip />
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
+      <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+        Statistical Significance: Final Mean Performance
+      </h2>
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={chartData}>
+          <CartesianGrid strokeDasharray="3 3" className="stroke-gray-300 dark:stroke-gray-700" />
+          <XAxis 
+            dataKey="name" 
+            className="text-gray-600 dark:text-gray-400"
+          />
+          <YAxis 
+            className="text-gray-600 dark:text-gray-400"
+            label={{ value: 'Elo Rating', angle: -90, position: 'insideLeft' }}
+          />
+          <Tooltip 
+            contentStyle={{ 
+              backgroundColor: 'rgba(255, 255, 255, 0.95)',
+              border: '1px solid #e5e7eb',
+              borderRadius: '8px'
+            }}
+          />
           <Legend />
-          <Bar dataKey="mean" fill="#8884d8" name="Mean Elo">
-            <ErrorBar dataKey="std" strokeWidth={2} />
+          <Bar 
+            dataKey="avgElo" 
+            fill="#3b82f6" 
+            name="Average Elo"
+          >
+            <ErrorBar dataKey="stdDev" stroke="#ef4444" strokeWidth={2} />
           </Bar>
+          <Bar 
+            dataKey="peakElo" 
+            fill="#8b5cf6" 
+            name="Peak Elo"
+          />
         </BarChart>
       </ResponsiveContainer>
+      <div className="mt-4 grid md:grid-cols-3 gap-4 text-sm">
+        <div>
+          <span className="text-gray-600 dark:text-gray-400">Final Avg Elo:</span>
+          <span className="ml-2 font-medium">{analysis.final_avg_elo?.toFixed(2) || 'N/A'}</span>
+        </div>
+        <div>
+          <span className="text-gray-600 dark:text-gray-400">Final Peak Elo:</span>
+          <span className="ml-2 font-medium">{analysis.final_peak_elo?.toFixed(2) || 'N/A'}</span>
+        </div>
+        <div>
+          <span className="text-gray-600 dark:text-gray-400">Convergence Gen:</span>
+          <span className="ml-2 font-medium">{analysis.convergence_generation || 'Not converged'}</span>
+        </div>
+      </div>
     </div>
   )
 }

@@ -2,15 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-
-interface Experiment {
-  id: string
-  experiment_name: string
-  experiment_group: 'CONTROL' | 'EXPERIMENTAL'
-  mutation_mode: 'STATIC' | 'ADAPTIVE'
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
-  created_at: string
-}
+import { Experiment } from '@/types/protocol'
 
 export default function ExperimentsPage() {
   const [experiments, setExperiments] = useState<Experiment[]>([])
@@ -38,18 +30,36 @@ export default function ExperimentsPage() {
     }
   }
 
+  const getGroupColor = (group: string) => {
+    return group === 'CONTROL' ? 'text-blue-600 dark:text-blue-400' : 'text-purple-600 dark:text-purple-400'
+  }
+
   if (loading) {
-    return <div className="p-8">Loading experiments...</div>
+    return (
+      <main className="min-h-screen p-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p className="mt-4 text-gray-600 dark:text-gray-400">Loading experiments...</p>
+          </div>
+        </div>
+      </main>
+    )
   }
 
   return (
-    <main className="min-h-screen p-8">
+    <main className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900">
       <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-4xl font-bold">Experiments</h1>
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">Experiments</h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Manage and monitor genetic algorithm experiments
+            </p>
+          </div>
           <Link
             href="/experiments/new"
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
           >
             New Experiment
           </Link>
@@ -57,24 +67,41 @@ export default function ExperimentsPage() {
 
         <div className="grid gap-4">
           {experiments.length === 0 ? (
-            <p className="text-gray-600">No experiments yet. Create one to get started.</p>
+            <div className="p-12 text-center border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800">
+              <p className="text-gray-600 dark:text-gray-400 mb-4">No experiments yet.</p>
+              <Link
+                href="/experiments/new"
+                className="text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Create your first experiment
+              </Link>
+            </div>
           ) : (
             experiments.map((exp) => (
               <Link
                 key={exp.id}
                 href={`/experiments/${exp.id}`}
-                className="block p-6 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+                className="block p-6 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-md transition-all bg-white dark:bg-gray-800"
               >
                 <div className="flex justify-between items-start">
-                  <div>
-                    <h2 className="text-2xl font-semibold mb-2">{exp.experiment_name}</h2>
-                    <div className="flex gap-4 text-sm text-gray-600">
-                      <span>Group: {exp.experiment_group}</span>
-                      <span>Mode: {exp.mutation_mode}</span>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                        {exp.experiment_name}
+                      </h2>
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${getGroupColor(exp.experiment_group)} bg-opacity-10`}>
+                        {exp.experiment_group}
+                      </span>
+                    </div>
+                    <div className="flex gap-6 text-sm text-gray-600 dark:text-gray-400">
+                      <span>Mode: <strong>{exp.mutation_mode}</strong></span>
+                      <span>Population: <strong>{exp.population_size}</strong></span>
+                      <span>Max Generations: <strong>{exp.max_generations}</strong></span>
+                      <span>Seed: <strong>{exp.random_seed}</strong></span>
                       <span>Created: {new Date(exp.created_at).toLocaleDateString()}</span>
                     </div>
                   </div>
-                  <span className={`px-3 py-1 rounded text-white text-sm ${getStatusColor(exp.status)}`}>
+                  <span className={`px-4 py-2 rounded-lg text-white text-sm font-medium ${getStatusColor(exp.status)}`}>
                     {exp.status}
                   </span>
                 </div>

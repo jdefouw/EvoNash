@@ -27,9 +27,9 @@ class ExperimentConfig:
     def __post_init__(self):
         if self.network_architecture is None:
             self.network_architecture = {
-                "input_size": 100,
-                "hidden_layers": [256, 128, 64],
-                "output_size": 10
+                "input_size": 24,
+                "hidden_layers": [64],
+                "output_size": 4
             }
     
     def get_mutation_rate(self, parent_elo: float) -> float:

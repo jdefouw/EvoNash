@@ -1,0 +1,44 @@
+{
+  "petri_dish": {
+    "width": 1000.0,
+    "height": 1000.0,
+    "toroidal": true
+  },
+  "physics": {
+    "gravity": 0.0,
+    "friction": 0.0,
+    "dt": 0.016
+  },
+  "agent": {
+    "radius": 10.0,
+    "initial_energy": 100.0,
+    "energy_decay_rate": 0.1,
+    "movement_cost": 0.5,
+    "max_velocity": 5.0,
+    "thrust_force": 0.2,
+    "turn_rate": 0.1,
+    "shoot_cooldown": 30,
+    "split_cooldown": 60
+  },
+  "food": {
+    "radius": 5.0,
+    "energy_value": 10.0,
+    "spawn_count": 50,
+    "respawn_time": 300
+  },
+  "projectile": {
+    "radius": 3.0,
+    "speed": 10.0,
+    "damage": 20.0,
+    "lifetime": 200
+  },
+  "simulation": {
+    "ticks_per_generation": 1000,
+    "max_agents": 1000
+  },
+  "raycast": {
+    "count": 8,
+    "max_distance": 200.0,
+    "angles": [0, 45, 90, 135, 180, 225, 270, 315]
+  }
+}

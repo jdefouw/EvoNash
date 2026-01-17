@@ -52,12 +52,8 @@ class StatisticalAnalyzer:
         Returns:
             Dictionary with t-statistic, p-value, and interpretation
         """
-        control_final_elo = self.control_df['avg_elo'].iloc[-1]
-        experimental_final_elo = self.experimental_df['avg_elo'].iloc[-1]
-        
-        # Get all final generation Elo values (if multiple runs)
-        # For now, use the last generation's average
-        control_elos = self.control_df['avg_elo'].tail(100).values  # Last 100 generations
+        # Get last 100 generations for statistical power
+        control_elos = self.control_df['avg_elo'].tail(100).values
         experimental_elos = self.experimental_df['avg_elo'].tail(100).values
         
         t_stat, p_value = stats.ttest_ind(control_elos, experimental_elos)

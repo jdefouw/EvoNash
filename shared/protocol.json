@@ -117,6 +117,74 @@
           }
         }
       }
+    },
+    "ExperimentConfig": {
+      "type": "object",
+      "required": ["experiment_id", "experiment_name", "mutation_mode", "random_seed", "population_size", "max_generations", "network_architecture", "experiment_group"],
+      "properties": {
+        "experiment_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "experiment_name": {
+          "type": "string"
+        },
+        "mutation_mode": {
+          "type": "string",
+          "enum": ["STATIC", "ADAPTIVE"]
+        },
+        "mutation_rate": {
+          "type": "number",
+          "description": "For STATIC mode"
+        },
+        "mutation_base": {
+          "type": "number",
+          "description": "For ADAPTIVE mode"
+        },
+        "max_possible_elo": {
+          "type": "number",
+          "default": 2000.0
+        },
+        "random_seed": {
+          "type": "integer"
+        },
+        "population_size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "selection_pressure": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.2
+        },
+        "max_generations": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "network_architecture": {
+          "type": "object",
+          "required": ["input_size", "hidden_layers", "output_size"],
+          "properties": {
+            "input_size": {
+              "type": "integer"
+            },
+            "hidden_layers": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "output_size": {
+              "type": "integer"
+            }
+          }
+        },
+        "experiment_group": {
+          "type": "string",
+          "enum": ["CONTROL", "EXPERIMENTAL"]
+        }
+      }
     }
   }
 }

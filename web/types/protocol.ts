@@ -1,6 +1,6 @@
 // TypeScript types matching the shared protocol.json schema
 
-export type MatchType = 'self_play' | 'benchmark' | 'human_vs_ai';
+export type MatchType = 'self_play' | 'benchmark';
 
 export type MutationMode = 'STATIC' | 'ADAPTIVE';
 export type ExperimentGroup = 'CONTROL' | 'EXPERIMENTAL';
@@ -43,6 +43,11 @@ export interface GenerationStats {
   entropy_variance: number;
   population_diversity: number;
   mutation_rate: number;
+  min_elo?: number;
+  std_elo?: number;
+  min_fitness?: number;
+  max_fitness?: number;
+  std_fitness?: number;
 }
 
 export interface JobRequest {
@@ -50,7 +55,7 @@ export interface JobRequest {
   experiment_id: string;
   generation_id: string;
   agent_ids: string[];
-  match_type: 'self_play' | 'benchmark';
+  match_type: MatchType;
   num_batches: number;
   batch_size: number;
   experiment_config: ExperimentConfig;
@@ -59,7 +64,45 @@ export interface JobRequest {
 export interface JobResult {
   job_id: string;
   experiment_id: string;
-  generation_id?: string; // Optional, will be set by API if not provided
+  generation_id?: string;
   matches: Match[];
   generation_stats: GenerationStats;
+}
+
+export interface Experiment {
+  id: string;
+  experiment_name: string;
+  experiment_group: ExperimentGroup;
+  mutation_mode: MutationMode;
+  random_seed: number;
+  population_size: number;
+  max_generations: number;
+  status: ExperimentStatus;
+  created_at: string;
+  completed_at?: string;
+  mutation_rate?: number;
+  mutation_base?: number;
+  max_possible_elo: number;
+  selection_pressure: number;
+  network_architecture: NetworkArchitecture;
+}
+
+export interface Generation {
+  id: string;
+  experiment_id: string;
+  generation_number: number;
+  created_at: string;
+  population_size: number;
+  avg_fitness?: number;
+  avg_elo?: number;
+  peak_elo?: number;
+  min_elo?: number;
+  std_elo?: number;
+  policy_entropy?: number;
+  entropy_variance?: number;
+  population_diversity?: number;
+  mutation_rate?: number;
+  min_fitness?: number;
+  max_fitness?: number;
+  std_fitness?: number;
 }
