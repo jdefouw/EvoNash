@@ -28,11 +28,13 @@ export interface ExperimentConfig {
 }
 
 export interface Match {
+  id?: string;
   agent_a_id: string;
   agent_b_id: string;
   winner_id: string | null;
   move_history: unknown[];
   telemetry: Record<string, unknown>;
+  created_at?: string;
 }
 
 export interface GenerationStats {
