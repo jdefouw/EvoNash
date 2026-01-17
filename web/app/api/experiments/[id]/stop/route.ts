@@ -3,16 +3,20 @@ import { createServerClient } from '@/lib/supabase/server'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
     const supabase = await createServerClient()
+    
+    // Handle both sync and async params (Next.js 13+ vs 15+)
+    const resolvedParams = await Promise.resolve(params)
+    const experimentId = resolvedParams.id
     
     // First, check if experiment exists and is RUNNING
     const { data: experiment, error: fetchError } = await supabase
       .from('experiments')
       .select('status')
-      .eq('id', params.id)
+      .eq('id', experimentId)
       .single()
     
     if (fetchError || !experiment) {
@@ -33,7 +37,7 @@ export async function POST(
     const { error: updateError } = await supabase
       .from('experiments')
       .update({ status: 'STOPPED' })
-      .eq('id', params.id)
+      .eq('id', experimentId)
     
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })

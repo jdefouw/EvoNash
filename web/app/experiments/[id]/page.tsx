@@ -236,9 +236,18 @@ export default function ExperimentDetailPage() {
             </div>
             <div className="flex gap-3">
               <button
-                onClick={() => {
-                  fetch(`/api/experiments/${experimentId}/start`, { method: 'POST' })
-                    .then(() => window.location.reload())
+                onClick={async () => {
+                  try {
+                    const response = await fetch(`/api/experiments/${experimentId}/start`, { method: 'POST' })
+                    if (response.ok) {
+                      window.location.reload()
+                    } else {
+                      const error = await response.json()
+                      alert(`Failed to start experiment: ${error.error || 'Unknown error'}`)
+                    }
+                  } catch (error) {
+                    alert(`Failed to start experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
+                  }
                 }}
                 className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={experiment.status === 'RUNNING' || experiment.status === 'STOPPED'}
@@ -248,10 +257,18 @@ export default function ExperimentDetailPage() {
               {experiment.status === 'RUNNING' && (
                 <button
                   onClick={async () => {
+                    if (!confirm('Are you sure you want to stop this experiment? The worker will finish the current generation before stopping.')) {
+                      return
+                    }
                     try {
                       const response = await fetch(`/api/experiments/${experimentId}/stop`, { method: 'POST' })
                       if (response.ok) {
+                        const data = await response.json()
                         setExperiment({ ...experiment, status: 'STOPPED' })
+                        // Refresh the page after a short delay to show updated status
+                        setTimeout(() => {
+                          window.location.reload()
+                        }, 500)
                       } else {
                         const error = await response.json()
                         alert(`Failed to stop experiment: ${error.error || 'Unknown error'}`)
