@@ -25,6 +25,7 @@ export default function ExperimentDetailPage() {
   const [loading, setLoading] = useState(true)
   const [pollingError, setPollingError] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
+  const [workerStatus, setWorkerStatus] = useState<{connected: boolean, pending_count: number} | null>(null)
   
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const lastGenerationNumberRef = useRef<number>(-1)
@@ -114,9 +115,23 @@ export default function ExperimentDetailPage() {
       .then(res => res.json())
       .then(data => {
         setExperiment(data)
+        console.log('Experiment status:', data.status) // Debug log
       })
       .catch(err => {
         console.error('Error fetching experiment:', err)
+      })
+
+    // Check worker status
+    fetch('/api/worker/status')
+      .then(res => res.json())
+      .then(data => {
+        setWorkerStatus({
+          connected: data.worker_connected || false,
+          pending_count: data.pending_count || 0
+        })
+      })
+      .catch(err => {
+        console.error('Error fetching worker status:', err)
       })
 
     // Fetch generations
@@ -232,27 +247,48 @@ export default function ExperimentDetailPage() {
                   Mode: <strong className="text-gray-900 dark:text-white">{experiment.mutation_mode}</strong>
                 </span>
                 <StatusIndicator status={experiment.status} />
+                {workerStatus && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <div className={`w-2 h-2 rounded-full ${workerStatus.connected ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Worker: {workerStatus.connected ? 'Connected' : 'Not Connected'}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-3 items-center">
               <button
-                onClick={async () => {
+                onClick={async (e) => {
+                  e.preventDefault()
+                  console.log('Start button clicked, current status:', experiment.status) // Debug log
+                  if (experiment.status === 'RUNNING' || experiment.status === 'STOPPED' || experiment.status === 'COMPLETED') {
+                    alert(`Cannot start experiment with status: ${experiment.status}`)
+                    return
+                  }
                   try {
+                    console.log('Calling start endpoint...') // Debug log
                     const response = await fetch(`/api/experiments/${experimentId}/start`, { method: 'POST' })
+                    console.log('Start response status:', response.status) // Debug log
                     if (response.ok) {
+                      const data = await response.json()
+                      console.log('Start response data:', data) // Debug log
                       window.location.reload()
                     } else {
                       const error = await response.json()
+                      console.error('Start error:', error) // Debug log
                       alert(`Failed to start experiment: ${error.error || 'Unknown error'}`)
                     }
                   } catch (error) {
+                    console.error('Start exception:', error) // Debug log
                     alert(`Failed to start experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
                   }
                 }}
                 className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={experiment.status === 'RUNNING' || experiment.status === 'STOPPED'}
+                disabled={experiment.status === 'RUNNING' || experiment.status === 'STOPPED' || experiment.status === 'COMPLETED'}
+                title={experiment.status === 'RUNNING' ? 'Experiment is already running' : experiment.status === 'STOPPED' ? 'Experiment was stopped' : experiment.status === 'COMPLETED' ? 'Experiment is completed' : 'Start experiment on GPU worker'}
               >
-                {experiment.status === 'RUNNING' ? 'Running...' : 'Start Experiment'}
+                {experiment.status === 'RUNNING' ? 'Running...' : experiment.status === 'STOPPED' ? 'Stopped' : experiment.status === 'COMPLETED' ? 'Completed' : 'Start Experiment'}
               </button>
               {experiment.status === 'RUNNING' && (
                 <button

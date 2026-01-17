@@ -7,6 +7,7 @@ import { Experiment } from '@/types/protocol'
 export default function ExperimentsPage() {
   const [experiments, setExperiments] = useState<Experiment[]>([])
   const [loading, setLoading] = useState(true)
+  const [workerStatus, setWorkerStatus] = useState<{connected: boolean, pending_count: number} | null>(null)
 
   useEffect(() => {
     fetch('/api/experiments')
@@ -26,6 +27,19 @@ export default function ExperimentsPage() {
         console.error('Error fetching experiments:', err)
         setExperiments([]) // Set empty array on error
         setLoading(false)
+      })
+
+    // Check worker status
+    fetch('/api/worker/status')
+      .then(res => res.json())
+      .then(data => {
+        setWorkerStatus({
+          connected: data.worker_connected || false,
+          pending_count: data.pending_count || 0
+        })
+      })
+      .catch(err => {
+        console.error('Error fetching worker status:', err)
       })
   }, [])
 
@@ -64,6 +78,15 @@ export default function ExperimentsPage() {
             <p className="text-gray-600 dark:text-gray-400">
               Manage and monitor genetic algorithm experiments
             </p>
+            {workerStatus && (
+              <div className="mt-2 flex items-center gap-2 text-sm">
+                <div className={`w-2 h-2 rounded-full ${workerStatus.connected ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+                <span className="text-gray-600 dark:text-gray-400">
+                  GPU Worker: {workerStatus.connected ? 'Connected' : 'Not Connected'}
+                  {workerStatus.pending_count > 0 && ` • ${workerStatus.pending_count} pending`}
+                </span>
+              </div>
+            )}
           </div>
           <Link
             href="/experiments/new"
