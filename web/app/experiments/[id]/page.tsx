@@ -403,6 +403,49 @@ export default function ExperimentDetailPage() {
               generations={generations}
             />
             
+            {/* Worker Status Card */}
+            {experiment.status === 'PENDING' && (
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                  <span className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                    Queued for GPU Worker - Waiting for worker to pick up...
+                  </span>
+                </div>
+                <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                  Worker polls every 30 seconds. Status will update to RUNNING when worker starts.
+                </p>
+              </div>
+            )}
+            
+            {experiment.status === 'RUNNING' && latestGeneration && (
+              <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  <span className="text-sm font-medium text-green-800 dark:text-green-200">
+                    ✓ GPU Worker is Processing
+                  </span>
+                </div>
+                <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                  Generation {latestGeneration.generation_number} completed. Worker is actively running on GPU.
+                </p>
+              </div>
+            )}
+            
+            {experiment.status === 'RUNNING' && !latestGeneration && (
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                  <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                    GPU Worker Started - Waiting for first generation...
+                  </span>
+                </div>
+                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                  Worker has claimed the job and is initializing. First generation data will appear shortly.
+                </p>
+              </div>
+            )}
+            
             {/* Configuration Card */}
             <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
               <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Configuration</h2>

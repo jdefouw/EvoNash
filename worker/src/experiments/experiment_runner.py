@@ -229,34 +229,48 @@ class ExperimentRunner:
         Returns:
             Dictionary with final experiment results
         """
-        print(f"Starting experiment: {self.config.experiment_name}")
+        print(f"\n{'='*80}")
+        print(f"🚀 STARTING EXPERIMENT EXECUTION")
+        print(f"{'='*80}")
+        print(f"Experiment: {self.config.experiment_name}")
         print(f"Mutation mode: {self.config.mutation_mode}")
         print(f"Random seed: {self.config.random_seed}")
         print(f"Max generations: {self.config.max_generations}")
+        print(f"Population size: {self.config.population_size}")
+        print(f"{'='*80}\n")
         
         stopped = False
         for gen in range(self.config.max_generations):
+            # Print generation start
+            progress_pct = ((gen + 1) / self.config.max_generations) * 100
+            print(f"\n{'─'*80}")
+            print(f"Generation {gen + 1}/{self.config.max_generations} ({progress_pct:.1f}%) - Processing...")
+            print(f"{'─'*80}")
+            
+            # Run the generation
             stats = self.run_generation()
+            
+            # Print generation results immediately
+            print(f"✓ Generation {gen + 1}/{self.config.max_generations} Complete")
+            print(f"  Avg Elo: {stats.get('avg_elo', 0):7.2f} | "
+                  f"Peak Elo: {stats.get('peak_elo', 0):7.2f} | "
+                  f"Min Elo: {stats.get('min_elo', 0):7.2f}")
+            print(f"  Entropy: {stats.get('policy_entropy', 0):.4f} | "
+                  f"Entropy Var: {stats.get('entropy_variance', 0):.6f} | "
+                  f"Diversity: {stats.get('population_diversity', 0):.4f}")
+            print(f"  Avg Fitness: {stats.get('avg_fitness', 0):.2f} | "
+                  f"Mutation Rate: {stats.get('mutation_rate', 0):.4f}")
             
             # Check if experiment should stop after completing this generation
             if self.stop_check_callback:
                 try:
                     if self.stop_check_callback():
-                        print(f"Stop signal received after generation {gen + 1}")
+                        print(f"\n⚠ Stop signal received after generation {gen + 1}")
                         stopped = True
                         break
                 except Exception as e:
                     print(f"Warning: Stop check callback failed: {e}")
                     # Continue execution even if stop check fails
-            
-            # Print statistics every generation
-            # Brief stats every generation
-            progress_pct = ((gen + 1) / self.config.max_generations) * 100
-            print(f"[{progress_pct:5.1f}%] Gen {gen + 1:5d}/{self.config.max_generations} | "
-                  f"Avg Elo: {stats.get('avg_elo', 0):7.2f} | "
-                  f"Peak: {stats.get('peak_elo', 0):7.2f} | "
-                  f"Entropy: {stats.get('policy_entropy', 0):.4f} | "
-                  f"Div: {stats.get('population_diversity', 0):.4f}")
             
             # Detailed stats every 10 generations or first generation
             if (gen + 1) % 10 == 0 or gen == 0:
@@ -278,7 +292,7 @@ class ExperimentRunner:
                 print(f"    Diversity:      {stats.get('population_diversity', 0):.4f}")
                 print(f"  Evolution:")
                 print(f"    Mutation Rate:  {stats.get('mutation_rate', 0):.4f}")
-                print(f"{'='*80}\n")
+                print(f"{'='*80}")
         
         if stopped:
             print("Experiment stopped by user")

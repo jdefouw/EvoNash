@@ -4,11 +4,15 @@ import { Generation, Match } from '@/types/protocol'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
     const supabase = await createServerClient()
     const { searchParams } = new URL(request.url)
+    
+    // Handle both sync and async params (Next.js 13+ vs 15+)
+    const resolvedParams = await Promise.resolve(params)
+    const experimentId = resolvedParams.id
     
     // Get optional timestamp for incremental updates
     const sinceTimestamp = searchParams.get('since')
@@ -18,7 +22,7 @@ export async function GET(
     const { data: experiment, error: expError } = await supabase
       .from('experiments')
       .select('status, max_generations')
-      .eq('id', params.id)
+      .eq('id', experimentId)
       .single()
     
     if (expError || !experiment) {
@@ -29,7 +33,7 @@ export async function GET(
     let genQuery = supabase
       .from('generations')
       .select('*')
-      .eq('experiment_id', params.id)
+      .eq('experiment_id', experimentId)
       .order('generation_number', { ascending: false })
       .limit(1)
     
@@ -50,7 +54,7 @@ export async function GET(
     let matchesQuery = supabase
       .from('matches')
       .select('*')
-      .eq('experiment_id', params.id)
+      .eq('experiment_id', experimentId)
       .order('created_at', { ascending: false })
       .limit(50) // Limit to most recent 50 matches
     
