@@ -5,7 +5,7 @@ Handles reproducibility, batch inference, and generation statistics.
 
 import torch
 import numpy as np
-from typing import Dict, Optional
+from typing import Dict, Optional, Callable
 from pathlib import Path
 import json
 
@@ -27,16 +27,20 @@ class ExperimentRunner:
     - Generation statistics logging
     """
     
-    def __init__(self, config: ExperimentConfig, device: str = 'cuda'):
+    def __init__(self, config: ExperimentConfig, device: str = 'cuda', upload_callback: Optional[Callable[[Dict], None]] = None, stop_check_callback: Optional[Callable[[], bool]] = None):
         """
         Initialize experiment runner.
         
         Args:
             config: Experiment configuration
             device: Device to run on ('cuda' or 'cpu')
+            upload_callback: Optional callback function called after each generation with stats dict
+            stop_check_callback: Optional callback function that returns True if experiment should stop
         """
         self.config = config
         self.device = device if torch.cuda.is_available() and device == 'cuda' else 'cpu'
+        self.upload_callback = upload_callback
+        self.stop_check_callback = stop_check_callback
         
         # Set all random seeds for reproducibility
         self._set_seeds(config.random_seed)
@@ -204,6 +208,14 @@ class ExperimentRunner:
         # Store history
         self.generation_stats_history.append(stats)
         
+        # Upload immediately if callback provided (incremental upload)
+        if self.upload_callback:
+            try:
+                self.upload_callback(stats)
+            except Exception as e:
+                print(f"Warning: Upload callback failed: {e}")
+                # Continue execution even if upload fails
+        
         # Evolve to next generation
         self.ga.evolve_generation()
         self.current_generation += 1
@@ -222,8 +234,20 @@ class ExperimentRunner:
         print(f"Random seed: {self.config.random_seed}")
         print(f"Max generations: {self.config.max_generations}")
         
+        stopped = False
         for gen in range(self.config.max_generations):
             stats = self.run_generation()
+            
+            # Check if experiment should stop after completing this generation
+            if self.stop_check_callback:
+                try:
+                    if self.stop_check_callback():
+                        print(f"Stop signal received after generation {gen + 1}")
+                        stopped = True
+                        break
+                except Exception as e:
+                    print(f"Warning: Stop check callback failed: {e}")
+                    # Continue execution even if stop check fails
             
             if (gen + 1) % 100 == 0:
                 print(f"Generation {gen + 1}/{self.config.max_generations}: "
@@ -231,10 +255,14 @@ class ExperimentRunner:
                       f"Peak Elo: {stats['peak_elo']:.2f}, "
                       f"Entropy: {stats['policy_entropy']:.4f}")
         
-        print("Experiment completed!")
+        if stopped:
+            print("Experiment stopped by user")
+        else:
+            print("Experiment completed!")
         
         return {
             'final_stats': self.generation_stats_history[-1] if self.generation_stats_history else {},
             'all_stats': self.generation_stats_history,
-            'csv_path': str(self.logger.get_filepath())
+            'csv_path': str(self.logger.get_filepath()),
+            'stopped': stopped
         }

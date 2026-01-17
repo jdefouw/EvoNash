@@ -4,7 +4,7 @@ export type MatchType = 'self_play' | 'benchmark';
 
 export type MutationMode = 'STATIC' | 'ADAPTIVE';
 export type ExperimentGroup = 'CONTROL' | 'EXPERIMENTAL';
-export type ExperimentStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+export type ExperimentStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STOPPED';
 
 export interface NetworkArchitecture {
   input_size: number;

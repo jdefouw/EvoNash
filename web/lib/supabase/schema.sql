@@ -5,7 +5,7 @@
 -- Create enums
 CREATE TYPE experiment_group_type AS ENUM ('CONTROL', 'EXPERIMENTAL');
 CREATE TYPE mutation_mode_type AS ENUM ('STATIC', 'ADAPTIVE');
-CREATE TYPE experiment_status_type AS ENUM ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED');
+CREATE TYPE experiment_status_type AS ENUM ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'STOPPED');
 CREATE TYPE match_type_enum AS ENUM ('self_play', 'benchmark');
 
 -- Experiments Table
