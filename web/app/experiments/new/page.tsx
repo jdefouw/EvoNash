@@ -45,7 +45,10 @@ export default function NewExperimentPage() {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to create experiment')
+        const errorMessage = errorData.error || 'Failed to create experiment'
+        const details = errorData.details ? ` Details: ${errorData.details}` : ''
+        const hint = errorData.hint ? ` Hint: ${errorData.hint}` : ''
+        throw new Error(`${errorMessage}${details}${hint}`)
       }
 
       const data = await response.json()

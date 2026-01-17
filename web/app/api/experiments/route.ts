@@ -28,7 +28,17 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const supabase = await createServerClient()
+    
+    let supabase
+    try {
+      supabase = await createServerClient()
+    } catch (clientError) {
+      console.error('Failed to create Supabase client:', clientError)
+      return NextResponse.json(
+        { error: 'Database connection failed. Please check Supabase configuration.' },
+        { status: 500 }
+      )
+    }
     
     const {
       experiment_name,
@@ -76,7 +86,12 @@ export async function POST(request: NextRequest) {
       .single()
     
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error('Supabase insert error:', error)
+      return NextResponse.json({ 
+        error: error.message || 'Database error occurred',
+        details: error.details || null,
+        hint: error.hint || null
+      }, { status: 500 })
     }
     
     // Return experiment config for worker
@@ -97,8 +112,10 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({ experiment: data, config })
   } catch (error) {
+    console.error('Error creating experiment:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create experiment'
     return NextResponse.json(
-      { error: 'Failed to create experiment' },
+      { error: errorMessage },
       { status: 500 }
     )
   }
