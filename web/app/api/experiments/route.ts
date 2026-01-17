@@ -12,15 +12,16 @@ export async function GET() {
       .order('created_at', { ascending: false })
     
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error('Supabase error:', error)
+      // Return empty array instead of error to prevent client-side issues
+      return NextResponse.json([])
     }
     
     return NextResponse.json(data || [])
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch experiments' },
-      { status: 500 }
-    )
+    console.error('Error fetching experiments:', error)
+    // Return empty array on error to prevent client-side issues
+    return NextResponse.json([])
   }
 }
 

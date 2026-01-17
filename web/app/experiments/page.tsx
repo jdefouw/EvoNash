@@ -10,13 +10,21 @@ export default function ExperimentsPage() {
 
   useEffect(() => {
     fetch('/api/experiments')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`)
+        }
+        return res.json()
+      })
       .then(data => {
-        setExperiments(data)
+        // Ensure data is an array
+        const experimentsArray = Array.isArray(data) ? data : []
+        setExperiments(experimentsArray)
         setLoading(false)
       })
       .catch(err => {
         console.error('Error fetching experiments:', err)
+        setExperiments([]) // Set empty array on error
         setLoading(false)
       })
   }, [])
