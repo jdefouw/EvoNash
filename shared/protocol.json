@@ -1,0 +1,122 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EvoNash Communication Protocol",
+  "description": "JSON Schema for communication between Next.js Controller and Python Worker",
+  "definitions": {
+    "JobRequest": {
+      "type": "object",
+      "required": ["job_id", "experiment_id", "generation_id", "agent_ids", "match_type", "num_batches", "batch_size", "experiment_config"],
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique identifier for the job"
+        },
+        "experiment_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Identifier for the experiment"
+        },
+        "generation_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Identifier for the current generation"
+        },
+        "agent_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "description": "List of agent UUIDs to use in matches"
+        },
+        "match_type": {
+          "type": "string",
+          "enum": ["self_play", "benchmark"],
+          "description": "Type of match to run"
+        },
+        "num_batches": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of batches to run"
+        },
+        "batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of matches per batch"
+        },
+        "experiment_config": {
+          "type": "object",
+          "description": "Full experiment configuration"
+        }
+      }
+    },
+    "JobResult": {
+      "type": "object",
+      "required": ["job_id", "experiment_id", "matches", "generation_stats"],
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "experiment_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "matches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "agent_a_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "agent_b_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "winner_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "move_history": {
+                "type": "array"
+              },
+              "telemetry": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "generation_stats": {
+          "type": "object",
+          "required": ["avg_fitness", "avg_elo", "peak_elo", "policy_entropy", "entropy_variance", "population_diversity", "mutation_rate"],
+          "properties": {
+            "avg_fitness": {
+              "type": "number"
+            },
+            "avg_elo": {
+              "type": "number"
+            },
+            "peak_elo": {
+              "type": "number"
+            },
+            "policy_entropy": {
+              "type": "number"
+            },
+            "entropy_variance": {
+              "type": "number"
+            },
+            "population_diversity": {
+              "type": "number"
+            },
+            "mutation_rate": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    }
+  }
+}

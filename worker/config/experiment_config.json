@@ -1,0 +1,18 @@
+{
+  "experiment_id": "",
+  "experiment_name": "",
+  "mutation_mode": "STATIC",
+  "mutation_rate": 0.05,
+  "mutation_base": 0.1,
+  "max_possible_elo": 2000,
+  "random_seed": 42,
+  "population_size": 1000,
+  "selection_pressure": 0.2,
+  "max_generations": 5000,
+  "network_architecture": {
+    "input_size": 100,
+    "hidden_layers": [256, 128, 64],
+    "output_size": 10
+  },
+  "experiment_group": "CONTROL"
+}
