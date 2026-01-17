@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 
+// Force dynamic rendering since we query the database
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const supabase = await createServerClient()
