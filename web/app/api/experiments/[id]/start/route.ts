@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase/server'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 // POST /api/experiments/[id]/start - Start an experiment
 export async function POST(
@@ -7,6 +7,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const supabaseAdmin = getSupabaseAdmin()
     // Update experiment status to RUNNING
     const { data, error } = await supabaseAdmin
       .from('experiments')

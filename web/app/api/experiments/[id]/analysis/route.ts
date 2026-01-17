@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase/server'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 // GET /api/experiments/[id]/analysis - Get statistical analysis
 export async function GET(
@@ -7,6 +7,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const supabaseAdmin = getSupabaseAdmin()
     // Get experiment details
     const { data: experiment, error: expError } = await supabaseAdmin
       .from('experiments')

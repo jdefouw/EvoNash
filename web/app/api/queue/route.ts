@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase/server'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { JobRequest, JobResult } from '@/types/protocol'
 
 // GET /api/queue - Worker polls for jobs
 export async function GET(request: NextRequest) {
   try {
+    const supabaseAdmin = getSupabaseAdmin()
     // Find experiments that are RUNNING and have pending work
     // For now, return the first RUNNING experiment
     const { data: experiment, error } = await supabaseAdmin
@@ -76,6 +77,7 @@ export async function GET(request: NextRequest) {
 // POST /api/queue - Worker submits results
 export async function POST(request: NextRequest) {
   try {
+    const supabaseAdmin = getSupabaseAdmin()
     const result: JobResult = await request.json()
 
     // Save matches
