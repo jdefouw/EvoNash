@@ -50,10 +50,12 @@ CREATE TABLE IF NOT EXISTS generations (
     UNIQUE(experiment_id, generation_number)
 );
 
--- Convert generations to TimescaleDB hypertable
--- Note: This requires TimescaleDB extension to be installed
--- Run: CREATE EXTENSION IF NOT EXISTS timescaledb;
-SELECT create_hypertable('generations', 'created_at', if_not_exists => TRUE);
+-- Convert generations to TimescaleDB hypertable (OPTIONAL)
+-- Note: TimescaleDB is not available on all Supabase instances
+-- If you have TimescaleDB enabled, uncomment the following lines:
+-- CREATE EXTENSION IF NOT EXISTS timescaledb;
+-- SELECT create_hypertable('generations', 'created_at', if_not_exists => TRUE);
+-- The schema works fine without TimescaleDB, just without time-series optimizations
 
 -- Agents Table
 CREATE TABLE IF NOT EXISTS agents (
