@@ -14,6 +14,8 @@ export async function GET(
     const resolvedParams = await Promise.resolve(params)
     const experimentId = resolvedParams.id
     
+    console.log(`[LIVE] Fetching live data for experiment: ${experimentId}`)
+    
     // Get optional timestamp for incremental updates
     const sinceTimestamp = searchParams.get('since')
     const lastGenerationNumber = searchParams.get('last_gen')
@@ -26,6 +28,7 @@ export async function GET(
       .single()
     
     if (expError || !experiment) {
+      console.error(`[LIVE] Experiment not found: ${experimentId}`, expError)
       return NextResponse.json({ error: 'Experiment not found' }, { status: 404 })
     }
     
@@ -77,15 +80,20 @@ export async function GET(
     )
     
     // Always return the latest generation even if no updates, so UI can show current progress
-    return NextResponse.json({
+    const response = {
       generation: latestGeneration,
+      latestGeneration: latestGeneration, // Alias for consistency
       matches: matches || [],
       experiment_status: experiment.status,
       has_updates: hasUpdates,
       max_generations: experiment.max_generations,
       current_generation: latestGeneration?.generation_number || 0,
       total_generations: experiment.max_generations
-    })
+    }
+    
+    console.log(`[LIVE] Returning data for experiment ${experimentId}: gen=${latestGeneration?.generation_number || 0}, matches=${matches?.length || 0}, has_updates=${hasUpdates}`)
+    
+    return NextResponse.json(response)
   } catch (error) {
     console.error('Error in live endpoint:', error)
     return NextResponse.json(
