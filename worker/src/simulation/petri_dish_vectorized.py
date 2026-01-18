@@ -97,15 +97,19 @@ class VectorizedPetriDish(PetriDish):
         
         for chunk_start in range(0, num_agents, chunk_size):
             chunk_end = min(chunk_start + chunk_size, num_agents)
-            chunk_positions = agent_positions[chunk_start:chunk_end]
-            chunk_ray_dx = ray_dx[chunk_start:chunk_end]
-            chunk_ray_dy = ray_dy[chunk_start:chunk_end]
+            chunk_positions = agent_positions[chunk_start:chunk_end]  # (chunk_size, 2)
+            chunk_ray_dx = ray_dx[chunk_start:chunk_end]  # (chunk_size, raycast_count)
+            chunk_ray_dy = ray_dy[chunk_start:chunk_end]  # (chunk_size, raycast_count)
             chunk_size_actual = chunk_end - chunk_start
             
-            # Calculate check positions: (chunk_size, raycast_count, steps, 2)
-            step_distances_expanded = self._step_distances.unsqueeze(0).unsqueeze(0).unsqueeze(0)  # (1, 1, steps, 1)
-            check_x = chunk_positions[:, 0:1, None, None] + chunk_ray_dx[:, :, None, None] * step_distances_expanded
-            check_y = chunk_positions[:, 1:2, None, None] + chunk_ray_dy[:, :, None, None] * step_distances_expanded
+            # Calculate check positions: (chunk_size, raycast_count, steps)
+            # step_distances: (steps,) -> expand to (1, 1, steps) for broadcasting
+            step_distances_expanded = self._step_distances.view(1, 1, -1)  # (1, 1, steps)
+            # chunk_positions[:, 0:1]: (chunk_size, 1) -> (chunk_size, 1, 1)
+            # chunk_ray_dx: (chunk_size, raycast_count) -> (chunk_size, raycast_count, 1)
+            # Result: (chunk_size, raycast_count, steps)
+            check_x = chunk_positions[:, 0:1].unsqueeze(2) + chunk_ray_dx.unsqueeze(2) * step_distances_expanded
+            check_y = chunk_positions[:, 1:2].unsqueeze(2) + chunk_ray_dy.unsqueeze(2) * step_distances_expanded
             
             # Wrap positions
             if self.toroidal:
@@ -127,12 +131,13 @@ class VectorizedPetriDish(PetriDish):
                 food_x = self.food_positions[:, 0]  # (num_food,)
                 food_y = self.food_positions[:, 1]  # (num_food,)
                 
-                # Use broadcasting more efficiently
-                # (chunk_size, raycast_count, steps, 1) - (1, 1, 1, num_food)
+                # Use broadcasting: (chunk_size, raycast_count, steps) - (1, 1, 1, num_food)
+                # Expand check positions to add food dimension: (chunk_size, raycast_count, steps, 1)
                 check_x_expanded = check_x.unsqueeze(3)  # (chunk_size, raycast_count, steps, 1)
                 check_y_expanded = check_y.unsqueeze(3)  # (chunk_size, raycast_count, steps, 1)
-                food_x_expanded = food_x.view(1, 1, 1, -1)  # (1, 1, 1, num_food)
-                food_y_expanded = food_y.view(1, 1, 1, -1)  # (1, 1, 1, num_food)
+                # Expand food positions: (1, 1, 1, num_food)
+                food_x_expanded = food_x.unsqueeze(0).unsqueeze(0).unsqueeze(0)  # (1, 1, 1, num_food)
+                food_y_expanded = food_y.unsqueeze(0).unsqueeze(0).unsqueeze(0)  # (1, 1, 1, num_food)
                 
                 # Calculate distances
                 dx = check_x_expanded - food_x_expanded
