@@ -59,13 +59,24 @@ class ExperimentRunner:
         if self.device == 'cuda' and torch.cuda.is_available():
             torch.backends.cudnn.benchmark = True
             # Compile networks for faster inference (PyTorch 2.0+)
+            # Note: torch.compile is not supported on Python 3.14+
             try:
-                if hasattr(torch, 'compile'):
-                    for agent in self.ga.population:
-                        agent.network = torch.compile(agent.network, mode='reduce-overhead')
-                    print("  [OPT] Networks compiled with torch.compile for faster inference")
+                if hasattr(torch, 'compile') and callable(torch.compile):
+                    # Test if torch.compile actually works (it may exist but not be supported)
+                    test_model = torch.nn.Linear(1, 1)
+                    try:
+                        torch.compile(test_model, mode='reduce-overhead')
+                        # If we get here, torch.compile works
+                        for agent in self.ga.population:
+                            agent.network = torch.compile(agent.network, mode='reduce-overhead')
+                        print("  [OPT] Networks compiled with torch.compile for faster inference")
+                    except (RuntimeError, AttributeError, TypeError) as compile_error:
+                        # torch.compile exists but isn't supported (e.g., Python 3.14+)
+                        # This is expected and not an error - just skip compilation
+                        pass
             except Exception as e:
-                print(f"  [OPT] torch.compile not available: {e}")
+                # Any other error - silently skip compilation
+                pass
         
         # CSV logger
         self.logger = CSVLogger(

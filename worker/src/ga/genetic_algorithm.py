@@ -70,9 +70,19 @@ class GeneticAlgorithm:
                 torch.nn.init.normal_(param, mean=0.0, std=0.1)
             
             # Compile network for faster inference (PyTorch 2.0+)
+            # Note: torch.compile is not supported on Python 3.14+
             try:
-                if hasattr(torch, 'compile') and self.device == 'cuda':
-                    network = torch.compile(network, mode='reduce-overhead')
+                if hasattr(torch, 'compile') and callable(torch.compile) and self.device == 'cuda':
+                    # Test if torch.compile actually works (it may exist but not be supported)
+                    test_model = torch.nn.Linear(1, 1)
+                    try:
+                        torch.compile(test_model, mode='reduce-overhead')
+                        # If we get here, torch.compile works
+                        network = torch.compile(network, mode='reduce-overhead')
+                    except (RuntimeError, AttributeError, TypeError):
+                        # torch.compile exists but isn't supported (e.g., Python 3.14+)
+                        # This is expected and not an error - just skip compilation
+                        pass
             except Exception:
                 pass  # Continue without compilation if it fails
             

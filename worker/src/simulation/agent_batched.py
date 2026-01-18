@@ -29,12 +29,23 @@ class BatchedAgentProcessor:
         self.num_agents = len(agents)
         
         # Compile networks for faster inference (PyTorch 2.0+)
+        # Note: torch.compile is not supported on Python 3.14+
         try:
-            for agent in agents:
-                if hasattr(torch, 'compile'):
-                    agent.network = torch.compile(agent.network, mode='reduce-overhead')
-        except Exception as e:
-            print(f"Warning: torch.compile not available or failed: {e}")
+            if hasattr(torch, 'compile') and callable(torch.compile):
+                # Test if torch.compile actually works (it may exist but not be supported)
+                test_model = torch.nn.Linear(1, 1)
+                try:
+                    torch.compile(test_model, mode='reduce-overhead')
+                    # If we get here, torch.compile works
+                    for agent in agents:
+                        agent.network = torch.compile(agent.network, mode='reduce-overhead')
+                except (RuntimeError, AttributeError, TypeError):
+                    # torch.compile exists but isn't supported (e.g., Python 3.14+)
+                    # This is expected and not an error - just skip compilation
+                    pass
+        except Exception:
+            # Any other error - silently skip compilation
+            pass
     
     def batch_act(self, input_vectors: torch.Tensor) -> torch.Tensor:
         """
