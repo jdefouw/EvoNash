@@ -141,7 +141,9 @@ class ExperimentRunner:
         # Run simulation for specified ticks
         import sys
         for tick in range(total_ticks):
-            if tick % log_interval == 0 or tick < 5:  # Log first 5 ticks for debugging
+            # Log first 20 ticks, then every 10%, then every 100 ticks
+            should_log = (tick < 20) or (tick % log_interval == 0) or (tick % 100 == 0)
+            if should_log:
                 progress = (tick / total_ticks) * 100
                 elapsed = time.time() - start_time
                 print(f"  [SIM] Starting tick {tick}/{total_ticks} ({progress:.1f}%) - Elapsed: {elapsed:.1f}s")
@@ -196,7 +198,8 @@ class ExperimentRunner:
                     raise
             
             tick_time = time.time() - tick_start
-            if tick < 5 or tick % 100 == 0:
+            should_log = (tick < 20) or (tick % 100 == 0)
+            if should_log:
                 print(f"  [SIM] Tick {tick} agent processing completed in {tick_time:.2f}s")
             
             # Step simulation
@@ -209,13 +212,18 @@ class ExperimentRunner:
                 traceback.print_exc()
                 raise
             step_time = time.time() - step_start
-            if tick < 5 or tick % 100 == 0:
+            if should_log:
                 print(f"  [SIM] Tick {tick} step() completed in {step_time:.3f}s")
                 print(f"  [SIM] Tick {tick} total time: {tick_time + step_time:.2f}s")
             
             # Force flush output to ensure logs appear immediately
-            import sys
             sys.stdout.flush()
+            
+            # Safety check: if a tick takes too long, log a warning
+            total_tick_time = tick_time + step_time
+            if total_tick_time > 10.0:  # More than 10 seconds per tick is suspicious
+                print(f"  [SIM] ⚠ WARNING: Tick {tick} took {total_tick_time:.2f}s (very slow!)")
+                sys.stdout.flush()
         
         sim_time = time.time() - start_time
         print(f"  [SIM] Simulation complete in {sim_time:.2f}s")

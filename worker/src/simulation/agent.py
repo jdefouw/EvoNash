@@ -142,6 +142,8 @@ class Agent:
             output = self.network(input_vector.unsqueeze(0))
             # Only move to CPU if we're on CUDA (for numpy conversion)
             if self.device == 'cuda':
+                # Synchronize CUDA operations to ensure they complete
+                torch.cuda.synchronize()
                 output = output.squeeze(0).cpu().numpy()
             else:
                 output = output.squeeze(0).numpy()
