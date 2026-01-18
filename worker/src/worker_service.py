@@ -284,6 +284,23 @@ class WorkerService:
         self.logger.info(f"Device: {self.device}")
         self.logger.info("=" * 60)
         
+        # Test connection on startup
+        self.logger.info("Testing connection to controller...")
+        try:
+            test_response = requests.get(
+                f"{self.controller_url}/api/worker/test",
+                timeout=10
+            )
+            if test_response.status_code == 200:
+                test_data = test_response.json()
+                self.logger.info(f"✓ Connection test successful: {test_data.get('message', 'OK')}")
+            else:
+                self.logger.warning(f"⚠ Connection test returned status {test_response.status_code}")
+        except Exception as e:
+            self.logger.error(f"✗ Connection test failed: {e}")
+            self.logger.error(f"  Check that {self.controller_url} is correct and reachable")
+            self.logger.error(f"  Worker will continue but may not be able to connect")
+        
         consecutive_errors = 0
         max_consecutive_errors = 5
         

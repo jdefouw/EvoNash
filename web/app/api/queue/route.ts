@@ -2,13 +2,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { ExperimentConfig } from '@/types/protocol'
 
+// Force dynamic rendering since we query the database
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerClient()
     
-    // Log worker poll attempt
+    // Log worker poll attempt with detailed info
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    console.log(`[QUEUE] Worker poll from ${clientIp} at ${new Date().toISOString()}`)
+    const userAgent = request.headers.get('user-agent') || 'unknown'
+    const timestamp = new Date().toISOString()
+    console.log(`[QUEUE] ========================================`)
+    console.log(`[QUEUE] Worker poll received at ${timestamp}`)
+    console.log(`[QUEUE] Client IP: ${clientIp}`)
+    console.log(`[QUEUE] User-Agent: ${userAgent}`)
+    console.log(`[QUEUE] ========================================`)
     
     // Find a PENDING experiment
     const { data: experiment, error: fetchError } = await supabase
@@ -20,13 +29,17 @@ export async function POST(request: NextRequest) {
     
     if (fetchError || !experiment) {
       console.log(`[QUEUE] No PENDING experiments available`)
+      console.log(`[QUEUE] Fetch error: ${fetchError?.message || 'None'}`)
       return NextResponse.json(
         { error: 'No pending experiments available' },
         { status: 404 }
       )
     }
     
-    console.log(`[QUEUE] Found PENDING experiment: ${experiment.id} - ${experiment.experiment_name}`)
+    console.log(`[QUEUE] ✓ Found PENDING experiment:`)
+    console.log(`[QUEUE]   ID: ${experiment.id}`)
+    console.log(`[QUEUE]   Name: ${experiment.experiment_name}`)
+    console.log(`[QUEUE]   Max Generations: ${experiment.max_generations}`)
     
     // Update status to RUNNING
     const { error: updateError } = await supabase
@@ -35,8 +48,11 @@ export async function POST(request: NextRequest) {
       .eq('id', experiment.id)
     
     if (updateError) {
+      console.error(`[QUEUE] ✗ Failed to update experiment status: ${updateError.message}`)
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
+    
+    console.log(`[QUEUE] ✓ Experiment status updated to RUNNING`)
     
     // Create experiment config for worker
     const config: ExperimentConfig = {
@@ -56,6 +72,11 @@ export async function POST(request: NextRequest) {
     
     // Generate job ID (UUID)
     const job_id = crypto.randomUUID()
+    
+    console.log(`[QUEUE] ✓ Returning job to worker:`)
+    console.log(`[QUEUE]   Job ID: ${job_id}`)
+    console.log(`[QUEUE]   Experiment ID: ${experiment.id}`)
+    console.log(`[QUEUE] ========================================`)
     
     return NextResponse.json({
       job_id,

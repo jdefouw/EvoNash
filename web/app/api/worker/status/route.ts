@@ -48,12 +48,17 @@ export async function GET() {
     // Also check if there are recent generations (within last 5 minutes) as a sign of worker activity
     const { data: recentGenerations } = await supabase
       .from('generations')
-      .select('created_at')
+      .select('created_at, experiment_id')
       .order('created_at', { ascending: false })
       .limit(1)
     
     const has_recent_activity = recentGenerations && recentGenerations.length > 0 && 
       (new Date().getTime() - new Date(recentGenerations[0].created_at).getTime()) < 5 * 60 * 1000
+    
+    // Get the most recent generation timestamp for display
+    const last_generation_time = recentGenerations && recentGenerations.length > 0
+      ? recentGenerations[0].created_at
+      : null
     
     return NextResponse.json({
       worker_connected: worker_connected || has_recent_activity,
@@ -62,12 +67,13 @@ export async function GET() {
       pending_count: pendingExperiments?.length || 0,
       status_counts: counts,
       has_recent_activity: has_recent_activity,
+      last_generation_time: last_generation_time,
       message: pendingExperiments && pendingExperiments.length > 0 
         ? `${pendingExperiments.length} experiment(s) waiting for worker`
         : runningExperiments && runningExperiments.length > 0
         ? 'Worker is active (processing experiments)'
         : has_recent_activity
-        ? 'Worker recently active (checking for new jobs)'
+        ? `Worker recently active (last generation: ${last_generation_time ? new Date(last_generation_time).toLocaleString() : 'unknown'})`
         : 'No pending experiments - worker will poll every 30 seconds'
     })
   } catch (error) {
