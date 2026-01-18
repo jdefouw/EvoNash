@@ -13,6 +13,7 @@ import StatusIndicator from '@/components/StatusIndicator'
 import PetriDishViewer from '@/components/PetriDishViewer'
 import MatchReplay from '@/components/MatchReplay'
 import LiveViewLegend from '@/components/LiveViewLegend'
+import SimulationReplay from '@/components/SimulationReplay'
 
 export default function ExperimentDetailPage() {
   const params = useParams()
@@ -55,6 +56,10 @@ export default function ExperimentDetailPage() {
       // Update experiment status if changed
       if (data.experiment_status && experiment && data.experiment_status !== experiment.status) {
         setExperiment({ ...experiment, status: data.experiment_status })
+        // If experiment becomes RUNNING, update worker status to connected
+        if (data.experiment_status === 'RUNNING') {
+          setWorkerStatus(prev => prev ? { ...prev, connected: true } : { connected: true, pending_count: 0 })
+        }
       }
 
       // Always update latest generation if available (for progress display)
@@ -158,7 +163,25 @@ export default function ExperimentDetailPage() {
   }, [experimentId])
 
   // Set up polling when experiment is running or pending
+  // Also ensure generations are loaded for completed experiments
   useEffect(() => {
+    // For completed experiments, make sure generations are loaded
+    if (experiment && experiment.status === 'COMPLETED' && generations.length === 0 && !loading) {
+      fetch(`/api/generations?experiment_id=${experimentId}`)
+        .then(res => res.json())
+        .then(data => {
+          setGenerations(data)
+          if (data.length > 0) {
+            const latest = data[data.length - 1]
+            setLatestGeneration(latest)
+            lastGenerationNumberRef.current = latest.generation_number
+          }
+        })
+        .catch(err => {
+          console.error('Error fetching generations for completed experiment:', err)
+        })
+    }
+
     if (!experiment || (experiment.status !== 'RUNNING' && experiment.status !== 'PENDING')) {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current)
@@ -180,7 +203,7 @@ export default function ExperimentDetailPage() {
         pollingIntervalRef.current = null
       }
     }
-  }, [experiment, pollLiveData])
+  }, [experiment, pollLiveData, experimentId, generations.length, loading])
 
   if (loading) {
     return (
@@ -255,10 +278,18 @@ export default function ExperimentDetailPage() {
                 <StatusIndicator status={experiment.status} />
                 {workerStatus && (
                   <div className="flex items-center gap-2 text-xs">
-                    <div className={`w-2 h-2 rounded-full ${workerStatus.connected ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-                    <span className="text-gray-600 dark:text-gray-400">
-                      Worker: {workerStatus.connected ? 'Connected' : 'Not Connected'}
-                    </span>
+                    {/* If experiment is RUNNING, worker is definitely connected. Otherwise use API status */}
+                    {(() => {
+                      const isConnected = experiment.status === 'RUNNING' || workerStatus.connected
+                      return (
+                        <>
+                          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+                          <span className="text-gray-600 dark:text-gray-400">
+                            Worker: {isConnected ? 'Connected' : 'Not Connected'}
+                          </span>
+                        </>
+                      )
+                    })()}
                   </div>
                 )}
               </div>
@@ -366,9 +397,16 @@ export default function ExperimentDetailPage() {
           <div className="space-y-4">
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
               <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-                Live Simulation View
+                {experiment?.status === 'COMPLETED' ? 'Simulation Replay' : 'Live Simulation View'}
               </h2>
-              {experiment.status === 'RUNNING' && latestGeneration ? (
+              {experiment?.status === 'COMPLETED' ? (
+                <SimulationReplay
+                  generations={generations}
+                  experiment={experiment}
+                  width={800}
+                  height={600}
+                />
+              ) : experiment?.status === 'RUNNING' && latestGeneration ? (
                 <PetriDishViewer
                   width={800}
                   height={600}
@@ -382,7 +420,7 @@ export default function ExperimentDetailPage() {
                 <div className="flex items-center justify-center h-[600px] bg-slate-900 rounded-lg border border-gray-700">
                   <div className="text-center text-gray-400">
                     <p className="text-lg mb-2">
-                      {experiment.status === 'RUNNING' ? 'Waiting for simulation data...' : 'Start experiment to view simulation'}
+                      {experiment?.status === 'RUNNING' ? 'Waiting for simulation data...' : 'Start experiment to view simulation'}
                     </p>
                   </div>
                 </div>
