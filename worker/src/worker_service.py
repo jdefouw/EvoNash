@@ -298,6 +298,12 @@ class WorkerService:
         def checkpoint_callback(population_state: Dict):
             """Save checkpoint to controller with compression."""
             try:
+                # Validate generation number exists
+                generation_number = population_state.get('generation')
+                if generation_number is None:
+                    self.logger.error(f"⚠ Checkpoint save failed: generation number missing from population_state")
+                    return
+                
                 # Try to compress the population_state to reduce payload size
                 # Convert to JSON string, compress with gzip, then base64 encode
                 use_compression = True
@@ -309,17 +315,17 @@ class WorkerService:
                     self.logger.warning(f"⚠ Compression failed, sending uncompressed: {compress_error}")
                     use_compression = False
                 
-                # Prepare request payload
+                # Prepare request payload - always include generation_number at top level
                 if use_compression:
                     payload = {
-                        'generation_number': population_state['generation'],
+                        'generation_number': int(generation_number),  # Ensure it's an integer
                         'population_state_compressed': compressed_b64,
                         'compressed': True
                     }
                 else:
                     # Fallback to uncompressed (for small populations or if compression fails)
                     payload = {
-                        'generation_number': population_state['generation'],
+                        'generation_number': int(generation_number),  # Ensure it's an integer
                         'population_state': population_state,
                         'compressed': False
                     }

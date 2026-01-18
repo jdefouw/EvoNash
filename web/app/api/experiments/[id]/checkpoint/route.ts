@@ -22,9 +22,19 @@ export async function POST(
     const body = await request.json()
     const { generation_number, population_state, population_state_compressed, compressed } = body
     
-    if (!generation_number) {
+    // Check if generation_number exists (including 0, which is falsy but valid)
+    if (generation_number === undefined || generation_number === null) {
       return NextResponse.json(
         { error: 'generation_number is required' },
+        { status: 400 }
+      )
+    }
+    
+    // Ensure generation_number is an integer
+    const genNum = parseInt(String(generation_number), 10)
+    if (isNaN(genNum)) {
+      return NextResponse.json(
+        { error: 'generation_number must be a valid integer' },
         { status: 400 }
       )
     }
@@ -86,7 +96,7 @@ export async function POST(
       .from('experiment_checkpoints')
       .upsert({
         experiment_id: experimentId,
-        generation_number,
+        generation_number: genNum,
         population_state: finalPopulationState,
       }, {
         onConflict: 'experiment_id,generation_number'
@@ -118,7 +128,7 @@ export async function POST(
       console.log(`[CHECKPOINT] Cleaned up ${idsToDelete.length} old checkpoints`)
     }
     
-    console.log(`[CHECKPOINT] Saved checkpoint for experiment ${experimentId}, generation ${generation_number}`)
+    console.log(`[CHECKPOINT] Saved checkpoint for experiment ${experimentId}, generation ${genNum}`)
     
     return NextResponse.json({
       success: true,
