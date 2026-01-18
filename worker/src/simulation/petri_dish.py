@@ -241,7 +241,7 @@ class PetriDish:
     
     def get_raycast_data(self, agent: 'Agent', raycast_config: Dict) -> np.ndarray:
         """
-        Perform raycasts from agent position.
+        Perform raycasts from agent position (optimized with vectorization).
         
         Args:
             agent: Agent to raycast from
@@ -256,53 +256,80 @@ class PetriDish:
         
         results = np.zeros((raycast_count, 4))
         
-        # Optimize: pre-filter unconsumed food
+        # Optimize: pre-filter unconsumed food and convert to numpy array for vectorization
         active_food = [f for f in self.food if not f.consumed]
+        if len(active_food) > 0:
+            food_positions = np.array([[f.x, f.y] for f in active_food])  # (num_food, 2)
+        else:
+            food_positions = np.zeros((0, 2))
         
-        for i, angle_deg in enumerate(angles):
-            angle_rad = np.radians(angle_deg)
-            dx = np.cos(angle_rad)
-            dy = np.sin(angle_rad)
+        # Vectorize angle calculations
+        angles_rad = np.radians(angles)  # (raycast_count,)
+        ray_directions = np.column_stack([np.cos(angles_rad), np.sin(angles_rad)])  # (raycast_count, 2)
+        
+        # Optimized step size for better performance
+        step_size = 10.0  # Larger step size for faster raycasting
+        steps = int(max_distance / step_size)
+        
+        agent_pos = np.array([agent.x, agent.y])
+        
+        for i, (angle_rad, ray_dir) in enumerate(zip(angles_rad, ray_directions)):
+            dx, dy = ray_dir
             
             wall_dist = max_distance
             food_dist = max_distance
             enemy_dist = max_distance
             enemy_size = 0.0
             
-            # Cast ray with optimized step size
-            step_size = 5.0  # Larger step size for performance
-            steps = int(max_distance / step_size)
+            # Vectorized step positions
+            step_distances = np.arange(1, steps + 1) * step_size  # (steps,)
+            check_positions = agent_pos + ray_dir.reshape(1, 2) * step_distances.reshape(-1, 1)  # (steps, 2)
             
-            for step in range(1, steps + 1):
-                check_x = agent.x + dx * step * step_size
-                check_y = agent.y + dy * step * step_size
-                check_x, check_y = self._wrap_position(check_x, check_y)
+            # Wrap positions
+            if self.toroidal:
+                check_positions[:, 0] = check_positions[:, 0] % self.width
+                check_positions[:, 1] = check_positions[:, 1] % self.height
+            else:
+                check_positions[:, 0] = np.clip(check_positions[:, 0], 0, self.width)
+                check_positions[:, 1] = np.clip(check_positions[:, 1], 0, self.height)
+            
+            # Check wall collisions (vectorized)
+            if not self.toroidal:
+                wall_mask = (check_positions[:, 0] < 0) | (check_positions[:, 0] > self.width) | \
+                           (check_positions[:, 1] < 0) | (check_positions[:, 1] > self.height)
+                if wall_mask.any():
+                    first_wall_idx = np.argmax(wall_mask)
+                    wall_dist = step_distances[first_wall_idx]
+            
+            # Check food collisions (vectorized)
+            if len(active_food) > 0:
+                # Calculate distances from all check positions to all food (vectorized)
+                # check_positions: (steps, 2), food_positions: (num_food, 2)
+                # Expand for broadcasting: (steps, 1, 2) - (1, num_food, 2) = (steps, num_food, 2)
+                check_expanded = check_positions[:, np.newaxis, :]  # (steps, 1, 2)
+                food_expanded = food_positions[np.newaxis, :, :]  # (1, num_food, 2)
                 
-                dist = step * step_size
+                if self.toroidal:
+                    # Toroidal distance
+                    dx_tor = check_expanded[:, :, 0] - food_expanded[:, :, 0]
+                    dy_tor = check_expanded[:, :, 1] - food_expanded[:, :, 1]
+                    dx_tor = np.minimum(np.minimum(np.abs(dx_tor), np.abs(dx_tor + self.width)), np.abs(dx_tor - self.width))
+                    dy_tor = np.minimum(np.minimum(np.abs(dy_tor), np.abs(dy_tor + self.height)), np.abs(dy_tor - self.height))
+                    distances = np.sqrt(dx_tor**2 + dy_tor**2)  # (steps, num_food)
+                else:
+                    diff = check_expanded - food_expanded  # (steps, num_food, 2)
+                    distances = np.linalg.norm(diff, axis=2)  # (steps, num_food)
                 
-                # Check wall collision (only for non-toroidal)
-                if not self.toroidal:
-                    if check_x < 0 or check_x > self.width or check_y < 0 or check_y > self.height:
-                        if dist < wall_dist:
-                            wall_dist = dist
-                        break
-                
-                # Check food using optimized distance calculation
-                if food_dist >= max_distance and len(active_food) > 0:
-                    # Check each food item (optimized: early exit when found)
-                    for food in active_food:
-                        food_dist_check = self._distance(check_x, check_y, food.x, food.y)
-                        if food_dist_check < self.food_radius:
-                            food_dist = dist
-                            break  # Found food, no need to check further
-                
-                # Early exit if we found both wall and food
-                if wall_dist < max_distance and food_dist < max_distance:
-                    break
-                
-                # Check enemies (would need access to all agents)
-                # This is simplified - in full implementation, would check all agents
-                # For now, return max_distance as placeholder
+                # Find food collisions (within food radius)
+                food_mask = distances < self.food_radius  # (steps, num_food)
+                if food_mask.any():
+                    # Find first collision for each step, then first step with collision
+                    first_collision_step = np.argmax(food_mask.any(axis=1))
+                    if food_mask[first_collision_step].any():
+                        food_dist = step_distances[first_collision_step]
+            
+            # Enemy detection would go here (similar vectorized approach)
+            # For now, leave as max_distance
             
             results[i] = [wall_dist, food_dist, enemy_dist, enemy_size]
         

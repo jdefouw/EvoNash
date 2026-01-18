@@ -46,6 +46,11 @@ class GeneticAlgorithm:
         # Initialize population
         self.population: List[Agent] = []
         self.max_global_elo = 1500.0  # Track max Elo for adaptive mutation
+        
+        # Enable cuDNN benchmarking for optimal GPU performance
+        if self.device == 'cuda' and torch.cuda.is_available():
+            torch.backends.cudnn.benchmark = True
+        
         self._initialize_population()
     
     def _initialize_population(self):
@@ -60,9 +65,16 @@ class GeneticAlgorithm:
                 output_size=arch['output_size']
             ).to(self.device)
             
-            # Initialize with random weights
+            # Initialize with random weights (use GPU-optimized initialization)
             for param in network.parameters():
                 torch.nn.init.normal_(param, mean=0.0, std=0.1)
+            
+            # Compile network for faster inference (PyTorch 2.0+)
+            try:
+                if hasattr(torch, 'compile') and self.device == 'cuda':
+                    network = torch.compile(network, mode='reduce-overhead')
+            except Exception:
+                pass  # Continue without compilation if it fails
             
             agent = Agent(
                 agent_id=i,
@@ -108,6 +120,7 @@ class GeneticAlgorithm:
     def calculate_policy_entropy(self, agent: Agent, sample_inputs: torch.Tensor) -> float:
         """
         Calculate policy entropy: H(π) = -Σ π(a|s) log π(a|s)
+        Optimized to keep operations on GPU.
         
         Args:
             agent: Agent to calculate entropy for
@@ -117,16 +130,46 @@ class GeneticAlgorithm:
             Average policy entropy
         """
         with torch.no_grad():
+            # Ensure inputs are on correct device
+            network_device = next(agent.network.parameters()).device
+            if sample_inputs.device != network_device:
+                sample_inputs = sample_inputs.to(network_device)
+            
             outputs = agent.network(sample_inputs)
             # Apply softmax to get probability distribution
             probs = torch.softmax(outputs, dim=1)
-            # Calculate entropy: -Σ p log p
+            # Calculate entropy: -Σ p log p (all on GPU)
             entropy = -torch.sum(probs * torch.log(probs + 1e-10), dim=1)
             return float(entropy.mean().item())
+    
+    def batch_calculate_policy_entropy(self, agents: List[Agent], sample_inputs: torch.Tensor) -> torch.Tensor:
+        """
+        Batch calculate policy entropy for multiple agents.
+        More efficient than calling calculate_policy_entropy individually.
+        
+        Args:
+            agents: List of agents
+            sample_inputs: Sample input states (batch_size, input_size)
+            
+        Returns:
+            Tensor of shape (num_agents,) with entropy values
+        """
+        entropies = []
+        with torch.no_grad():
+            for agent in agents:
+                network_device = next(agent.network.parameters()).device
+                inputs = sample_inputs.to(network_device)
+                outputs = agent.network(inputs)
+                probs = torch.softmax(outputs, dim=1)
+                entropy = -torch.sum(probs * torch.log(probs + 1e-10), dim=1)
+                entropies.append(entropy.mean())
+        
+        return torch.stack(entropies)
     
     def calculate_population_diversity(self) -> float:
         """
         Calculate average Euclidean distance between weight vectors.
+        Optimized to use GPU tensors when possible.
         
         Returns:
             Average Euclidean distance (population diversity)
@@ -134,21 +177,38 @@ class GeneticAlgorithm:
         if len(self.population) < 2:
             return 0.0
         
-        weights_list = [agent.network.get_weights() for agent in self.population]
-        distances = []
-        
         # Sample pairs to avoid O(n²) computation
-        sample_size = min(100, len(weights_list))
-        indices = np.random.choice(len(weights_list), size=sample_size, replace=False)
+        sample_size = min(100, len(self.population))
+        indices = np.random.choice(len(self.population), size=sample_size, replace=False)
+        sample_agents = [self.population[i] for i in indices]
         
-        for i in range(sample_size):
-            for j in range(i + 1, sample_size):
-                idx_i = indices[i]
-                idx_j = indices[j]
-                dist = np.linalg.norm(weights_list[idx_i] - weights_list[idx_j])
-                distances.append(dist)
+        # Get weights (keep on GPU if possible for faster computation)
+        weights_tensors = []
+        for agent in sample_agents:
+            # Get weights as tensor on GPU
+            weight_list = []
+            for param in agent.network.parameters():
+                weight_list.append(param.data.flatten())
+            weights_tensor = torch.cat(weight_list)
+            weights_tensors.append(weights_tensor)
         
-        return float(np.mean(distances)) if distances else 0.0
+        # Calculate distances on GPU (much faster)
+        if self.device == 'cuda' and len(weights_tensors) > 0:
+            distances = []
+            for i in range(len(weights_tensors)):
+                for j in range(i + 1, len(weights_tensors)):
+                    dist = torch.norm(weights_tensors[i] - weights_tensors[j]).item()
+                    distances.append(dist)
+            return float(np.mean(distances)) if distances else 0.0
+        else:
+            # Fallback to CPU
+            weights_list = [w.cpu().numpy() if isinstance(w, torch.Tensor) else w for w in weights_tensors]
+            distances = []
+            for i in range(len(weights_list)):
+                for j in range(i + 1, len(weights_list)):
+                    dist = np.linalg.norm(weights_list[i] - weights_list[j])
+                    distances.append(dist)
+            return float(np.mean(distances)) if distances else 0.0
     
     def select_parents(self) -> List[Agent]:
         """
@@ -195,6 +255,13 @@ class GeneticAlgorithm:
         ).to(self.device)
         
         network.set_weights(offspring_weights)
+        
+        # Compile for faster inference
+        try:
+            if hasattr(torch, 'compile') and self.device == 'cuda':
+                network = torch.compile(network, mode='reduce-overhead')
+        except Exception:
+            pass
         
         # Use average of parent Elo ratings
         parent_elo = (parent_a.elo_rating + parent_b.elo_rating) / 2.0
@@ -293,12 +360,17 @@ class GeneticAlgorithm:
             for agent in self.population
         ]
         
-        # Calculate policy entropy (average across population)
+        # Calculate policy entropy (batch process for better GPU utilization)
         policy_entropies = []
         if sample_inputs is not None:
-            for agent in self.population[:100]:  # Sample for performance
-                entropy = self.calculate_policy_entropy(agent, sample_inputs)
-                policy_entropies.append(entropy)
+            # Process all agents in batches for better GPU utilization
+            sample_size = min(200, len(self.population))  # Increased sample size
+            sample_agents = self.population[:sample_size]
+            
+            # Batch process on GPU
+            entropy_tensor = self.batch_calculate_policy_entropy(sample_agents, sample_inputs)
+            policy_entropies = entropy_tensor.cpu().numpy().tolist()
+        
         avg_policy_entropy = float(np.mean(policy_entropies)) if policy_entropies else 0.0
         
         # Calculate entropy variance

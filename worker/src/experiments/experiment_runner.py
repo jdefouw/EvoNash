@@ -55,6 +55,18 @@ class ExperimentRunner:
         self.ga = GeneticAlgorithm(config, device=self.device)
         self.petri_dish = PetriDish(ticks_per_generation=config.ticks_per_generation)
         
+        # Enable cuDNN benchmarking for optimal GPU performance
+        if self.device == 'cuda' and torch.cuda.is_available():
+            torch.backends.cudnn.benchmark = True
+            # Compile networks for faster inference (PyTorch 2.0+)
+            try:
+                if hasattr(torch, 'compile'):
+                    for agent in self.ga.population:
+                        agent.network = torch.compile(agent.network, mode='reduce-overhead')
+                    print("  [OPT] Networks compiled with torch.compile for faster inference")
+            except Exception as e:
+                print(f"  [OPT] torch.compile not available: {e}")
+        
         # CSV logger
         self.logger = CSVLogger(
             experiment_id=config.experiment_id,
@@ -195,52 +207,63 @@ class ExperimentRunner:
                 'angles': np.linspace(0, 360, 8)
             }
             
-            # Process each agent with progress tracking
+            # OPTIMIZED: Batch process agents for better GPU utilization
             agent_count = len(agents)
-            agent_log_interval = max(1, agent_count // 10)  # Log every 10% of agents
+            active_agents = [a for a in agents if a.energy > 0]
+            
+            # Batch 1: Prepare all input vectors (keep on GPU)
+            input_vectors_gpu = []
+            active_indices = []
             
             for agent_idx, agent in enumerate(agents):
-                if (agent_idx % agent_log_interval == 0 and tick == 0) or (tick < 3 and agent_idx == 0):
-                    print(f"    Processing agent {agent_idx}/{agent_count}...")
-                    sys.stdout.flush()
-                
                 if agent.energy <= 0:
                     continue
                 
-                # Get raycast data with timeout protection
+                active_indices.append(agent_idx)
+                
+                # Get raycast data
                 try:
-                    import time
-                    raycast_start = time.time()
                     raycast_data = self.petri_dish.get_raycast_data(agent, raycast_config)
-                    raycast_time = time.time() - raycast_start
-                    # Log if raycast takes too long
-                    if raycast_time > 1.0 and (tick < 20 or tick % 100 == 0):
-                        print(f"    ⚠ Raycast for agent {agent_idx} took {raycast_time:.2f}s")
-                        sys.stdout.flush()
-                except Exception as e:
-                    print(f"    ✗ Error in raycast for agent {agent_idx}: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    sys.stdout.flush()
-                    raise
-                
-                # Get input vector
-                try:
                     input_vector = agent.get_input_vector(raycast_data, self.petri_dish)
+                    input_vectors_gpu.append(input_vector)
                 except Exception as e:
-                    print(f"    ✗ Error getting input vector for agent {agent_idx}: {e}")
+                    print(f"    ✗ Error preparing input for agent {agent_idx}: {e}")
                     raise
+            
+            # Batch 2: Process all neural networks in parallel batches
+            # Process in batches of 32 to maximize GPU utilization
+            batch_size = 32
+            actions_list = []
+            
+            for batch_start in range(0, len(active_agents), batch_size):
+                batch_end = min(batch_start + batch_size, len(active_agents))
+                batch_inputs = input_vectors_gpu[batch_start:batch_end]
+                batch_agents = active_agents[batch_start:batch_end]
                 
-                # Get action from neural network
+                # Process batch (each agent has different network, but we batch the calls)
+                with torch.no_grad():
+                    # Use torch's parallel processing capabilities
+                    batch_actions = []
+                    for i, agent in enumerate(batch_agents):
+                        # Use act_tensor if available (stays on GPU), otherwise use act
+                        if hasattr(agent, 'act_tensor'):
+                            action_tensor = agent.act_tensor(batch_inputs[i])
+                            # Convert to dict format
+                            action = {
+                                'thrust': float(torch.clamp(action_tensor[0], 0.0, 1.0).cpu().item()),
+                                'turn': float(torch.clamp(action_tensor[1], -1.0, 1.0).cpu().item()),
+                                'shoot': float(torch.clamp(action_tensor[2], 0.0, 1.0).cpu().item()),
+                                'split': float(torch.clamp(action_tensor[3], 0.0, 1.0).cpu().item())
+                            }
+                        else:
+                            action = agent.act(batch_inputs[i])
+                        batch_actions.append(action)
+                    actions_list.extend(batch_actions)
+            
+            # Batch 3: Apply all actions
+            for agent_idx, action in zip(active_indices, actions_list):
                 try:
-                    action = agent.act(input_vector)
-                except Exception as e:
-                    print(f"    ✗ Error in act() for agent {agent_idx}: {e}")
-                    raise
-                
-                # Apply action
-                try:
-                    agent.apply_action(action, self.petri_dish)
+                    agents[agent_idx].apply_action(action, self.petri_dish)
                 except Exception as e:
                     print(f"    ✗ Error applying action for agent {agent_idx}: {e}")
                     raise

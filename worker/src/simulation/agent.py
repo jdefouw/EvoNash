@@ -7,7 +7,7 @@ Output: 4 floats (Thrust, Turn, Shoot, Split)
 import torch
 import torch.nn as nn
 import numpy as np
-from typing import Optional
+from typing import Optional, Dict
 
 
 class NeuralNetwork(nn.Module):
@@ -97,13 +97,14 @@ class Agent:
     def get_input_vector(self, raycast_data: np.ndarray, petri_dish) -> torch.Tensor:
         """
         Construct input vector from raycast data and self state.
+        Optimized to create tensor directly on target device.
         
         Args:
             raycast_data: Array of shape (8, 4) from raycasts
             petri_dish: PetriDish instance for additional state
             
         Returns:
-            Tensor of shape (24,)
+            Tensor of shape (24,) on target device
         """
         # Flatten raycast data: 8 raycasts × 3 values (wall, food, enemy distances)
         # Normalize distances
@@ -113,18 +114,15 @@ class Agent:
         max_dist = 200.0
         raycast_flat = np.clip(raycast_flat / max_dist, 0.0, 1.0)
         
-        # Self state: energy (normalized), velocity (normalized), cooldown status
-        # Actually, we need exactly 24 inputs, so let's use 8 raycasts × 3 = 24
-        # We'll incorporate self state into the raycast normalization or use a different approach
-        
         # For now, use 8 raycasts × 3 = 24 inputs
         input_vector = raycast_flat[:24]  # Ensure exactly 24
         
-        return torch.tensor(input_vector, dtype=torch.float32).to(self.device)
+        # Create tensor directly on target device (faster than creating on CPU then moving)
+        return torch.tensor(input_vector, dtype=torch.float32, device=self.device)
     
     def act(self, input_vector: torch.Tensor) -> Dict[str, float]:
         """
-        Get action from neural network.
+        Get action from neural network (optimized to minimize CPU-GPU transfers).
         
         Args:
             input_vector: Input tensor of shape (24,)
@@ -133,26 +131,29 @@ class Agent:
             Dictionary with actions: thrust, turn, shoot, split
         """
         # Ensure input is on the correct device
-        # Get device from network parameters (PyTorch modules don't have .device attribute)
         network_device = next(self.network.parameters()).device
         if input_vector.device != network_device:
             input_vector = input_vector.to(network_device)
         
         with torch.no_grad():
             output = self.network(input_vector.unsqueeze(0))
-            # Only move to CPU if we're on CUDA (for numpy conversion)
+            output = output.squeeze(0)
+            
+            # Clamp on GPU before transferring to CPU (faster)
+            output = torch.clamp(output, min=-1.0, max=1.0)
+            
+            # Only transfer to CPU at the very end
             if self.device == 'cuda':
-                # Synchronize CUDA operations to ensure they complete
-                torch.cuda.synchronize()
-                output = output.squeeze(0).cpu().numpy()
+                # Don't synchronize here - let it run asynchronously
+                output_cpu = output.cpu().numpy()
             else:
-                output = output.squeeze(0).numpy()
+                output_cpu = output.numpy()
         
-        # Process outputs
-        thrust = float(np.clip(output[0], 0.0, 1.0))  # 0-1
-        turn = float(np.clip(output[1], -1.0, 1.0))   # -1 to 1
-        shoot = float(np.clip(output[2], 0.0, 1.0))   # 0-1
-        split = float(np.clip(output[3], 0.0, 1.0))   # 0-1
+        # Process outputs (already clamped)
+        thrust = float(np.clip(output_cpu[0], 0.0, 1.0))  # 0-1
+        turn = float(np.clip(output_cpu[1], -1.0, 1.0))   # -1 to 1
+        shoot = float(np.clip(output_cpu[2], 0.0, 1.0))   # 0-1
+        split = float(np.clip(output_cpu[3], 0.0, 1.0))   # 0-1
         
         return {
             'thrust': thrust,
@@ -160,6 +161,33 @@ class Agent:
             'shoot': shoot,
             'split': split
         }
+    
+    def act_tensor(self, input_vector: torch.Tensor) -> torch.Tensor:
+        """
+        Get action as tensor (stays on GPU).
+        
+        Args:
+            input_vector: Input tensor of shape (24,)
+            
+        Returns:
+            Action tensor of shape (4,) with [thrust, turn, shoot, split] on GPU
+        """
+        network_device = next(self.network.parameters()).device
+        if input_vector.device != network_device:
+            input_vector = input_vector.to(network_device)
+        
+        with torch.no_grad():
+            output = self.network(input_vector.unsqueeze(0))
+            output = output.squeeze(0)
+            # Clamp on GPU
+            output = torch.clamp(output, min=-1.0, max=1.0)
+            # Clamp individual outputs
+            output[0] = torch.clamp(output[0], 0.0, 1.0)  # thrust
+            output[1] = torch.clamp(output[1], -1.0, 1.0)  # turn
+            output[2] = torch.clamp(output[2], 0.0, 1.0)  # shoot
+            output[3] = torch.clamp(output[3], 0.0, 1.0)  # split
+        
+        return output
     
     def apply_action(self, action: Dict[str, float], petri_dish, thrust_force: float = 0.2, turn_rate: float = 0.1):
         """
