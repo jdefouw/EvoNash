@@ -14,27 +14,33 @@ export default function GenerationProgress({
   currentGeneration, 
   generations 
 }: GenerationProgressProps) {
-  const currentGenNum = currentGeneration?.generation_number || 0
+  const currentGenNum = currentGeneration?.generation_number ?? -1
+  
+  // Calculate the actual highest generation number from all available data
+  // Use the max of: currentGenNum, or max from generations array
+  const maxGenFromArray = generations.length > 0 
+    ? Math.max(...generations.map(g => g.generation_number))
+    : -1
+  const actualGenNum = Math.max(currentGenNum, maxGenFromArray)
+  
+  // Calculate completed generations count
+  // Generation numbers are 0-indexed, so generation N means (N+1) generations completed
+  const completedGenerations = actualGenNum >= 0 ? actualGenNum + 1 : 0
   
   // If experiment is completed, show 100% progress
-  // Otherwise, calculate based on completed generations or current generation number
+  // Otherwise, calculate based on actual generation number
   let progress = 0
   if (experiment.status === 'COMPLETED') {
     progress = 100
-  } else if (generations.length > 0) {
-    // Use the actual number of completed generations
-    // Generation numbers are 0-indexed, so generation 4 means 5 generations completed (0,1,2,3,4)
-    const completedGenerations = generations.length
+  } else if (completedGenerations > 0) {
     progress = Math.min(100, (completedGenerations / experiment.max_generations) * 100)
-  } else if (currentGenNum > 0) {
-    // Fallback: use current generation number (0-indexed, so add 1)
-    progress = Math.min(100, ((currentGenNum + 1) / experiment.max_generations) * 100)
   }
   
+  // Calculate remaining generations
   // If completed, remaining is always 0
   const remaining = experiment.status === 'COMPLETED' 
     ? 0 
-    : Math.max(0, experiment.max_generations - (generations.length || (currentGenNum + 1)))
+    : Math.max(0, experiment.max_generations - completedGenerations)
   const elapsed = generations.length > 0 
     ? Math.floor((new Date().getTime() - new Date(generations[0].created_at).getTime()) / 1000 / 60)
     : 0
@@ -46,7 +52,7 @@ export default function GenerationProgress({
         <div>
           <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
             <Tooltip content="Current generation number out of total planned generations">
-              <span className="cursor-help">Generation {generations.length > 0 ? generations.length : (currentGenNum + 1)} of {experiment.max_generations}</span>
+              <span className="cursor-help">Generation {actualGenNum >= 0 ? (actualGenNum + 1) : 0} of {experiment.max_generations}</span>
             </Tooltip>
             <Tooltip content="Percentage of generations completed">
               <span className="font-semibold text-gray-900 dark:text-white cursor-help">{progress.toFixed(1)}%</span>
@@ -59,7 +65,7 @@ export default function GenerationProgress({
             />
           </div>
         </div>
-        {(currentGenNum > 0 || generations.length > 0) && (
+        {(actualGenNum >= 0 || generations.length > 0) && (
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-gray-600 dark:text-gray-400">Remaining:</span>
@@ -70,12 +76,12 @@ export default function GenerationProgress({
             <div>
               <span className="text-gray-600 dark:text-gray-400">Total Completed:</span>
               <Tooltip content="Total number of generations that have been completed">
-                <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{generations.length || (currentGenNum + 1)}</span>
+                <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{completedGenerations}</span>
               </Tooltip>
             </div>
           </div>
         )}
-        {experiment.status === 'RUNNING' && currentGenNum === 0 && (
+        {experiment.status === 'RUNNING' && actualGenNum < 0 && (
           <div className="text-sm text-yellow-600 dark:text-yellow-400">
             ⏳ Waiting for first generation data...
           </div>
