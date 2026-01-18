@@ -146,7 +146,7 @@ export default function NewExperimentPage() {
               </div>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div>
                 <label htmlFor="random_seed" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Random Seed
@@ -188,22 +188,22 @@ export default function NewExperimentPage() {
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 />
               </div>
-            </div>
 
-            <div>
-              <label htmlFor="ticks_per_generation" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Ticks Per Generation
-              </label>
-              <input
-                type="number"
-                id="ticks_per_generation"
-                name="ticks_per_generation"
-                min="1"
-                value={formData.ticks_per_generation}
-                onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Number of simulation ticks per generation (default: 500)</p>
+              <div>
+                <label htmlFor="ticks_per_generation" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Ticks Per Generation
+                </label>
+                <input
+                  type="number"
+                  id="ticks_per_generation"
+                  name="ticks_per_generation"
+                  min="1"
+                  value={formData.ticks_per_generation}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Simulation ticks per generation</p>
+              </div>
             </div>
 
             {formData.mutation_mode === 'STATIC' ? (
