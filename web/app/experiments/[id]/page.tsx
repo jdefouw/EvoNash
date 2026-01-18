@@ -120,25 +120,43 @@ export default function ExperimentDetailPage() {
 
   // Initial data fetch
   useEffect(() => {
-    if (!experimentId) return
+    if (!experimentId) {
+      setLoading(false)
+      return
+    }
 
     let batchesInterval: NodeJS.Timeout | null = null
+    let timeoutId: NodeJS.Timeout | null = null
+
+    // Set a timeout to ensure loading is set to false even if fetch hangs
+    timeoutId = setTimeout(() => {
+      console.warn('Experiment fetch timeout, setting loading to false')
+      setLoading(false)
+    }, 10000) // 10 second timeout
 
     // Fetch experiment - this is critical, set loading to false after this
-    fetch(`/api/experiments/${experimentId}`)
+    fetch(`/api/experiments/${experimentId}`, {
+      signal: AbortSignal.timeout(8000) // 8 second abort timeout
+    })
       .then(res => {
+        if (timeoutId) clearTimeout(timeoutId)
         if (!res.ok) {
-          throw new Error(`Failed to fetch experiment: ${res.status}`)
+          throw new Error(`Failed to fetch experiment: ${res.status} ${res.statusText}`)
         }
         return res.json()
       })
       .then(data => {
+        if (timeoutId) clearTimeout(timeoutId)
+        if (!data || data.error) {
+          throw new Error(data?.error || 'Invalid experiment data')
+        }
         setExperiment(data)
         console.log('Experiment status:', data.status) // Debug log
         // Set loading to false once experiment is loaded
         setLoading(false)
       })
       .catch(err => {
+        if (timeoutId) clearTimeout(timeoutId)
         console.error('Error fetching experiment:', err)
         setLoading(false) // Set loading to false even on error
       })
@@ -205,6 +223,7 @@ export default function ExperimentDetailPage() {
     
     return () => {
       if (batchesInterval) clearInterval(batchesInterval)
+      if (timeoutId) clearTimeout(timeoutId)
     }
   }, [experimentId])
 

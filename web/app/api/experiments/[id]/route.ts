@@ -1,20 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 
+// Force dynamic rendering since we query the database
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
+    // Handle both sync and async params (Next.js 13+ compatibility)
+    const resolvedParams = await Promise.resolve(params)
+    const experimentId = resolvedParams.id
+    
+    if (!experimentId) {
+      return NextResponse.json({ error: 'Experiment ID is required' }, { status: 400 })
+    }
+    
     const supabase = await createServerClient()
     
     const { data, error } = await supabase
       .from('experiments')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', experimentId)
       .single()
     
     if (error) {
+      console.error('Error fetching experiment:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
     
@@ -23,9 +35,10 @@ export async function GET(
     }
     
     return NextResponse.json(data)
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Unexpected error in GET /api/experiments/[id]:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch experiment' },
+      { error: 'Failed to fetch experiment', details: error?.message || String(error) },
       { status: 500 }
     )
   }
