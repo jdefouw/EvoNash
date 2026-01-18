@@ -134,11 +134,18 @@ export default function ExperimentDetailPage() {
       setLoading(false)
     }, 10000) // 10 second timeout
 
+    // Create AbortController for fetch timeout
+    const abortController = new AbortController()
+    const abortTimeout = setTimeout(() => {
+      abortController.abort()
+    }, 8000) // 8 second abort timeout
+
     // Fetch experiment - this is critical, set loading to false after this
     fetch(`/api/experiments/${experimentId}`, {
-      signal: AbortSignal.timeout(8000) // 8 second abort timeout
+      signal: abortController.signal
     })
       .then(res => {
+        clearTimeout(abortTimeout)
         if (timeoutId) clearTimeout(timeoutId)
         if (!res.ok) {
           throw new Error(`Failed to fetch experiment: ${res.status} ${res.statusText}`)
@@ -146,6 +153,7 @@ export default function ExperimentDetailPage() {
         return res.json()
       })
       .then(data => {
+        clearTimeout(abortTimeout)
         if (timeoutId) clearTimeout(timeoutId)
         if (!data || data.error) {
           throw new Error(data?.error || 'Invalid experiment data')
@@ -156,8 +164,13 @@ export default function ExperimentDetailPage() {
         setLoading(false)
       })
       .catch(err => {
+        clearTimeout(abortTimeout)
         if (timeoutId) clearTimeout(timeoutId)
-        console.error('Error fetching experiment:', err)
+        if (err.name === 'AbortError') {
+          console.warn('Experiment fetch aborted due to timeout')
+        } else {
+          console.error('Error fetching experiment:', err)
+        }
         setLoading(false) // Set loading to false even on error
       })
 
