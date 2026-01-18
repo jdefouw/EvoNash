@@ -187,7 +187,7 @@ class OptimizedExperimentRunner:
             
             # Batch neural network inference using optimized batched processor
             # Use the batched processor which handles mixed precision and batching
-            with torch.cuda.amp.autocast(enabled=(self.device == 'cuda')):
+            with torch.amp.autocast('cuda', enabled=(self.device == 'cuda')):
                 action_tensor = self.batched_processor.batch_act(input_vectors, active_mask=active_mask)
             
             # Apply actions using vectorized physics
@@ -305,7 +305,7 @@ class OptimizedExperimentRunner:
         print(f"[GEN {self.current_generation}] Step 3/3: Calculating statistics...")
         stats_start = time.time()
         sample_inputs = torch.randn(100, 24, device=self.device, dtype=torch.float16 if self.device == 'cuda' else torch.float32)
-        with torch.cuda.amp.autocast(enabled=(self.device == 'cuda')):
+        with torch.amp.autocast('cuda', enabled=(self.device == 'cuda')):
             stats = self.ga.get_generation_stats(sample_inputs=sample_inputs)
         stats_time = time.time() - stats_start
         print(f"  [STATS] Statistics calculated in {stats_time:.2f}s")

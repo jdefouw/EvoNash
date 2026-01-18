@@ -79,7 +79,7 @@ class BatchedAgentProcessor:
                 
                 # Process batch with autocast for mixed precision
                 if use_amp:
-                    with torch.cuda.amp.autocast():
+                    with torch.amp.autocast('cuda'):
                         for j, agent in enumerate(batch_agents):
                             if active_mask is None or active_mask[i + j]:
                                 # Single sample forward pass (already batched by input shape)
