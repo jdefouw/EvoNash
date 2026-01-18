@@ -400,3 +400,130 @@ class GeneticAlgorithm:
             'entropy_variance': float(entropy_variance),
             'population_diversity': float(self.calculate_population_diversity())
         }
+    
+    def save_population_state(self, experiment_id: str, generation: int) -> Dict:
+        """
+        Serialize population state for checkpointing.
+        
+        Args:
+            experiment_id: Experiment ID
+            generation: Generation number
+            
+        Returns:
+            Dictionary with serialized population state
+        """
+        import json
+        
+        population_state = {
+            'experiment_id': experiment_id,
+            'generation': generation,
+            'max_global_elo': float(self.max_global_elo),
+            'population_size': len(self.population),
+            'agents': []
+        }
+        
+        # Serialize each agent's network weights and metadata
+        for i, agent in enumerate(self.population):
+            # Get network weights as numpy array
+            weights = agent.network.get_weights()
+            
+            agent_state = {
+                'agent_id': agent.id,
+                'elo_rating': float(agent.elo_rating),
+                'fitness_score': float(agent.fitness_score),
+                'parent_elo': float(agent.parent_elo) if agent.parent_elo is not None else None,
+                'mutation_rate_applied': float(agent.mutation_rate_applied) if agent.mutation_rate_applied is not None else None,
+                'network_weights': weights.tolist(),  # Convert numpy to list for JSON
+                'network_architecture': {
+                    'input_size': self.config.network_architecture['input_size'],
+                    'hidden_size': self.config.network_architecture['hidden_layers'][0],
+                    'output_size': self.config.network_architecture['output_size']
+                }
+            }
+            population_state['agents'].append(agent_state)
+        
+        return population_state
+    
+    def load_population_state(self, state_dict: Dict):
+        """
+        Restore population from saved state.
+        
+        Args:
+            state_dict: Dictionary with serialized population state
+        """
+        import numpy as np
+        
+        # Clear current population
+        self.population = []
+        
+        # Restore max global Elo
+        self.max_global_elo = float(state_dict.get('max_global_elo', 1500.0))
+        
+        # Restore each agent
+        for agent_state in state_dict.get('agents', []):
+            # Reconstruct network
+            arch = agent_state.get('network_architecture', {})
+            network = NeuralNetwork(
+                input_size=arch.get('input_size', 24),
+                hidden_size=arch.get('hidden_size', 64),
+                output_size=arch.get('output_size', 4)
+            ).to(self.device)
+            
+            # Load weights
+            weights_array = np.array(agent_state['network_weights'], dtype=np.float32)
+            network.set_weights(weights_array)
+            
+            # Compile network if possible
+            try:
+                if hasattr(torch, 'compile') and callable(torch.compile) and self.device == 'cuda':
+                    test_model = torch.nn.Linear(1, 1)
+                    try:
+                        torch.compile(test_model, mode='reduce-overhead')
+                        network = torch.compile(network, mode='reduce-overhead')
+                    except (RuntimeError, AttributeError, TypeError):
+                        pass
+            except Exception:
+                pass
+            
+            # Create agent
+            agent = Agent(
+                agent_id=agent_state.get('agent_id', len(self.population)),
+                network=network,
+                initial_energy=100.0,
+                device=self.device
+            )
+            
+            # Restore metadata
+            agent.elo_rating = float(agent_state.get('elo_rating', 1500.0))
+            agent.fitness_score = float(agent_state.get('fitness_score', 0.0))
+            agent.parent_elo = float(agent_state['parent_elo']) if agent_state.get('parent_elo') is not None else None
+            agent.mutation_rate_applied = float(agent_state['mutation_rate_applied']) if agent_state.get('mutation_rate_applied') is not None else None
+            
+            self.population.append(agent)
+        
+        # Ensure population size matches config
+        while len(self.population) < self.config.population_size:
+            # Add new random agents if population is smaller
+            network = NeuralNetwork(
+                input_size=self.config.network_architecture['input_size'],
+                hidden_size=self.config.network_architecture['hidden_layers'][0],
+                output_size=self.config.network_architecture['output_size']
+            ).to(self.device)
+            for param in network.parameters():
+                torch.nn.init.normal_(param, mean=0.0, std=0.1)
+            
+            agent = Agent(
+                agent_id=len(self.population),
+                network=network,
+                initial_energy=100.0,
+                device=self.device
+            )
+            agent.elo_rating = 1500.0
+            self.population.append(agent)
+        
+        # Trim if too large
+        self.population = self.population[:self.config.population_size]
+        
+        # Update agent IDs
+        for i, agent in enumerate(self.population):
+            agent.id = i

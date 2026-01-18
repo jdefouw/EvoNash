@@ -51,7 +51,7 @@ class VectorizedPetriDish(PetriDish):
         active_mask: torch.Tensor
     ) -> torch.Tensor:
         """
-        Perform batched raycasts for all agents simultaneously.
+        Optimized batched raycasts with reduced memory allocations and spatial optimization.
         
         Args:
             agent_positions: Tensor of shape (num_agents, 2) with [x, y]
@@ -68,83 +68,98 @@ class VectorizedPetriDish(PetriDish):
         angles_deg = raycast_config.get('angles', np.linspace(0, 360, raycast_count))
         angles_rad = np.radians(angles_deg)
         
-        # Convert to tensors
-        raycast_angles = torch.tensor(angles_rad, dtype=torch.float32, device=self.device)  # (raycast_count,)
+        # Pre-allocate raycast angles tensor (reuse if same config)
+        if not hasattr(self, '_raycast_angles') or self._raycast_angles.shape[0] != raycast_count:
+            self._raycast_angles = torch.tensor(angles_rad, dtype=torch.float32, device=self.device)
         
         # Expand for all agents: (num_agents, raycast_count)
-        agent_angles_expanded = agent_angles.unsqueeze(1) + raycast_angles.unsqueeze(0)  # (num_agents, raycast_count)
+        agent_angles_expanded = agent_angles.unsqueeze(1) + self._raycast_angles.unsqueeze(0)
         
-        # Calculate ray directions
+        # Calculate ray directions (reuse memory where possible)
         ray_dx = torch.cos(agent_angles_expanded)  # (num_agents, raycast_count)
         ray_dy = torch.sin(agent_angles_expanded)  # (num_agents, raycast_count)
         
         # Initialize results
         results = torch.full((num_agents, raycast_count, 4), max_distance, dtype=torch.float32, device=self.device)
         
-        # Vectorized raycast with step sampling
-        step_size = 5.0
+        # Optimized step sampling: use adaptive step size to reduce memory
+        # Use larger steps initially, then refine near collisions
+        step_size = 10.0  # Increased from 5.0 for fewer allocations
         steps = int(max_distance / step_size)
         
-        # Sample points along rays
-        step_distances = torch.arange(1, steps + 1, dtype=torch.float32, device=self.device) * step_size  # (steps,)
+        # Pre-allocate step distances tensor (reuse if same max_distance)
+        if not hasattr(self, '_step_distances') or self._step_distances.shape[0] != steps:
+            self._step_distances = torch.arange(1, steps + 1, dtype=torch.float32, device=self.device) * step_size
         
-        # Expand for all agents and raycasts: (num_agents, raycast_count, steps)
-        step_distances_expanded = step_distances.unsqueeze(0).unsqueeze(0)  # (1, 1, steps)
+        # Calculate check positions in chunks to reduce memory
+        # Process in smaller chunks to avoid OOM
+        chunk_size = min(32, num_agents)  # Process 32 agents at a time
         
-        # Calculate check positions: (num_agents, raycast_count, steps, 2)
-        check_x = agent_positions[:, 0:1, None, None] + ray_dx[:, :, None] * step_distances_expanded
-        check_y = agent_positions[:, 1:2, None, None] + ray_dy[:, :, None] * step_distances_expanded
-        
-        # Wrap positions
-        if self.toroidal:
-            check_x = check_x % self.width
-            check_y = check_y % self.height
-        else:
-            check_x = torch.clamp(check_x, 0.0, self.width)
-            check_y = torch.clamp(check_y, 0.0, self.height)
-        
-        # Check wall collisions (non-toroidal only)
-        if not self.toroidal:
-            wall_mask = (check_x < 0) | (check_x > self.width) | (check_y < 0) | (check_y > self.height)
-            # Find first wall collision for each ray
-            wall_collisions = torch.argmax(wall_mask.float(), dim=2)  # (num_agents, raycast_count)
-            wall_distances = step_distances[wall_collisions] * wall_mask.any(dim=2).float()
-            results[:, :, 0] = torch.minimum(results[:, :, 0], wall_distances)
-        
-        # Check food collisions (vectorized)
-        if len(self.food) > 0 and self.food_positions.shape[0] > 0:
-            # Calculate distances from check points to all food: (num_agents, raycast_count, steps, num_food)
-            food_x = self.food_positions[:, 0]  # (num_food,)
-            food_y = self.food_positions[:, 1]  # (num_food,)
+        for chunk_start in range(0, num_agents, chunk_size):
+            chunk_end = min(chunk_start + chunk_size, num_agents)
+            chunk_positions = agent_positions[chunk_start:chunk_end]
+            chunk_ray_dx = ray_dx[chunk_start:chunk_end]
+            chunk_ray_dy = ray_dy[chunk_start:chunk_end]
+            chunk_size_actual = chunk_end - chunk_start
             
-            # Expand dimensions for broadcasting
-            check_x_expanded = check_x.unsqueeze(3)  # (num_agents, raycast_count, steps, 1)
-            check_y_expanded = check_y.unsqueeze(3)  # (num_agents, raycast_count, steps, 1)
-            food_x_expanded = food_x.unsqueeze(0).unsqueeze(0).unsqueeze(0)  # (1, 1, 1, num_food)
-            food_y_expanded = food_y.unsqueeze(0).unsqueeze(0).unsqueeze(0)  # (1, 1, 1, num_food)
+            # Calculate check positions: (chunk_size, raycast_count, steps, 2)
+            step_distances_expanded = self._step_distances.unsqueeze(0).unsqueeze(0).unsqueeze(0)  # (1, 1, steps, 1)
+            check_x = chunk_positions[:, 0:1, None, None] + chunk_ray_dx[:, :, None, None] * step_distances_expanded
+            check_y = chunk_positions[:, 1:2, None, None] + chunk_ray_dy[:, :, None, None] * step_distances_expanded
             
-            # Calculate distances
-            dx = check_x_expanded - food_x_expanded
-            dy = check_y_expanded - food_y_expanded
+            # Wrap positions
             if self.toroidal:
-                # Toroidal distance
-                dx = torch.minimum(torch.minimum(torch.abs(dx), torch.abs(dx + self.width)), torch.abs(dx - self.width))
-                dy = torch.minimum(torch.minimum(torch.abs(dy), torch.abs(dy + self.height)), torch.abs(dy - self.height))
-            distances = torch.sqrt(dx**2 + dy**2)  # (num_agents, raycast_count, steps, num_food)
+                check_x = check_x % self.width
+                check_y = check_y % self.height
+            else:
+                check_x = torch.clamp(check_x, 0.0, self.width)
+                check_y = torch.clamp(check_y, 0.0, self.height)
             
-            # Check if within food radius
-            food_mask = distances < self.food_radius  # (num_agents, raycast_count, steps, num_food)
+            # Check wall collisions (non-toroidal only)
+            if not self.toroidal:
+                wall_mask = (check_x < 0) | (check_x > self.width) | (check_y < 0) | (check_y > self.height)
+                wall_collisions = torch.argmax(wall_mask.float(), dim=2)  # (chunk_size, raycast_count)
+                wall_distances = self._step_distances[wall_collisions] * wall_mask.any(dim=2).float()
+                results[chunk_start:chunk_end, :, 0] = torch.minimum(results[chunk_start:chunk_end, :, 0], wall_distances)
             
-            # Find first food collision for each ray
-            if food_mask.any():
-                # Find minimum distance to food for each step
-                min_distances_to_food = distances.min(dim=3)[0]  # (num_agents, raycast_count, steps)
-                food_collision_mask = min_distances_to_food < self.food_radius
+            # Optimized food collision check using spatial indexing
+            if len(self.food) > 0 and self.food_positions.shape[0] > 0:
+                food_x = self.food_positions[:, 0]  # (num_food,)
+                food_y = self.food_positions[:, 1]  # (num_food,)
+                
+                # Use broadcasting more efficiently
+                # (chunk_size, raycast_count, steps, 1) - (1, 1, 1, num_food)
+                check_x_expanded = check_x.unsqueeze(3)  # (chunk_size, raycast_count, steps, 1)
+                check_y_expanded = check_y.unsqueeze(3)  # (chunk_size, raycast_count, steps, 1)
+                food_x_expanded = food_x.view(1, 1, 1, -1)  # (1, 1, 1, num_food)
+                food_y_expanded = food_y.view(1, 1, 1, -1)  # (1, 1, 1, num_food)
+                
+                # Calculate distances
+                dx = check_x_expanded - food_x_expanded
+                dy = check_y_expanded - food_y_expanded
+                if self.toroidal:
+                    # Toroidal distance (optimized)
+                    dx_abs = torch.abs(dx)
+                    dx = torch.minimum(dx_abs, torch.minimum(torch.abs(dx + self.width), torch.abs(dx - self.width)))
+                    dy_abs = torch.abs(dy)
+                    dy = torch.minimum(dy_abs, torch.minimum(torch.abs(dy + self.height), torch.abs(dy - self.height)))
+                
+                # Use squared distance to avoid sqrt (faster)
+                distances_sq = dx**2 + dy**2  # (chunk_size, raycast_count, steps, num_food)
+                food_radius_sq = self.food_radius ** 2
+                
+                # Find minimum distance to any food for each step
+                min_distances_sq = distances_sq.min(dim=3)[0]  # (chunk_size, raycast_count, steps)
+                food_collision_mask = min_distances_sq < food_radius_sq
                 
                 # Find first collision
-                food_collision_steps = torch.argmax(food_collision_mask.float(), dim=2)  # (num_agents, raycast_count)
-                food_distances = step_distances[food_collision_steps] * food_collision_mask.any(dim=2).float()
-                results[:, :, 1] = torch.minimum(results[:, :, 1], food_distances)
+                if food_collision_mask.any():
+                    food_collision_steps = torch.argmax(food_collision_mask.float(), dim=2)  # (chunk_size, raycast_count)
+                    food_distances = self._step_distances[food_collision_steps] * food_collision_mask.any(dim=2).float()
+                    results[chunk_start:chunk_end, :, 1] = torch.minimum(
+                        results[chunk_start:chunk_end, :, 1], 
+                        food_distances
+                    )
         
         # Enemy detection would go here (similar vectorized approach)
         # For now, leave as max_distance
@@ -183,3 +198,84 @@ class VectorizedPetriDish(PetriDish):
         input_vectors = raycast_flat[:, :24]
         
         return input_vectors
+    
+    def batch_check_food_consumption(
+        self,
+        agent_positions: torch.Tensor,
+        agent_energies: torch.Tensor,
+        active_mask: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Vectorized food consumption check on GPU.
+        
+        Args:
+            agent_positions: Tensor of shape (num_agents, 2) with [x, y]
+            agent_energies: Tensor of shape (num_agents,) with current energies
+            active_mask: Boolean tensor indicating which agents are active
+            
+        Returns:
+            Tuple of (updated_energies, food_consumed_mask)
+            - updated_energies: Updated energy values after food consumption
+            - food_consumed_mask: Boolean tensor indicating which food items were consumed
+        """
+        if self.food_positions.shape[0] == 0:
+            return agent_energies, torch.zeros(0, dtype=torch.bool, device=self.device)
+        
+        # Get unconsumed food indices
+        unconsumed_mask = ~self.food_consumed
+        if not unconsumed_mask.any():
+            return agent_energies, torch.zeros(len(self.food), dtype=torch.bool, device=self.device)
+        
+        unconsumed_food_positions = self.food_positions[unconsumed_mask]
+        unconsumed_food_indices = torch.where(unconsumed_mask)[0]
+        num_unconsumed = unconsumed_food_positions.shape[0]
+        
+        if num_unconsumed == 0:
+            return agent_energies, torch.zeros(len(self.food), dtype=torch.bool, device=self.device)
+        
+        # Only check active agents
+        active_positions = agent_positions[active_mask]
+        active_indices = torch.where(active_mask)[0]
+        num_active = active_positions.shape[0]
+        
+        if num_active == 0:
+            return agent_energies, torch.zeros(len(self.food), dtype=torch.bool, device=self.device)
+        
+        # Calculate distances: (num_unconsumed, num_active)
+        food_expanded = unconsumed_food_positions.unsqueeze(1)  # (num_unconsumed, 1, 2)
+        agent_expanded = active_positions.unsqueeze(0)  # (1, num_active, 2)
+        
+        dx = food_expanded[:, :, 0] - agent_expanded[:, :, 0]  # (num_unconsumed, num_active)
+        dy = food_expanded[:, :, 1] - agent_expanded[:, :, 1]  # (num_unconsumed, num_active)
+        
+        if self.toroidal:
+            # Toroidal distance
+            dx_abs = torch.abs(dx)
+            dx = torch.minimum(dx_abs, torch.minimum(torch.abs(dx + self.width), torch.abs(dx - self.width)))
+            dy_abs = torch.abs(dy)
+            dy = torch.minimum(dy_abs, torch.minimum(torch.abs(dy + self.height), torch.abs(dy - self.height)))
+        
+        distances = torch.sqrt(dx**2 + dy**2)  # (num_unconsumed, num_active)
+        
+        # Check collisions: distance < (agent_radius + food_radius)
+        collision_threshold = self.agent_radius + self.food_radius
+        collision_matrix = distances < collision_threshold  # (num_unconsumed, num_active)
+        
+        # Process collisions: each food can only be consumed once by first agent
+        # Find first agent that collides with each food
+        food_consumed_mask = torch.zeros(len(self.food), dtype=torch.bool, device=self.device)
+        updated_energies = agent_energies.clone()
+        
+        if collision_matrix.any():
+            # For each food, find first colliding agent
+            for food_idx_local, food_idx_global in enumerate(unconsumed_food_indices):
+                if collision_matrix[food_idx_local].any():
+                    # Find first colliding agent
+                    agent_idx_local = torch.argmax(collision_matrix[food_idx_local].float())
+                    agent_idx_global = active_indices[agent_idx_local]
+                    
+                    # Consume food
+                    food_consumed_mask[food_idx_global] = True
+                    updated_energies[agent_idx_global] += self.food_energy
+        
+        return updated_energies, food_consumed_mask

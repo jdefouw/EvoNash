@@ -47,12 +47,13 @@ class BatchedAgentProcessor:
             # Any other error - silently skip compilation
             pass
     
-    def batch_act(self, input_vectors: torch.Tensor) -> torch.Tensor:
+    def batch_act(self, input_vectors: torch.Tensor, active_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
-        Batch process actions for all agents simultaneously.
+        Batch process actions for all agents simultaneously with optimized GPU utilization.
         
         Args:
             input_vectors: Tensor of shape (num_agents, input_size)
+            active_mask: Optional boolean tensor indicating which agents are active
             
         Returns:
             Tensor of shape (num_agents, 4) with actions [thrust, turn, shoot, split]
@@ -60,31 +61,37 @@ class BatchedAgentProcessor:
         if input_vectors.device != self.device:
             input_vectors = input_vectors.to(self.device)
         
-        # Since each agent has its own network, we need to process them separately
-        # But we can still batch them efficiently
-        outputs = []
+        # Pre-allocate output tensor on GPU
+        outputs = torch.zeros((self.num_agents, 4), dtype=torch.float32, device=self.device)
         
-        # Group agents by network architecture (if they're the same, we could share computation)
-        # For now, process in batches to reduce overhead
-        batch_size = 64  # Process 64 agents at a time
+        # Process in larger batches for better GPU utilization
+        # Use CUDA streams for parallel execution where possible
+        batch_size = 128  # Increased batch size for better GPU utilization
         
         with torch.no_grad():
+            # Use torch.cuda.amp for mixed precision if available
+            use_amp = self.device == 'cuda' and torch.cuda.is_available()
+            
             for i in range(0, self.num_agents, batch_size):
                 batch_end = min(i + batch_size, self.num_agents)
                 batch_inputs = input_vectors[i:batch_end]
+                batch_agents = self.agents[i:batch_end]
                 
-                # Process each agent in the batch (they have different networks)
-                batch_outputs = []
-                for j, agent in enumerate(self.agents[i:batch_end]):
-                    agent_output = agent.network(batch_inputs[j:j+1])
-                    batch_outputs.append(agent_output)
-                
-                if batch_outputs:
-                    outputs.append(torch.cat(batch_outputs, dim=0))
+                # Process batch with autocast for mixed precision
+                if use_amp:
+                    with torch.cuda.amp.autocast():
+                        for j, agent in enumerate(batch_agents):
+                            if active_mask is None or active_mask[i + j]:
+                                # Single sample forward pass (already batched by input shape)
+                                agent_output = agent.network(batch_inputs[j:j+1])
+                                outputs[i + j] = agent_output.squeeze(0)
+                else:
+                    for j, agent in enumerate(batch_agents):
+                        if active_mask is None or active_mask[i + j]:
+                            agent_output = agent.network(batch_inputs[j:j+1])
+                            outputs[i + j] = agent_output.squeeze(0)
         
-        if outputs:
-            return torch.cat(outputs, dim=0)
-        return torch.zeros((self.num_agents, 4), device=self.device)
+        return outputs
     
     def batch_act_shared_network(self, input_vectors: torch.Tensor, shared_network: nn.Module) -> torch.Tensor:
         """

@@ -36,7 +36,8 @@ class OptimizedExperimentRunner:
         upload_callback: Optional[Callable[[Dict], None]] = None,
         stop_check_callback: Optional[Callable[[], bool]] = None,
         generation_start: int = 0,
-        generation_end: Optional[int] = None
+        generation_end: Optional[int] = None,
+        checkpoint_callback: Optional[Callable[[Dict], None]] = None
     ):
         """
         Initialize optimized experiment runner.
@@ -53,6 +54,7 @@ class OptimizedExperimentRunner:
         self.device = device if torch.cuda.is_available() and device == 'cuda' else 'cpu'
         self.upload_callback = upload_callback
         self.stop_check_callback = stop_check_callback
+        self.checkpoint_callback = checkpoint_callback
         self.generation_start = generation_start
         self.generation_end = generation_end if generation_end is not None else (config.max_generations - 1)
         
@@ -61,6 +63,10 @@ class OptimizedExperimentRunner:
         
         # Initialize components
         self.ga = GeneticAlgorithm(config, device=self.device)
+        
+        # Note: Population state will be loaded after initialization if checkpoint is provided
+        # This is done in worker_service.py after runner creation
+        
         self.petri_dish = VectorizedPetriDish(
             ticks_per_generation=config.ticks_per_generation,
             device=self.device
@@ -179,23 +185,10 @@ class OptimizedExperimentRunner:
                 agent_cooldowns=self.vectorized_physics.shoot_cooldowns
             )
             
-            # Batch neural network inference
-            # Since each agent has its own network, we process in batches
-            # But we can still optimize by processing multiple agents at once
-            action_tensor = torch.zeros((num_agents, 4), dtype=torch.float32, device=self.device)
-            
-            # Process agents in batches for efficiency
-            batch_size = 32  # Process 32 agents at a time
-            with torch.no_grad():
-                for i in range(0, num_agents, batch_size):
-                    batch_end = min(i + batch_size, num_agents)
-                    batch_inputs = input_vectors[i:batch_end]
-                    
-                    # Process each agent's network (they're different after evolution)
-                    for j, agent in enumerate(agents[i:batch_end]):
-                        if active_mask[i + j]:
-                            agent_output = agent.network(batch_inputs[j:j+1])
-                            action_tensor[i + j] = agent_output.squeeze(0)
+            # Batch neural network inference using optimized batched processor
+            # Use the batched processor which handles mixed precision and batching
+            with torch.cuda.amp.autocast(enabled=(self.device == 'cuda')):
+                action_tensor = self.batched_processor.batch_act(input_vectors, active_mask=active_mask)
             
             # Apply actions using vectorized physics
             self.vectorized_physics.apply_physics_step(
@@ -215,29 +208,60 @@ class OptimizedExperimentRunner:
                 toroidal=self.petri_dish.toroidal
             )
             
-            # Handle food consumption (still need to do this, but can optimize)
-            # For now, sync back to agents for food consumption check
-            if tick % 10 == 0:  # Only sync every 10 ticks to reduce overhead
-                self.vectorized_physics.sync_to_agents(agents)
-                self.petri_dish.step(agents)  # Handle food, projectiles
-                self.vectorized_physics.sync_from_agents(agents)
-            else:
-                # Just update food tensors
-                self.petri_dish._update_food_tensors()
+            # Handle food consumption on GPU (vectorized)
+            if tick % 5 == 0:  # Check food every 5 ticks (more frequent but still efficient)
+                # Check food consumption directly on GPU tensors
+                updated_energies, food_consumed_mask = self.petri_dish.batch_check_food_consumption(
+                    agent_positions=self.vectorized_physics.positions,
+                    agent_energies=self.vectorized_physics.energies,
+                    active_mask=active_mask
+                )
+                
+                # Update energies on GPU
+                self.vectorized_physics.energies = updated_energies
+                
+                # Update food consumed status (sync to CPU only for food objects)
+                if food_consumed_mask.any():
+                    food_consumed_cpu = food_consumed_mask.cpu().numpy()
+                    for i, food in enumerate(self.petri_dish.food):
+                        if i < len(food_consumed_cpu) and food_consumed_cpu[i]:
+                            food.consumed = True
+                    
+                    # Update food tensors
+                    self.petri_dish._update_food_tensors()
+                
+                # Update active mask based on new energies
+                self.vectorized_physics.active_mask = self.vectorized_physics.energies > 0.0
         
-        # Final sync
+        # Final food check on GPU
+        updated_energies, food_consumed_mask = self.petri_dish.batch_check_food_consumption(
+            agent_positions=self.vectorized_physics.positions,
+            agent_energies=self.vectorized_physics.energies,
+            active_mask=self.vectorized_physics.active_mask
+        )
+        self.vectorized_physics.energies = updated_energies
+        if food_consumed_mask.any():
+            food_consumed_cpu = food_consumed_mask.cpu().numpy()
+            for i, food in enumerate(self.petri_dish.food):
+                if i < len(food_consumed_cpu) and food_consumed_cpu[i]:
+                    food.consumed = True
+        
+        # Calculate fitness on GPU (minimize CPU transfer)
+        fitness_scores = self.vectorized_physics.energies + (
+            self.petri_dish.ticks_per_generation * (self.vectorized_physics.energies > 0).float()
+        )
+        
+        # Only sync to CPU for final results
         self.vectorized_physics.sync_to_agents(agents)
         
-        # Final food check
-        self.petri_dish.step(agents)
-        
-        # Calculate fitness
-        for agent in agents:
-            agent.fitness_score = agent.energy + (self.petri_dish.ticks_per_generation if agent.energy > 0 else 0)
+        # Set fitness scores
+        fitness_cpu = fitness_scores.cpu().numpy()
+        for i, agent in enumerate(agents):
+            agent.fitness_score = float(fitness_cpu[i])
         
         sim_time = time.time() - start_time
-        survivors = sum(1 for a in agents if a.energy > 0)
-        avg_energy = np.mean([a.energy for a in agents])
+        survivors = int(self.vectorized_physics.active_mask.sum().item())
+        avg_energy = float(self.vectorized_physics.energies.mean().item())
         
         print(f"  [SIM] Optimized simulation complete in {sim_time:.2f}s")
         print(f"  [SIM] Results: {survivors}/{num_agents} survivors, avg energy: {avg_energy:.2f}")
@@ -280,8 +304,9 @@ class OptimizedExperimentRunner:
         # Get generation statistics
         print(f"[GEN {self.current_generation}] Step 3/3: Calculating statistics...")
         stats_start = time.time()
-        sample_inputs = torch.randn(100, 24, device=self.device)
-        stats = self.ga.get_generation_stats(sample_inputs=sample_inputs)
+        sample_inputs = torch.randn(100, 24, device=self.device, dtype=torch.float16 if self.device == 'cuda' else torch.float32)
+        with torch.cuda.amp.autocast(enabled=(self.device == 'cuda')):
+            stats = self.ga.get_generation_stats(sample_inputs=sample_inputs)
         stats_time = time.time() - stats_start
         print(f"  [STATS] Statistics calculated in {stats_time:.2f}s")
         
@@ -316,6 +341,18 @@ class OptimizedExperimentRunner:
                 self.upload_callback(stats)
             except Exception as e:
                 print(f"[GENERATION {self.current_generation}] ✗ Upload callback failed: {e}")
+        
+        # Save checkpoint if callback provided
+        if self.checkpoint_callback:
+            try:
+                population_state = self.ga.save_population_state(
+                    experiment_id=self.config.experiment_id,
+                    generation=self.current_generation
+                )
+                self.checkpoint_callback(population_state)
+                print(f"[GENERATION {self.current_generation}] ✓ Checkpoint saved")
+            except Exception as e:
+                print(f"[GENERATION {self.current_generation}] ✗ Checkpoint save failed: {e}")
         
         # Evolve to next generation
         self.ga.evolve_generation()

@@ -74,6 +74,15 @@ export async function POST(request: NextRequest) {
         .eq('experiment_id', experiment.id)
         .in('status', ['assigned', 'processing'])
       
+      // Get last completed generation from checkpoints
+      const { data: latestCheckpoint } = await supabase
+        .from('experiment_checkpoints')
+        .select('generation_number')
+        .eq('experiment_id', experiment.id)
+        .order('generation_number', { ascending: false })
+        .limit(1)
+        .single()
+      
       // Calculate which generations are already assigned
       const assignedRanges: Array<{start: number, end: number}> = (assignedBatches || []).map((b: any) => ({
         start: b.generation_start,
@@ -81,8 +90,9 @@ export async function POST(request: NextRequest) {
       }))
       
       // Find first unassigned batch
+      // Start from last completed generation + 1, or 0 if no checkpoint
       const batchSize = DEFAULT_BATCH_SIZE
-      let generationStart = 0
+      let generationStart = latestCheckpoint ? (latestCheckpoint.generation_number + 1) : 0
       let foundBatch = false
       
       while (generationStart < experiment.max_generations) {

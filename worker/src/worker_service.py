@@ -17,7 +17,7 @@ import torch
 import logging
 
 from .experiments.experiment_manager import ExperimentManager, ExperimentConfig
-from .experiments.experiment_runner import ExperimentRunner
+from .experiments.experiment_runner_optimized import OptimizedExperimentRunner
 from .main import request_job, upload_generation_stats, check_experiment_status
 from .logging.worker_logger import setup_worker_logger
 
@@ -283,6 +283,37 @@ class WorkerService:
         
         return stop_check_callback
     
+    def _create_checkpoint_callback(self, experiment_id: str) -> callable:
+        """
+        Create checkpoint callback function that saves population state.
+        
+        Args:
+            experiment_id: Experiment ID
+            
+        Returns:
+            Callback function that saves checkpoint
+        """
+        def checkpoint_callback(population_state: Dict):
+            """Save checkpoint to controller."""
+            try:
+                response = requests.post(
+                    f"{self.controller_url}/api/experiments/{experiment_id}/checkpoint",
+                    json={
+                        'generation_number': population_state['generation'],
+                        'population_state': population_state
+                    },
+                    timeout=30
+                )
+                
+                if response.status_code == 200:
+                    self.logger.info(f"✓ Checkpoint saved for generation {population_state['generation']}")
+                else:
+                    self.logger.warning(f"⚠ Checkpoint save failed: {response.status_code}")
+            except Exception as e:
+                self.logger.warning(f"⚠ Checkpoint save error: {e}")
+        
+        return checkpoint_callback
+    
     def process_job(self, job: Dict):
         """
         Process a single job (generation batch).
@@ -322,6 +353,28 @@ class WorkerService:
             # Create ExperimentConfig from job
             config = ExperimentManager.load_from_dict(experiment_config)
             
+            # Load checkpoint if starting from a non-zero generation
+            checkpoint_state = None
+            if generation_start > 0:
+                try:
+                    self.logger.info(f"📥 Attempting to load checkpoint for generation {generation_start - 1}...")
+                    checkpoint_response = requests.get(
+                        f"{self.controller_url}/api/experiments/{experiment_id}/checkpoint",
+                        params={'generation': str(generation_start - 1)},
+                        timeout=30
+                    )
+                    
+                    if checkpoint_response.status_code == 200:
+                        checkpoint_data = checkpoint_response.json()
+                        checkpoint_state = checkpoint_data.get('population_state')
+                        self.logger.info(f"✓ Checkpoint loaded for generation {checkpoint_data.get('generation_number')}")
+                    elif checkpoint_response.status_code == 404:
+                        self.logger.warning(f"⚠ No checkpoint found for generation {generation_start - 1}, starting fresh")
+                    else:
+                        self.logger.warning(f"⚠ Failed to load checkpoint: {checkpoint_response.status_code}")
+                except Exception as e:
+                    self.logger.warning(f"⚠ Error loading checkpoint: {e}, starting fresh")
+            
             self.logger.info("=" * 80)
             self.logger.info("📋 EXPERIMENT CONFIGURATION")
             self.logger.info("=" * 80)
@@ -347,15 +400,28 @@ class WorkerService:
             # Create stop check callback
             stop_check_callback = self._create_stop_check_callback(experiment_id)
             
+            # Create checkpoint callback
+            checkpoint_callback = self._create_checkpoint_callback(experiment_id)
+            
             # Initialize and run experiment batch
-            runner = ExperimentRunner(
+            runner = OptimizedExperimentRunner(
                 config,
                 device=self.device,
                 upload_callback=upload_callback,
                 stop_check_callback=stop_check_callback,
                 generation_start=generation_start,
-                generation_end=generation_end
+                generation_end=generation_end,
+                checkpoint_callback=checkpoint_callback
             )
+            
+            # Load checkpoint state if available
+            if checkpoint_state:
+                try:
+                    runner.ga.load_population_state(checkpoint_state)
+                    self.logger.info(f"✓ Population state restored from checkpoint")
+                except Exception as e:
+                    self.logger.error(f"✗ Failed to load population state: {e}")
+                    self.logger.warning("⚠ Continuing with fresh population (may cause inconsistency)")
             
             self.logger.info("=" * 80)
             self.logger.info("🔄 Starting batch execution...")
