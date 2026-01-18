@@ -79,6 +79,45 @@ export default function LiveViewLegend() {
           </div>
         </div>
 
+        {/* Live Simulation View */}
+        <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Live Simulation View (Petri Dish)</h3>
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-4 h-4 bg-blue-500 rounded-full opacity-80" />
+              <span className="text-gray-600 dark:text-gray-400">
+                <strong className="text-gray-900 dark:text-white">Blue Circles</strong> - Neural network agents in the population
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative w-4 h-4">
+                <div className="absolute inset-0 bg-blue-500 rounded-full opacity-80" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-3 h-0.5 bg-white" style={{ transform: 'rotate(45deg)' }} />
+                </div>
+              </div>
+              <span className="text-gray-600 dark:text-gray-400">
+                <strong className="text-gray-900 dark:text-white">White Line</strong> - Direction indicator showing agent's facing direction and movement orientation
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-3 h-3 bg-green-500 rounded-full" />
+              <span className="text-gray-600 dark:text-gray-400">
+                <strong className="text-gray-900 dark:text-white">Green Dots</strong> - Available food pellets (not yet consumed)
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-3 h-3 bg-red-500 rounded-full opacity-30" />
+              <span className="text-gray-600 dark:text-gray-400">
+                <strong className="text-gray-900 dark:text-white">Red Dots</strong> - Consumed food pellets (faded, already eaten)
+              </span>
+            </div>
+            <div className="text-gray-600 dark:text-gray-400 pl-5 text-xs mt-2">
+              <p className="mt-1">The simulation shows agents (blue circles) navigating the 2D toroidal space, seeking food (green dots) to maintain energy. Agents consume food when they come into contact, converting it to energy for survival.</p>
+            </div>
+          </div>
+        </div>
+
         {/* Color Reference */}
         <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Color Reference</h3>
