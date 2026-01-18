@@ -8,24 +8,36 @@ export async function GET() {
   try {
     const supabase = await createServerClient()
     
-    // Get workers information
+    // Get workers information (handle case where table doesn't exist yet)
     const { data: workers, error: workersError } = await supabase
       .from('workers')
       .select('*')
       .order('last_heartbeat', { ascending: false })
     
-    // Mark workers as offline if they haven't sent a heartbeat in the last 2 minutes
-    const now = new Date()
-    const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000)
-    
-    const workersWithStatus = (workers || []).map((worker: any) => {
-      const lastHeartbeat = new Date(worker.last_heartbeat)
-      const isOffline = lastHeartbeat < twoMinutesAgo
-      return {
-        ...worker,
-        status: isOffline ? 'offline' : worker.status
+    // If workers table doesn't exist, return empty workers array
+    let workersWithStatus: any[] = []
+    if (workersError) {
+      if (workersError.message && workersError.message.includes('does not exist')) {
+        console.log('Workers table does not exist yet, returning empty workers')
+        workersWithStatus = []
+      } else {
+        console.error('Error fetching workers:', workersError)
+        workersWithStatus = []
       }
-    })
+    } else {
+      // Mark workers as offline if they haven't sent a heartbeat in the last 2 minutes
+      const now = new Date()
+      const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000)
+      
+      workersWithStatus = (workers || []).map((worker: any) => {
+        const lastHeartbeat = new Date(worker.last_heartbeat)
+        const isOffline = lastHeartbeat < twoMinutesAgo
+        return {
+          ...worker,
+          status: isOffline ? 'offline' : worker.status
+        }
+      })
+    }
     
     const activeWorkers = workersWithStatus.filter((w: any) => w.status !== 'offline')
     const totalCapacity = workersWithStatus.reduce((sum: number, w: any) => sum + (w.max_parallel_jobs || 0), 0)

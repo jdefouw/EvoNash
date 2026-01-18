@@ -122,18 +122,28 @@ export default function ExperimentDetailPage() {
   useEffect(() => {
     if (!experimentId) return
 
-    // Fetch experiment
+    let batchesInterval: NodeJS.Timeout | null = null
+
+    // Fetch experiment - this is critical, set loading to false after this
     fetch(`/api/experiments/${experimentId}`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`Failed to fetch experiment: ${res.status}`)
+        }
+        return res.json()
+      })
       .then(data => {
         setExperiment(data)
         console.log('Experiment status:', data.status) // Debug log
+        // Set loading to false once experiment is loaded
+        setLoading(false)
       })
       .catch(err => {
         console.error('Error fetching experiment:', err)
+        setLoading(false) // Set loading to false even on error
       })
 
-    // Check worker status
+    // Check worker status (non-blocking)
     fetch('/api/worker/status')
       .then(res => res.json())
       .then(data => {
@@ -144,45 +154,58 @@ export default function ExperimentDetailPage() {
       })
       .catch(err => {
         console.error('Error fetching worker status:', err)
+        // Don't block on this error
       })
     
-    // Fetch batch assignments
+    // Fetch batch assignments (non-blocking, handles missing tables gracefully)
     const fetchBatches = () => {
       fetch(`/api/experiments/${experimentId}/batches`)
-        .then(res => res.json())
+        .then(res => {
+          if (!res.ok) {
+            // If table doesn't exist or other error, just return empty array
+            return { batches: [] }
+          }
+          return res.json()
+        })
         .then(data => {
           setBatches(data.batches || [])
         })
         .catch(err => {
           console.error('Error fetching batches:', err)
+          // Don't block on this error, just set empty batches
+          setBatches([])
         })
     }
     
     fetchBatches()
     
     // Refresh batches every 10 seconds
-    const batchesInterval = setInterval(fetchBatches, 10000)
-    
-    return () => {
-      if (batchesInterval) clearInterval(batchesInterval)
-    }
+    batchesInterval = setInterval(fetchBatches, 10000)
 
-    // Fetch generations
+    // Fetch generations (non-blocking)
     fetch(`/api/generations?experiment_id=${experimentId}`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          return []
+        }
+        return res.json()
+      })
       .then(data => {
-        setGenerations(data)
-        if (data.length > 0) {
+        setGenerations(data || [])
+        if (data && data.length > 0) {
           const latest = data[data.length - 1]
           setLatestGeneration(latest)
           lastGenerationNumberRef.current = latest.generation_number
         }
-        setLoading(false)
       })
       .catch(err => {
         console.error('Error fetching generations:', err)
-        setLoading(false)
+        // Don't block on this error
       })
+    
+    return () => {
+      if (batchesInterval) clearInterval(batchesInterval)
+    }
   }, [experimentId])
 
   // Set up polling when experiment is running or pending

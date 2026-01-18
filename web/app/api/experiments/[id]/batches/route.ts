@@ -13,6 +13,7 @@ export async function GET(
     const experimentId = params.id
     
     // Get all job assignments for this experiment
+    // Handle case where tables might not exist yet (graceful degradation)
     const { data: jobAssignments, error } = await supabase
       .from('job_assignments')
       .select(`
@@ -27,12 +28,20 @@ export async function GET(
       .eq('experiment_id', experimentId)
       .order('generation_start', { ascending: true })
     
+    // If table doesn't exist or other error, return empty array instead of error
     if (error) {
+      // Check if it's a "relation does not exist" error (table not created yet)
+      if (error.message && error.message.includes('does not exist')) {
+        console.log('Job assignments table does not exist yet, returning empty batches')
+        return NextResponse.json({
+          batches: []
+        })
+      }
       console.error('Error fetching job assignments:', error)
-      return NextResponse.json(
-        { error: error.message || 'Failed to fetch job assignments' },
-        { status: 500 }
-      )
+      // For other errors, still return empty array to not break the UI
+      return NextResponse.json({
+        batches: []
+      })
     }
     
     return NextResponse.json({
@@ -40,9 +49,9 @@ export async function GET(
     })
   } catch (error: any) {
     console.error('Error in GET /api/experiments/[id]/batches:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch batches', details: error?.message || String(error) },
-      { status: 500 }
-    )
+    // Always return empty array on error to not break the UI
+    return NextResponse.json({
+      batches: []
+    })
   }
 }
