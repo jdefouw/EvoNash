@@ -33,14 +33,44 @@ export async function POST(
     let finalPopulationState = population_state
     if (compressed && population_state_compressed) {
       try {
+        // Validate compressed data exists and is not empty
+        if (!population_state_compressed || population_state_compressed.length === 0) {
+          return NextResponse.json(
+            { error: 'population_state_compressed is empty' },
+            { status: 400 }
+          )
+        }
+        
         // Decompress: base64 decode -> gzip decompress -> JSON parse
         const compressedBuffer = Buffer.from(population_state_compressed, 'base64')
+        if (compressedBuffer.length === 0) {
+          return NextResponse.json(
+            { error: 'Failed to decode base64 compressed data' },
+            { status: 400 }
+          )
+        }
+        
         const decompressed = gunzipSync(compressedBuffer)
+        if (decompressed.length === 0) {
+          return NextResponse.json(
+            { error: 'Decompressed data is empty' },
+            { status: 400 }
+          )
+        }
+        
         finalPopulationState = JSON.parse(decompressed.toString('utf-8'))
+        
+        // Validate decompressed data structure
+        if (!finalPopulationState || typeof finalPopulationState !== 'object') {
+          return NextResponse.json(
+            { error: 'Decompressed data is not a valid object' },
+            { status: 400 }
+          )
+        }
       } catch (error: any) {
         console.error(`[CHECKPOINT] Error decompressing checkpoint:`, error)
         return NextResponse.json(
-          { error: 'Failed to decompress checkpoint data', details: error?.message },
+          { error: 'Failed to decompress checkpoint data', details: error?.message || String(error) },
           { status: 400 }
         )
       }

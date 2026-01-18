@@ -298,26 +298,51 @@ class WorkerService:
         def checkpoint_callback(population_state: Dict):
             """Save checkpoint to controller with compression."""
             try:
-                # Compress the population_state to reduce payload size
+                # Try to compress the population_state to reduce payload size
                 # Convert to JSON string, compress with gzip, then base64 encode
-                json_str = json.dumps(population_state)
-                compressed = gzip.compress(json_str.encode('utf-8'))
-                compressed_b64 = base64.b64encode(compressed).decode('utf-8')
+                use_compression = True
+                try:
+                    json_str = json.dumps(population_state)
+                    compressed = gzip.compress(json_str.encode('utf-8'))
+                    compressed_b64 = base64.b64encode(compressed).decode('utf-8')
+                except Exception as compress_error:
+                    self.logger.warning(f"⚠ Compression failed, sending uncompressed: {compress_error}")
+                    use_compression = False
                 
-                response = requests.post(
-                    f"{self.controller_url}/api/experiments/{experiment_id}/checkpoint",
-                    json={
+                # Prepare request payload
+                if use_compression:
+                    payload = {
                         'generation_number': population_state['generation'],
                         'population_state_compressed': compressed_b64,
                         'compressed': True
-                    },
+                    }
+                else:
+                    # Fallback to uncompressed (for small populations or if compression fails)
+                    payload = {
+                        'generation_number': population_state['generation'],
+                        'population_state': population_state,
+                        'compressed': False
+                    }
+                
+                response = requests.post(
+                    f"{self.controller_url}/api/experiments/{experiment_id}/checkpoint",
+                    json=payload,
                     timeout=60  # Increased timeout for large payloads
                 )
                 
                 if response.status_code == 200:
                     self.logger.info(f"✓ Checkpoint saved for generation {population_state['generation']}")
                 else:
-                    self.logger.warning(f"⚠ Checkpoint save failed: {response.status_code}")
+                    # Log the error response for debugging
+                    try:
+                        error_data = response.json()
+                        error_msg = error_data.get('error', 'Unknown error')
+                        error_details = error_data.get('details', '')
+                        self.logger.warning(f"⚠ Checkpoint save failed: {response.status_code} - {error_msg}")
+                        if error_details:
+                            self.logger.warning(f"  Details: {error_details}")
+                    except:
+                        self.logger.warning(f"⚠ Checkpoint save failed: {response.status_code} - {response.text[:200]}")
             except Exception as e:
                 self.logger.warning(f"⚠ Checkpoint save error: {e}")
         
