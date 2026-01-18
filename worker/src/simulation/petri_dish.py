@@ -144,7 +144,7 @@ class PetriDish:
     
     def step(self, agents: List['Agent']) -> Dict:
         """
-        Advance simulation by one tick.
+        Advance simulation by one tick (OPTIMIZED with vectorized operations).
         
         Args:
             agents: List of Agent objects to simulate
@@ -154,78 +154,189 @@ class PetriDish:
         """
         self.tick += 1
         
-        # Update agents
+        # OPTIMIZATION: Vectorize agent updates where possible
+        # Collect active agents for batch processing
+        active_agents = [a for a in agents if a.energy > 0]
+        if not active_agents:
+            # All agents dead, skip updates
+            pass
+        else:
+            # Batch update agent physics using numpy arrays
+            num_active = len(active_agents)
+            agent_x = np.array([a.x for a in active_agents])
+            agent_y = np.array([a.y for a in active_agents])
+            agent_vx = np.array([a.vx for a in active_agents])
+            agent_vy = np.array([a.vy for a in active_agents])
+            agent_energies = np.array([a.energy for a in active_agents])
+            
+            # Energy decay (vectorized)
+            agent_energies -= self.energy_decay_rate * self.dt
+            
+            # Apply friction (vectorized)
+            agent_vx *= (1 - self.friction)
+            agent_vy *= (1 - self.friction)
+            
+            # Limit velocity (vectorized)
+            speeds = np.sqrt(agent_vx**2 + agent_vy**2)
+            speed_mask = speeds > self.max_velocity
+            if speed_mask.any():
+                scale_factors = np.where(speed_mask, self.max_velocity / speeds, 1.0)
+                agent_vx *= scale_factors
+                agent_vy *= scale_factors
+            
+            # Update positions (vectorized)
+            agent_x += agent_vx * self.dt
+            agent_y += agent_vy * self.dt
+            
+            # Wrap positions (vectorized)
+            if self.toroidal:
+                agent_x = agent_x % self.width
+                agent_y = agent_y % self.height
+            else:
+                agent_x = np.clip(agent_x, 0, self.width)
+                agent_y = np.clip(agent_y, 0, self.height)
+            
+            # Write back to agents
+            for i, agent in enumerate(active_agents):
+                agent.x = float(agent_x[i])
+                agent.y = float(agent_y[i])
+                agent.vx = float(agent_vx[i])
+                agent.vy = float(agent_vy[i])
+                agent.energy = max(0.0, float(agent_energies[i]))
+        
+        # Update cooldowns for ALL agents (cooldowns continue even if dead)
         for agent in agents:
-            if agent.energy <= 0:
-                continue
-            
-            # Energy decay (metabolism)
-            agent.energy -= self.energy_decay_rate * self.dt
-            
-            # Apply physics
-            agent.vx *= (1 - self.friction)
-            agent.vy *= (1 - self.friction)
-            
-            # Limit velocity
-            speed = np.sqrt(agent.vx**2 + agent.vy**2)
-            if speed > self.max_velocity:
-                agent.vx = (agent.vx / speed) * self.max_velocity
-                agent.vy = (agent.vy / speed) * self.max_velocity
-            
-            # Update position
-            agent.x += agent.vx * self.dt
-            agent.y += agent.vy * self.dt
-            
-            # Wrap position
-            agent.x, agent.y = self._wrap_position(agent.x, agent.y)
-            
-            # Update cooldowns
             if agent.shoot_cooldown > 0:
                 agent.shoot_cooldown -= 1
             if agent.split_cooldown > 0:
                 agent.split_cooldown -= 1
         
-        # Check food consumption
-        for food in self.food:
-            if food.consumed:
-                continue
-            
-            for agent in agents:
-                if agent.energy <= 0:
-                    continue
+        # OPTIMIZATION: Vectorized food consumption check
+        # Re-get active agents in case energy changed
+        active_agents = [a for a in agents if a.energy > 0]
+        if active_agents and len(self.food) > 0:
+            # Get unconsumed food
+            unconsumed_food = [f for f in self.food if not f.consumed]
+            if unconsumed_food:
+                # Convert to numpy arrays for vectorized distance calculation
+                food_positions = np.array([[f.x, f.y] for f in unconsumed_food])  # (num_food, 2)
+                agent_positions = np.array([[a.x, a.y] for a in active_agents])  # (num_agents, 2)
                 
-                dist = self._distance(agent.x, agent.y, food.x, food.y)
-                if dist < (self.agent_radius + self.food_radius):
-                    agent.energy += food.energy_value
-                    food.consumed = True
-                    break
+                # Calculate all distances at once using broadcasting
+                # food_positions: (num_food, 2), agent_positions: (num_agents, 2)
+                # Expand for broadcasting: (num_food, 1, 2) - (1, num_agents, 2) = (num_food, num_agents, 2)
+                food_expanded = food_positions[:, np.newaxis, :]  # (num_food, 1, 2)
+                agent_expanded = agent_positions[np.newaxis, :, :]  # (1, num_agents, 2)
+                
+                if self.toroidal:
+                    # Toroidal distance calculation
+                    dx = food_expanded[:, :, 0] - agent_expanded[:, :, 0]  # (num_food, num_agents)
+                    dy = food_expanded[:, :, 1] - agent_expanded[:, :, 1]  # (num_food, num_agents)
+                    dx = np.minimum(np.minimum(np.abs(dx), np.abs(dx + self.width)), np.abs(dx - self.width))
+                    dy = np.minimum(np.minimum(np.abs(dy), np.abs(dy + self.height)), np.abs(dy - self.height))
+                    distances = np.sqrt(dx**2 + dy**2)  # (num_food, num_agents)
+                else:
+                    # Euclidean distance
+                    diff = food_expanded - agent_expanded  # (num_food, num_agents, 2)
+                    distances = np.linalg.norm(diff, axis=2)  # (num_food, num_agents)
+                
+                # Check collisions: distance < (agent_radius + food_radius)
+                collision_threshold = self.agent_radius + self.food_radius
+                collision_matrix = distances < collision_threshold  # (num_food, num_agents)
+                
+                # Process collisions: each food can only be consumed once
+                # Find first agent that collides with each food
+                for food_idx, food in enumerate(unconsumed_food):
+                    if collision_matrix[food_idx].any():
+                        # Find first colliding agent
+                        agent_idx = np.argmax(collision_matrix[food_idx])
+                        agent = active_agents[agent_idx]
+                        # Consume food
+                        agent.energy += food.energy_value
+                        food.consumed = True
         
-        # Update projectiles
-        for proj in self.projectiles[:]:
-            if not proj.active:
-                self.projectiles.remove(proj)
-                continue
+        # OPTIMIZATION: Vectorized projectile updates and collision detection
+        active_projectiles = [p for p in self.projectiles if p.active]
+        if active_projectiles:
+            # Batch update projectile positions
+            proj_x = np.array([p.x for p in active_projectiles])
+            proj_y = np.array([p.y for p in active_projectiles])
+            proj_vx = np.array([p.vx for p in active_projectiles])
+            proj_vy = np.array([p.vy for p in active_projectiles])
+            proj_ages = np.array([p.age for p in active_projectiles])
+            proj_owner_ids = np.array([p.owner_id for p in active_projectiles])
             
-            proj.age += 1
-            if proj.age >= proj.lifetime:
-                proj.active = False
-                continue
+            # Update ages
+            proj_ages += 1
             
-            # Move projectile
-            proj.x += proj.vx * self.dt
-            proj.y += proj.vy * self.dt
-            proj.x, proj.y = self._wrap_position(proj.x, proj.y)
+            # Move projectiles (vectorized)
+            proj_x += proj_vx * self.dt
+            proj_y += proj_vy * self.dt
             
-            # Check collisions with agents
-            for agent in agents:
-                if agent.energy <= 0 or agent.id == proj.owner_id:
-                    continue
+            # Wrap positions (vectorized)
+            if self.toroidal:
+                proj_x = proj_x % self.width
+                proj_y = proj_y % self.height
+            else:
+                proj_x = np.clip(proj_x, 0, self.width)
+                proj_y = np.clip(proj_y, 0, self.height)
+            
+            # Write back positions and ages
+            for i, proj in enumerate(active_projectiles):
+                proj.x = float(proj_x[i])
+                proj.y = float(proj_y[i])
+                proj.age = int(proj_ages[i])
                 
-                dist = self._distance(agent.x, agent.y, proj.x, proj.y)
-                if dist < (self.agent_radius + self.proj_radius):
-                    agent.energy -= proj.damage
+                # Check lifetime
+                if proj.age >= proj.lifetime:
                     proj.active = False
-                    break
+                    continue
+            
+            # Vectorized collision detection with agents
+            # Re-get active agents in case energy changed from food consumption
+            active_agents = [a for a in agents if a.energy > 0]
+            if active_agents:
+                # Get active projectiles again (after lifetime check)
+                still_active_projs = [(i, p) for i, p in enumerate(active_projectiles) if p.active]
+                if still_active_projs:
+                    active_proj_indices, active_projs = zip(*still_active_projs)
+                    proj_positions = np.array([[p.x, p.y] for p in active_projs])  # (num_proj, 2)
+                    proj_owner_ids_active = np.array([p.owner_id for p in active_projs])  # (num_proj,)
+                    agent_positions = np.array([[a.x, a.y] for a in active_agents])  # (num_agents, 2)
+                    agent_ids = np.array([a.id for a in active_agents])  # (num_agents,)
+                    
+                    # Calculate all distances at once
+                    # proj_positions: (num_proj, 2), agent_positions: (num_agents, 2)
+                    proj_expanded = proj_positions[:, np.newaxis, :]  # (num_proj, 1, 2)
+                    agent_expanded = agent_positions[np.newaxis, :, :]  # (1, num_agents, 2)
+                    
+                    if self.toroidal:
+                        dx = proj_expanded[:, :, 0] - agent_expanded[:, :, 0]
+                        dy = proj_expanded[:, :, 1] - agent_expanded[:, :, 1]
+                        dx = np.minimum(np.minimum(np.abs(dx), np.abs(dx + self.width)), np.abs(dx - self.width))
+                        dy = np.minimum(np.minimum(np.abs(dy), np.abs(dy + self.height)), np.abs(dy - self.height))
+                        distances = np.sqrt(dx**2 + dy**2)
+                    else:
+                        diff = proj_expanded - agent_expanded
+                        distances = np.linalg.norm(diff, axis=2)
+                    
+                    # Check collisions: exclude same owner
+                    collision_threshold = self.agent_radius + self.proj_radius
+                    owner_mask = proj_owner_ids_active[:, np.newaxis] != agent_ids[np.newaxis, :]  # (num_proj, num_agents)
+                    collision_matrix = (distances < collision_threshold) & owner_mask  # (num_proj, num_agents)
+                    
+                    # Process collisions: each projectile can only hit one agent
+                    for proj_idx, proj in enumerate(active_projs):
+                        if collision_matrix[proj_idx].any():
+                            # Find first colliding agent
+                            agent_idx = np.argmax(collision_matrix[proj_idx])
+                            agent = active_agents[agent_idx]
+                            # Apply damage
+                            agent.energy = max(0.0, agent.energy - proj.damage)
+                            proj.active = False
+        
+        # Clean up inactive projectiles
+        self.projectiles = [p for p in self.projectiles if p.active]
         
         # Respawn food
         self.food_respawn_timer += 1
