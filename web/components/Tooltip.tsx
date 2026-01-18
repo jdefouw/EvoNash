@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 
 interface TooltipProps {
   content: string
@@ -17,29 +17,11 @@ export default function Tooltip({
 }: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number } | null>(null)
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const triggerRef = useRef<HTMLDivElement>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
 
-  const showTooltip = () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-    }
-    timeoutRef.current = setTimeout(() => {
-      setIsVisible(true)
-      updatePosition()
-    }, delay)
-  }
-
-  const hideTooltip = () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-    }
-    setIsVisible(false)
-    setTooltipPosition(null)
-  }
-
-  const updatePosition = () => {
+  const updatePosition = useCallback(() => {
     if (!triggerRef.current || !tooltipRef.current) return
 
     const triggerRect = triggerRef.current.getBoundingClientRect()
@@ -81,7 +63,25 @@ export default function Tooltip({
     }
 
     setTooltipPosition({ top, left })
-  }
+  }, [position])
+
+  const showTooltip = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+    timeoutRef.current = setTimeout(() => {
+      setIsVisible(true)
+      updatePosition()
+    }, delay)
+  }, [delay, updatePosition])
+
+  const hideTooltip = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+    setIsVisible(false)
+    setTooltipPosition(null)
+  }, [])
 
   useEffect(() => {
     if (isVisible) {
@@ -95,7 +95,7 @@ export default function Tooltip({
         window.removeEventListener('scroll', handleScroll, true)
       }
     }
-  }, [isVisible])
+  }, [isVisible, updatePosition])
 
   useEffect(() => {
     return () => {
