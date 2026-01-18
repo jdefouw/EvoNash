@@ -15,6 +15,8 @@ from datetime import datetime
 import requests
 import torch
 import logging
+import gzip
+import base64
 
 from .experiments.experiment_manager import ExperimentManager, ExperimentConfig
 from .experiments.experiment_runner_optimized import OptimizedExperimentRunner
@@ -294,15 +296,22 @@ class WorkerService:
             Callback function that saves checkpoint
         """
         def checkpoint_callback(population_state: Dict):
-            """Save checkpoint to controller."""
+            """Save checkpoint to controller with compression."""
             try:
+                # Compress the population_state to reduce payload size
+                # Convert to JSON string, compress with gzip, then base64 encode
+                json_str = json.dumps(population_state)
+                compressed = gzip.compress(json_str.encode('utf-8'))
+                compressed_b64 = base64.b64encode(compressed).decode('utf-8')
+                
                 response = requests.post(
                     f"{self.controller_url}/api/experiments/{experiment_id}/checkpoint",
                     json={
                         'generation_number': population_state['generation'],
-                        'population_state': population_state
+                        'population_state_compressed': compressed_b64,
+                        'compressed': True
                     },
-                    timeout=30
+                    timeout=60  # Increased timeout for large payloads
                 )
                 
                 if response.status_code == 200:

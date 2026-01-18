@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { gunzipSync } from 'zlib'
 
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
@@ -19,11 +20,33 @@ export async function POST(
     const experimentId = resolvedParams.id
     
     const body = await request.json()
-    const { generation_number, population_state } = body
+    const { generation_number, population_state, population_state_compressed, compressed } = body
     
-    if (!generation_number || population_state === undefined) {
+    if (!generation_number) {
       return NextResponse.json(
-        { error: 'generation_number and population_state are required' },
+        { error: 'generation_number is required' },
+        { status: 400 }
+      )
+    }
+    
+    // Handle compressed checkpoints (to avoid 413 Payload Too Large errors)
+    let finalPopulationState = population_state
+    if (compressed && population_state_compressed) {
+      try {
+        // Decompress: base64 decode -> gzip decompress -> JSON parse
+        const compressedBuffer = Buffer.from(population_state_compressed, 'base64')
+        const decompressed = gunzipSync(compressedBuffer)
+        finalPopulationState = JSON.parse(decompressed.toString('utf-8'))
+      } catch (error: any) {
+        console.error(`[CHECKPOINT] Error decompressing checkpoint:`, error)
+        return NextResponse.json(
+          { error: 'Failed to decompress checkpoint data', details: error?.message },
+          { status: 400 }
+        )
+      }
+    } else if (!population_state) {
+      return NextResponse.json(
+        { error: 'population_state or population_state_compressed is required' },
         { status: 400 }
       )
     }
@@ -34,7 +57,7 @@ export async function POST(
       .upsert({
         experiment_id: experimentId,
         generation_number,
-        population_state,
+        population_state: finalPopulationState,
       }, {
         onConflict: 'experiment_id,generation_number'
       })

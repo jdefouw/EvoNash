@@ -5,6 +5,7 @@ Implements Elo rating system and policy entropy calculation.
 
 import numpy as np
 import torch
+import logging
 from typing import List, Tuple, Optional
 from ..simulation.agent import Agent, NeuralNetwork
 from ..experiments.experiment_manager import ExperimentConfig
@@ -401,29 +402,41 @@ class GeneticAlgorithm:
             'population_diversity': float(self.calculate_population_diversity())
         }
     
-    def save_population_state(self, experiment_id: str, generation: int) -> Dict:
+    def save_population_state(self, experiment_id: str, generation: int, max_agents: Optional[int] = None) -> Dict:
         """
         Serialize population state for checkpointing.
+        Only saves top-performing agents to reduce payload size.
         
         Args:
             experiment_id: Experiment ID
             generation: Generation number
+            max_agents: Maximum number of agents to save (default: 20% of population or 200, whichever is smaller)
             
         Returns:
             Dictionary with serialized population state
         """
         import json
         
+        # Determine how many agents to save (save top performers to reduce payload size)
+        if max_agents is None:
+            # Default: save top 20% of population, but cap at 200 to keep payloads manageable
+            max_agents = min(int(len(self.population) * 0.2), 200)
+        
+        # Sort agents by Elo rating (descending) and take top performers
+        sorted_agents = sorted(self.population, key=lambda a: a.elo_rating, reverse=True)
+        agents_to_save = sorted_agents[:max_agents]
+        
         population_state = {
             'experiment_id': experiment_id,
             'generation': generation,
             'max_global_elo': float(self.max_global_elo),
             'population_size': len(self.population),
+            'saved_agents_count': len(agents_to_save),
             'agents': []
         }
         
-        # Serialize each agent's network weights and metadata
-        for i, agent in enumerate(self.population):
+        # Serialize only top-performing agents' network weights and metadata
+        for agent in agents_to_save:
             # Get network weights as numpy array
             weights = agent.network.get_weights()
             
@@ -502,24 +515,64 @@ class GeneticAlgorithm:
             self.population.append(agent)
         
         # Ensure population size matches config
-        while len(self.population) < self.config.population_size:
-            # Add new random agents if population is smaller
-            network = NeuralNetwork(
-                input_size=self.config.network_architecture['input_size'],
-                hidden_size=self.config.network_architecture['hidden_layers'][0],
-                output_size=self.config.network_architecture['output_size']
-            ).to(self.device)
-            for param in network.parameters():
-                torch.nn.init.normal_(param, mean=0.0, std=0.1)
+        # If we only loaded a subset (from compressed checkpoint), fill the rest
+        saved_count = len(self.population)
+        saved_agents_count = state_dict.get('saved_agents_count', saved_count)
+        if saved_count > 0 and saved_count < self.config.population_size:
+            # Log that we're expanding from a partial checkpoint
+            logger = logging.getLogger('EvoNashWorker')
+            logger.info(f"📦 Expanding checkpoint: loaded {saved_count} top agents, filling to {self.config.population_size} via crossover/mutation")
             
-            agent = Agent(
-                agent_id=len(self.population),
-                network=network,
-                initial_energy=100.0,
-                device=self.device
-            )
-            agent.elo_rating = 1500.0
-            self.population.append(agent)
+            # Fill population by creating offspring from saved top agents
+            # This preserves genetic diversity better than random initialization
+            while len(self.population) < self.config.population_size:
+                if saved_count >= 2:
+                    # Use crossover: select two random saved agents
+                    parent_a, parent_b = np.random.choice(self.population[:saved_count], size=2, replace=False)
+                    offspring = self.crossover(parent_a, parent_b)
+                    # Apply mutation to add diversity
+                    self.mutate(offspring)
+                else:
+                    # If only one agent saved, just mutate it
+                    parent = self.population[0]
+                    # Create a copy and mutate
+                    weights = parent.network.get_weights()
+                    network = NeuralNetwork(
+                        input_size=self.config.network_architecture['input_size'],
+                        hidden_size=self.config.network_architecture['hidden_layers'][0],
+                        output_size=self.config.network_architecture['output_size']
+                    ).to(self.device)
+                    network.set_weights(weights)
+                    offspring = Agent(
+                        agent_id=len(self.population),
+                        network=network,
+                        initial_energy=100.0,
+                        device=self.device
+                    )
+                    offspring.elo_rating = parent.elo_rating
+                    self.mutate(offspring)
+                
+                offspring.id = len(self.population)
+                self.population.append(offspring)
+        elif saved_count == 0:
+            # No agents loaded, initialize randomly
+            while len(self.population) < self.config.population_size:
+                network = NeuralNetwork(
+                    input_size=self.config.network_architecture['input_size'],
+                    hidden_size=self.config.network_architecture['hidden_layers'][0],
+                    output_size=self.config.network_architecture['output_size']
+                ).to(self.device)
+                for param in network.parameters():
+                    torch.nn.init.normal_(param, mean=0.0, std=0.1)
+                
+                agent = Agent(
+                    agent_id=len(self.population),
+                    network=network,
+                    initial_energy=100.0,
+                    device=self.device
+                )
+                agent.elo_rating = 1500.0
+                self.population.append(agent)
         
         # Trim if too large
         self.population = self.population[:self.config.population_size]
