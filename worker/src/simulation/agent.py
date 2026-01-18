@@ -132,9 +132,17 @@ class Agent:
         Returns:
             Dictionary with actions: thrust, turn, shoot, split
         """
+        # Ensure input is on the correct device
+        if input_vector.device != self.network.device:
+            input_vector = input_vector.to(self.device)
+        
         with torch.no_grad():
             output = self.network(input_vector.unsqueeze(0))
-            output = output.squeeze(0).cpu().numpy()
+            # Only move to CPU if we're on CUDA (for numpy conversion)
+            if self.device == 'cuda':
+                output = output.squeeze(0).cpu().numpy()
+            else:
+                output = output.squeeze(0).numpy()
         
         # Process outputs
         thrust = float(np.clip(output[0], 0.0, 1.0))  # 0-1

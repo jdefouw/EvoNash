@@ -57,12 +57,12 @@ class PetriDish:
             config_path: Path to simulation_config.json. If None, uses defaults.
         """
         if config_path:
-            with open(config_path, 'r') as f:
+            with open(config_path, 'r', encoding='utf-8') as f:
                 self.config = json.load(f)
         else:
             # Default config
             default_config_path = Path(__file__).parent.parent.parent / 'config' / 'simulation_config.json'
-            with open(default_config_path, 'r') as f:
+            with open(default_config_path, 'r', encoding='utf-8') as f:
                 self.config = json.load(f)
         
         # Extract config values
@@ -254,6 +254,9 @@ class PetriDish:
         
         results = np.zeros((raycast_count, 4))
         
+        # Optimize: pre-filter unconsumed food
+        active_food = [f for f in self.food if not f.consumed]
+        
         for i, angle_deg in enumerate(angles):
             angle_rad = np.radians(angle_deg)
             dx = np.cos(angle_rad)
@@ -280,13 +283,13 @@ class PetriDish:
                             wall_dist = dist
                         break
                 
-                # Check food
-                for food in self.food:
-                    if food.consumed:
-                        continue
-                    food_dist_check = self._distance(check_x, check_y, food.x, food.y)
-                    if food_dist_check < self.food_radius and dist < food_dist:
-                        food_dist = dist
+                # Check food (optimized: only check if we haven't found food yet, and use pre-filtered list)
+                if food_dist >= max_distance:  # Only check if we haven't found food
+                    for food in active_food:
+                        food_dist_check = self._distance(check_x, check_y, food.x, food.y)
+                        if food_dist_check < self.food_radius:
+                            food_dist = dist
+                            break  # Found food, no need to check further
                 
                 # Check enemies (would need access to all agents)
                 # This is simplified - in full implementation, would check all agents

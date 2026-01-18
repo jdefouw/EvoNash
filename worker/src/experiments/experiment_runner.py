@@ -118,12 +118,35 @@ class ExperimentRunner:
         
         print(f"  [SIM] Starting simulation: {len(agents)} agents, {total_ticks} ticks")
         
+        # Test: Process first agent to verify it works
+        if len(agents) > 0:
+            test_agent = agents[0]
+            print(f"  [SIM] Testing first agent processing...")
+            test_raycast_config = {
+                'count': 8,
+                'max_distance': 200.0,
+                'angles': np.linspace(0, 360, 8)
+            }
+            try:
+                test_raycast = self.petri_dish.get_raycast_data(test_agent, test_raycast_config)
+                test_input = test_agent.get_input_vector(test_raycast, self.petri_dish)
+                test_action = test_agent.act(test_input)
+                print(f"  [SIM] ✓ First agent test successful (action: {test_action})")
+            except Exception as e:
+                print(f"  [SIM] ✗ First agent test failed: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
+        
         # Run simulation for specified ticks
         for tick in range(total_ticks):
             if tick % log_interval == 0:
                 progress = (tick / total_ticks) * 100
                 elapsed = time.time() - start_time
                 print(f"  [SIM] Tick {tick}/{total_ticks} ({progress:.1f}%) - Elapsed: {elapsed:.1f}s")
+            
+            tick_start = time.time()
+            
             # Get raycast data for all agents
             raycast_config = {
                 'count': 8,
@@ -131,8 +154,14 @@ class ExperimentRunner:
                 'angles': np.linspace(0, 360, 8)
             }
             
-            # Process each agent
-            for agent in agents:
+            # Process each agent with progress tracking
+            agent_count = len(agents)
+            agent_log_interval = max(1, agent_count // 10)  # Log every 10% of agents
+            
+            for agent_idx, agent in enumerate(agents):
+                if agent_idx % agent_log_interval == 0 and tick == 0:
+                    print(f"    Processing agent {agent_idx}/{agent_count}...")
+                
                 if agent.energy <= 0:
                     continue
                 
@@ -147,6 +176,10 @@ class ExperimentRunner:
                 
                 # Apply action
                 agent.apply_action(action, self.petri_dish)
+            
+            tick_time = time.time() - tick_start
+            if tick == 0:
+                print(f"  [SIM] Tick 0 completed in {tick_time:.2f}s (processing {agent_count} agents)")
             
             # Step simulation
             self.petri_dish.step(agents)
