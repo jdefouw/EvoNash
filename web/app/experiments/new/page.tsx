@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Tooltip from '@/components/Tooltip'
 
 export default function NewExperimentPage() {
   const router = useRouter()
@@ -95,9 +96,11 @@ export default function NewExperimentPage() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label htmlFor="experiment_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Experiment Name *
-              </label>
+              <Tooltip content="A unique identifier or title for this specific experiment.">
+                <label htmlFor="experiment_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                  Experiment Name *
+                </label>
+              </Tooltip>
               <input
                 type="text"
                 id="experiment_name"
@@ -112,9 +115,11 @@ export default function NewExperimentPage() {
 
             <div className="grid md:grid-cols-2 gap-6">
               <div>
-                <label htmlFor="experiment_group" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Experiment Group *
-                </label>
+                <Tooltip content="Categorize this experiment into a group for easier organization and comparison with other related experiments.">
+                  <label htmlFor="experiment_group" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                    Experiment Group *
+                  </label>
+                </Tooltip>
                 <select
                   id="experiment_group"
                   name="experiment_group"
@@ -129,9 +134,11 @@ export default function NewExperimentPage() {
               </div>
 
               <div>
-                <label htmlFor="mutation_mode" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Mutation Mode *
-                </label>
+                <Tooltip content="Determines how genetic mutations are applied during evolution. 'Static' uses a constant rate, while 'Adaptive' allows the rate to change dynamically based on experiment progress.">
+                  <label htmlFor="mutation_mode" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                    Mutation Mode *
+                  </label>
+                </Tooltip>
                 <select
                   id="mutation_mode"
                   name="mutation_mode"
@@ -148,9 +155,11 @@ export default function NewExperimentPage() {
 
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div>
-                <label htmlFor="random_seed" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Random Seed
-                </label>
+                <Tooltip content="An integer value used to initialize the random number generator, ensuring that the experiment's starting conditions and subsequent 'random' events are reproducible.">
+                  <label htmlFor="random_seed" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                    Random Seed
+                  </label>
+                </Tooltip>
                 <input
                   type="number"
                   id="random_seed"
@@ -162,9 +171,11 @@ export default function NewExperimentPage() {
               </div>
 
               <div>
-                <label htmlFor="population_size" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Population Size
-                </label>
+                <Tooltip content="The number of individual agents (e.g., neural networks or organisms) that will be present in each generation of the experiment.">
+                  <label htmlFor="population_size" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                    Population Size
+                  </label>
+                </Tooltip>
                 <input
                   type="number"
                   id="population_size"
@@ -176,9 +187,11 @@ export default function NewExperimentPage() {
               </div>
 
               <div>
-                <label htmlFor="max_generations" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Max Generations
-                </label>
+                <Tooltip content="The total number of evolutionary cycles or generations the experiment will run before automatically stopping.">
+                  <label htmlFor="max_generations" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                    Max Generations
+                  </label>
+                </Tooltip>
                 <input
                   type="number"
                   id="max_generations"
@@ -190,9 +203,11 @@ export default function NewExperimentPage() {
               </div>
 
               <div>
-                <label htmlFor="ticks_per_generation" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Ticks Per Generation
-                </label>
+                <Tooltip content="The number of discrete simulation steps or time units during which each agent is evaluated within a single generation to determine its performance or fitness.">
+                  <label htmlFor="ticks_per_generation" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                    Ticks Per Generation
+                  </label>
+                </Tooltip>
                 <input
                   type="number"
                   id="ticks_per_generation"
@@ -208,9 +223,11 @@ export default function NewExperimentPage() {
 
             {formData.mutation_mode === 'STATIC' ? (
               <div>
-                <label htmlFor="mutation_rate" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Mutation Rate (Static)
-                </label>
+                <Tooltip content="The fixed probability (as a decimal) that a genetic characteristic (e.g., a weight in a neural network) of an agent will randomly change during reproduction. For example, 0.05 means a 5% chance of mutation.">
+                  <label htmlFor="mutation_rate" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                    Mutation Rate (Static)
+                  </label>
+                </Tooltip>
                 <input
                   type="number"
                   id="mutation_rate"
@@ -226,9 +243,11 @@ export default function NewExperimentPage() {
               </div>
             ) : (
               <div>
-                <label htmlFor="mutation_base" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Mutation Base (Adaptive)
-                </label>
+                <Tooltip content="Base mutation rate for adaptive mode - starting point for dynamic mutation scaling. The actual mutation rate will change based on agent fitness, with lower-performing agents mutating more and higher-performing agents mutating less.">
+                  <label htmlFor="mutation_base" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                    Mutation Base (Adaptive)
+                  </label>
+                </Tooltip>
                 <input
                   type="number"
                   id="mutation_base"
@@ -246,9 +265,11 @@ export default function NewExperimentPage() {
 
             <div className="grid md:grid-cols-2 gap-6">
               <div>
-                <label htmlFor="max_possible_elo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Max Possible Elo
-                </label>
+                <Tooltip content="The highest possible Elo rating that an agent can achieve within the experiment's scoring system. This helps define the scale of performance and is used in adaptive mutation calculations.">
+                  <label htmlFor="max_possible_elo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                    Max Possible Elo
+                  </label>
+                </Tooltip>
                 <input
                   type="number"
                   id="max_possible_elo"
@@ -261,9 +282,11 @@ export default function NewExperimentPage() {
               </div>
 
               <div>
-                <label htmlFor="selection_pressure" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Selection Pressure
-                </label>
+                <Tooltip content="The proportion of the highest-performing agents from the current generation that are chosen to reproduce and contribute to the next generation. A value of 0.2 means the top 20% of agents are selected.">
+                  <label htmlFor="selection_pressure" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                    Selection Pressure
+                  </label>
+                </Tooltip>
                 <input
                   type="number"
                   id="selection_pressure"
