@@ -32,13 +32,10 @@ class VectorizedPetriDish(PetriDish):
     def _update_food_tensors(self):
         """Update food position tensors for vectorized operations."""
         if len(self.food) > 0:
-            food_positions = [[f.x, f.y] for f in self.food if not f.consumed]
-            if food_positions:
-                self.food_positions = torch.tensor(food_positions, dtype=torch.float32, device=self.device)
-                self.food_consumed = torch.tensor([f.consumed for f in self.food], dtype=torch.bool, device=self.device)
-            else:
-                self.food_positions = torch.zeros((0, 2), dtype=torch.float32, device=self.device)
-                self.food_consumed = torch.ones(len(self.food), dtype=torch.bool, device=self.device)
+            # Include ALL food items (not just unconsumed) to match food_consumed mask
+            food_positions = [[f.x, f.y] for f in self.food]
+            self.food_positions = torch.tensor(food_positions, dtype=torch.float32, device=self.device)
+            self.food_consumed = torch.tensor([f.consumed for f in self.food], dtype=torch.bool, device=self.device)
         else:
             self.food_positions = torch.zeros((0, 2), dtype=torch.float32, device=self.device)
             self.food_consumed = torch.zeros(0, dtype=torch.bool, device=self.device)
@@ -127,9 +124,15 @@ class VectorizedPetriDish(PetriDish):
                 results[chunk_start:chunk_end, :, 0] = torch.minimum(results[chunk_start:chunk_end, :, 0], wall_distances)
             
             # Optimized food collision check using spatial indexing
+            # Filter out consumed food items
             if len(self.food) > 0 and self.food_positions.shape[0] > 0:
-                food_x = self.food_positions[:, 0]  # (num_food,)
-                food_y = self.food_positions[:, 1]  # (num_food,)
+                unconsumed_mask = ~self.food_consumed
+                if unconsumed_mask.any():
+                    unconsumed_food_positions = self.food_positions[unconsumed_mask]
+                    food_x = unconsumed_food_positions[:, 0]  # (num_unconsumed_food,)
+                    food_y = unconsumed_food_positions[:, 1]  # (num_unconsumed_food,)
+                else:
+                    continue  # Skip food check if all food is consumed
                 
                 # Use broadcasting: (chunk_size, raycast_count, steps) - (1, 1, 1, num_food)
                 # Expand check positions to add food dimension: (chunk_size, raycast_count, steps, 1)
