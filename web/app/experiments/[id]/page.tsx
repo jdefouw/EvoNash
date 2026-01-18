@@ -12,6 +12,7 @@ import GenerationProgress from '@/components/GenerationProgress'
 import StatusIndicator from '@/components/StatusIndicator'
 import PetriDishViewer from '@/components/PetriDishViewer'
 import MatchReplay from '@/components/MatchReplay'
+import LiveViewLegend from '@/components/LiveViewLegend'
 
 export default function ExperimentDetailPage() {
   const params = useParams()
@@ -402,6 +403,7 @@ export default function ExperimentDetailPage() {
               currentGeneration={latestGeneration}
               generations={generations}
             />
+            <LiveViewLegend />
             
             {/* Worker Status Card */}
             {experiment.status === 'PENDING' && (
