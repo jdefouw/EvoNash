@@ -133,8 +133,10 @@ class Agent:
             Dictionary with actions: thrust, turn, shoot, split
         """
         # Ensure input is on the correct device
-        if input_vector.device != self.network.device:
-            input_vector = input_vector.to(self.device)
+        # Get device from network parameters (PyTorch modules don't have .device attribute)
+        network_device = next(self.network.parameters()).device
+        if input_vector.device != network_device:
+            input_vector = input_vector.to(network_device)
         
         with torch.no_grad():
             output = self.network(input_vector.unsqueeze(0))
