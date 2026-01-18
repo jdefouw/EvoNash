@@ -98,6 +98,9 @@ class ExperimentRunner:
         Returns:
             Dictionary with simulation results
         """
+        import time
+        start_time = time.time()
+        
         agents = self.ga.population
         self.petri_dish.reset()
         
@@ -110,8 +113,17 @@ class ExperimentRunner:
             agent.angle = np.random.uniform(0, 2 * np.pi)
             agent.energy = self.petri_dish.initial_energy
         
+        total_ticks = self.petri_dish.ticks_per_generation
+        log_interval = max(1, total_ticks // 10)  # Log every 10%
+        
+        print(f"  [SIM] Starting simulation: {len(agents)} agents, {total_ticks} ticks")
+        
         # Run simulation for specified ticks
-        for tick in range(self.petri_dish.ticks_per_generation):
+        for tick in range(total_ticks):
+            if tick % log_interval == 0:
+                progress = (tick / total_ticks) * 100
+                elapsed = time.time() - start_time
+                print(f"  [SIM] Tick {tick}/{total_ticks} ({progress:.1f}%) - Elapsed: {elapsed:.1f}s")
             # Get raycast data for all agents
             raycast_config = {
                 'count': 8,
@@ -139,13 +151,20 @@ class ExperimentRunner:
             # Step simulation
             self.petri_dish.step(agents)
         
+        sim_time = time.time() - start_time
+        print(f"  [SIM] Simulation complete in {sim_time:.2f}s")
+        
         # Calculate fitness (survival time + energy)
         for agent in agents:
             agent.fitness_score = agent.energy + (self.petri_dish.ticks_per_generation if agent.energy > 0 else 0)
         
+        survivors = sum(1 for a in agents if a.energy > 0)
+        avg_energy = np.mean([a.energy for a in agents])
+        print(f"  [SIM] Results: {survivors}/{len(agents)} survivors, avg energy: {avg_energy:.2f}")
+        
         return {
-            'survivors': sum(1 for a in agents if a.energy > 0),
-            'avg_energy': np.mean([a.energy for a in agents])
+            'survivors': survivors,
+            'avg_energy': avg_energy
         }
     
     def _run_elo_matches(self, num_matches: int = 100):
@@ -179,19 +198,34 @@ class ExperimentRunner:
         Returns:
             Dictionary with generation statistics
         """
+        import time
+        gen_start_time = time.time()
+        
         # Simulate generation in Petri Dish
+        print(f"\n[GEN {self.current_generation}] Step 1/3: Running Petri Dish simulation...")
         sim_results = self._simulate_generation()
         
         # Run Elo matches
+        print(f"[GEN {self.current_generation}] Step 2/3: Running Elo matches...")
+        elo_start = time.time()
         self._run_elo_matches(num_matches=100)
+        elo_time = time.time() - elo_start
+        print(f"  [ELO] Elo matches complete in {elo_time:.2f}s")
         
         # Get generation statistics
+        print(f"[GEN {self.current_generation}] Step 3/3: Calculating statistics...")
+        stats_start = time.time()
         # Create sample inputs for entropy calculation
         sample_inputs = torch.randn(10, 24).to(self.device)
         stats = self.ga.get_generation_stats(sample_inputs=sample_inputs)
+        stats_time = time.time() - stats_start
+        print(f"  [STATS] Statistics calculated in {stats_time:.2f}s")
         
         # Add generation number
         stats['generation'] = self.current_generation
+        
+        gen_total_time = time.time() - gen_start_time
+        print(f"[GEN {self.current_generation}] Generation complete in {gen_total_time:.2f}s total")
         
         # Log to CSV
         self.logger.log_generation(
@@ -244,18 +278,25 @@ class ExperimentRunner:
         print(f"{'='*80}\n")
         
         stopped = False
+        import time
+        experiment_start_time = time.time()
+        
         for gen in range(self.config.max_generations):
             # Print generation start
             progress_pct = ((gen + 1) / self.config.max_generations) * 100
+            elapsed_total = time.time() - experiment_start_time
             print(f"\n{'─'*80}")
             print(f"Generation {gen + 1}/{self.config.max_generations} ({progress_pct:.1f}%) - Processing...")
+            print(f"Total elapsed time: {elapsed_total:.1f}s")
             print(f"{'─'*80}")
             
+            gen_start = time.time()
             # Run the generation
             stats = self.run_generation()
+            gen_elapsed = time.time() - gen_start
             
             # Print generation results immediately
-            print(f"✓ Generation {gen + 1}/{self.config.max_generations} Complete")
+            print(f"\n✓ Generation {gen + 1}/{self.config.max_generations} Complete (took {gen_elapsed:.2f}s)")
             print(f"  Avg Elo: {stats.get('avg_elo', 0):7.2f} | "
                   f"Peak Elo: {stats.get('peak_elo', 0):7.2f} | "
                   f"Min Elo: {stats.get('min_elo', 0):7.2f}")
@@ -264,6 +305,13 @@ class ExperimentRunner:
                   f"Diversity: {stats.get('population_diversity', 0):.4f}")
             print(f"  Avg Fitness: {stats.get('avg_fitness', 0):.2f} | "
                   f"Mutation Rate: {stats.get('mutation_rate', 0):.4f}")
+            
+            # Estimate time remaining
+            if gen > 0:
+                avg_time_per_gen = elapsed_total / (gen + 1)
+                remaining_gens = self.config.max_generations - (gen + 1)
+                estimated_remaining = avg_time_per_gen * remaining_gens
+                print(f"  Estimated time remaining: {estimated_remaining/60:.1f} minutes")
             
             # Check if experiment should stop after completing this generation
             if self.stop_check_callback:
