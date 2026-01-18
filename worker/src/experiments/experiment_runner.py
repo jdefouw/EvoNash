@@ -139,11 +139,13 @@ class ExperimentRunner:
                 raise
         
         # Run simulation for specified ticks
+        import sys
         for tick in range(total_ticks):
-            if tick % log_interval == 0:
+            if tick % log_interval == 0 or tick < 5:  # Log first 5 ticks for debugging
                 progress = (tick / total_ticks) * 100
                 elapsed = time.time() - start_time
-                print(f"  [SIM] Tick {tick}/{total_ticks} ({progress:.1f}%) - Elapsed: {elapsed:.1f}s")
+                print(f"  [SIM] Starting tick {tick}/{total_ticks} ({progress:.1f}%) - Elapsed: {elapsed:.1f}s")
+                sys.stdout.flush()
             
             tick_start = time.time()
             
@@ -159,30 +161,61 @@ class ExperimentRunner:
             agent_log_interval = max(1, agent_count // 10)  # Log every 10% of agents
             
             for agent_idx, agent in enumerate(agents):
-                if agent_idx % agent_log_interval == 0 and tick == 0:
+                if (agent_idx % agent_log_interval == 0 and tick == 0) or (tick < 3 and agent_idx == 0):
                     print(f"    Processing agent {agent_idx}/{agent_count}...")
                 
                 if agent.energy <= 0:
                     continue
                 
                 # Get raycast data
-                raycast_data = self.petri_dish.get_raycast_data(agent, raycast_config)
+                try:
+                    raycast_data = self.petri_dish.get_raycast_data(agent, raycast_config)
+                except Exception as e:
+                    print(f"    ✗ Error in raycast for agent {agent_idx}: {e}")
+                    raise
                 
                 # Get input vector
-                input_vector = agent.get_input_vector(raycast_data, self.petri_dish)
+                try:
+                    input_vector = agent.get_input_vector(raycast_data, self.petri_dish)
+                except Exception as e:
+                    print(f"    ✗ Error getting input vector for agent {agent_idx}: {e}")
+                    raise
                 
                 # Get action from neural network
-                action = agent.act(input_vector)
+                try:
+                    action = agent.act(input_vector)
+                except Exception as e:
+                    print(f"    ✗ Error in act() for agent {agent_idx}: {e}")
+                    raise
                 
                 # Apply action
-                agent.apply_action(action, self.petri_dish)
+                try:
+                    agent.apply_action(action, self.petri_dish)
+                except Exception as e:
+                    print(f"    ✗ Error applying action for agent {agent_idx}: {e}")
+                    raise
             
             tick_time = time.time() - tick_start
-            if tick == 0:
-                print(f"  [SIM] Tick 0 completed in {tick_time:.2f}s (processing {agent_count} agents)")
+            if tick < 5 or tick % 100 == 0:
+                print(f"  [SIM] Tick {tick} agent processing completed in {tick_time:.2f}s")
             
             # Step simulation
-            self.petri_dish.step(agents)
+            step_start = time.time()
+            try:
+                self.petri_dish.step(agents)
+            except Exception as e:
+                print(f"  [SIM] ✗ Error in step() at tick {tick}: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
+            step_time = time.time() - step_start
+            if tick < 5 or tick % 100 == 0:
+                print(f"  [SIM] Tick {tick} step() completed in {step_time:.3f}s")
+                print(f"  [SIM] Tick {tick} total time: {tick_time + step_time:.2f}s")
+            
+            # Force flush output to ensure logs appear immediately
+            import sys
+            sys.stdout.flush()
         
         sim_time = time.time() - start_time
         print(f"  [SIM] Simulation complete in {sim_time:.2f}s")
