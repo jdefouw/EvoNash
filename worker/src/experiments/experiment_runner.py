@@ -149,6 +149,14 @@ class ExperimentRunner:
                 print(f"  [SIM] Starting tick {tick}/{total_ticks} ({progress:.1f}%) - Elapsed: {elapsed:.1f}s")
                 sys.stdout.flush()
             
+            # Safety check: if we're taking too long, log a warning
+            if tick > 0 and tick % 10 == 0:
+                elapsed = time.time() - start_time
+                avg_time_per_tick = elapsed / tick
+                if avg_time_per_tick > 1.0:
+                    print(f"  [SIM] ⚠ WARNING: Average time per tick is {avg_time_per_tick:.2f}s (very slow!)")
+                    sys.stdout.flush()
+            
             tick_start = time.time()
             
             # Get raycast data for all agents
@@ -165,15 +173,26 @@ class ExperimentRunner:
             for agent_idx, agent in enumerate(agents):
                 if (agent_idx % agent_log_interval == 0 and tick == 0) or (tick < 3 and agent_idx == 0):
                     print(f"    Processing agent {agent_idx}/{agent_count}...")
+                    sys.stdout.flush()
                 
                 if agent.energy <= 0:
                     continue
                 
-                # Get raycast data
+                # Get raycast data with timeout protection
                 try:
+                    import time
+                    raycast_start = time.time()
                     raycast_data = self.petri_dish.get_raycast_data(agent, raycast_config)
+                    raycast_time = time.time() - raycast_start
+                    # Log if raycast takes too long
+                    if raycast_time > 1.0 and (tick < 20 or tick % 100 == 0):
+                        print(f"    ⚠ Raycast for agent {agent_idx} took {raycast_time:.2f}s")
+                        sys.stdout.flush()
                 except Exception as e:
                     print(f"    ✗ Error in raycast for agent {agent_idx}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    sys.stdout.flush()
                     raise
                 
                 # Get input vector
@@ -201,20 +220,29 @@ class ExperimentRunner:
             should_log = (tick < 20) or (tick % 100 == 0)
             if should_log:
                 print(f"  [SIM] Tick {tick} agent processing completed in {tick_time:.2f}s")
+                sys.stdout.flush()
             
             # Step simulation
             step_start = time.time()
             try:
+                if should_log:
+                    print(f"  [SIM] About to call step() for tick {tick}...")
+                    sys.stdout.flush()
                 self.petri_dish.step(agents)
+                if should_log:
+                    print(f"  [SIM] step() returned for tick {tick}")
+                    sys.stdout.flush()
             except Exception as e:
                 print(f"  [SIM] ✗ Error in step() at tick {tick}: {e}")
                 import traceback
                 traceback.print_exc()
+                sys.stdout.flush()
                 raise
             step_time = time.time() - step_start
             if should_log:
                 print(f"  [SIM] Tick {tick} step() completed in {step_time:.3f}s")
                 print(f"  [SIM] Tick {tick} total time: {tick_time + step_time:.2f}s")
+                sys.stdout.flush()
             
             # Force flush output to ensure logs appear immediately
             sys.stdout.flush()
@@ -223,6 +251,11 @@ class ExperimentRunner:
             total_tick_time = tick_time + step_time
             if total_tick_time > 10.0:  # More than 10 seconds per tick is suspicious
                 print(f"  [SIM] ⚠ WARNING: Tick {tick} took {total_tick_time:.2f}s (very slow!)")
+                sys.stdout.flush()
+            
+            # Log that we're about to start the next iteration
+            if should_log:
+                print(f"  [SIM] Completed tick {tick}, moving to tick {tick + 1}...")
                 sys.stdout.flush()
         
         sim_time = time.time() - start_time
@@ -295,8 +328,9 @@ class ExperimentRunner:
         stats_time = time.time() - stats_start
         print(f"  [STATS] Statistics calculated in {stats_time:.2f}s")
         
-        # Add generation number
+        # Add generation number and population size
         stats['generation'] = self.current_generation
+        stats['population_size'] = len(self.ga.population)
         
         gen_total_time = time.time() - gen_start_time
         print(f"[GEN {self.current_generation}] Generation complete in {gen_total_time:.2f}s total")

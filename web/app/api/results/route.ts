@@ -116,9 +116,10 @@ export async function POST(request: NextRequest) {
     }
     
     return NextResponse.json({ success: true, generation_id: generation.id })
-  } catch (error) {
+  } catch (error: any) {
+    console.error(`[RESULTS] Unexpected error processing upload:`, error)
     return NextResponse.json(
-      { error: 'Failed to upload results' },
+      { error: 'Failed to upload results', details: error?.message || String(error) },
       { status: 500 }
     )
   }

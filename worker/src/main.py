@@ -8,11 +8,23 @@ import json
 import requests
 import sys
 import time
+import logging
 from pathlib import Path
 from typing import Optional, Dict, Callable
 
 from .experiments.experiment_manager import ExperimentManager, ExperimentConfig
 from .experiments.experiment_runner import ExperimentRunner
+
+# Set up logger for this module
+logger = logging.getLogger(__name__)
+
+# If no handlers are configured, add a basic handler to ensure logging works
+if not logger.handlers and not logging.root.handlers:
+    # Basic configuration as fallback
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
 
 
 def check_experiment_status(controller_url: str, experiment_id: str, timeout: int = 10) -> Optional[str]:
@@ -150,7 +162,7 @@ def upload_generation_stats(
         "matches": []  # Empty for now, would contain match results
     }
     
-    print(f"[UPLOAD] Uploading generation {gen_num} stats for experiment {experiment_id}...")
+    logger.info(f"[UPLOAD] Uploading generation {gen_num} stats for experiment {experiment_id}...")
     
     for attempt in range(max_retries):
         try:
@@ -161,27 +173,27 @@ def upload_generation_stats(
             )
             response.raise_for_status()
             result = response.json()
-            print(f"[UPLOAD] ✓ Successfully uploaded generation {gen_num} (generation_id: {result.get('generation_id', 'unknown')})")
+            logger.info(f"[UPLOAD] ✓ Successfully uploaded generation {gen_num} (generation_id: {result.get('generation_id', 'unknown')})")
             return True
         except requests.exceptions.RequestException as e:
             if attempt < max_retries - 1:
                 delay = retry_delay * (2 ** attempt)  # Exponential backoff
-                print(f"[UPLOAD] ✗ Upload failed (attempt {attempt + 1}/{max_retries}), retrying in {delay:.1f}s: {e}")
+                logger.warning(f"[UPLOAD] ✗ Upload failed (attempt {attempt + 1}/{max_retries}), retrying in {delay:.1f}s: {e}")
                 if hasattr(e, 'response') and e.response is not None:
                     try:
                         error_detail = e.response.json()
-                        print(f"[UPLOAD]   Error details: {error_detail}")
+                        logger.warning(f"[UPLOAD]   Error details: {error_detail}")
                     except:
-                        print(f"[UPLOAD]   Response text: {e.response.text[:200]}")
+                        logger.warning(f"[UPLOAD]   Response text: {e.response.text[:200]}")
                 time.sleep(delay)
             else:
-                print(f"[UPLOAD] ✗ Upload failed after {max_retries} attempts: {e}")
+                logger.error(f"[UPLOAD] ✗ Upload failed after {max_retries} attempts: {e}")
                 if hasattr(e, 'response') and e.response is not None:
                     try:
                         error_detail = e.response.json()
-                        print(f"[UPLOAD]   Final error details: {error_detail}")
+                        logger.error(f"[UPLOAD]   Final error details: {error_detail}")
                     except:
-                        print(f"[UPLOAD]   Final response text: {e.response.text[:200]}")
+                        logger.error(f"[UPLOAD]   Final response text: {e.response.text[:200]}")
                 return False
     
     return False
