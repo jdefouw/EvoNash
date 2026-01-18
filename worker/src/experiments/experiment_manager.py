@@ -21,6 +21,7 @@ class ExperimentConfig:
     population_size: int = 1000
     selection_pressure: float = 0.2
     max_generations: int = 5000
+    ticks_per_generation: int = 500  # Number of simulation ticks per generation
     network_architecture: Dict = None
     experiment_group: str = 'CONTROL'  # 'CONTROL' or 'EXPERIMENTAL'
     
@@ -69,7 +70,7 @@ class ExperimentManager:
         if not path.exists():
             raise FileNotFoundError(f"Config file not found: {config_path}")
         
-        with open(path, 'r') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
         return ExperimentConfig(**data)
@@ -110,9 +111,10 @@ class ExperimentManager:
             "population_size": config.population_size,
             "selection_pressure": config.selection_pressure,
             "max_generations": config.max_generations,
+            "ticks_per_generation": config.ticks_per_generation,
             "network_architecture": config.network_architecture,
             "experiment_group": config.experiment_group
         }
         
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2)

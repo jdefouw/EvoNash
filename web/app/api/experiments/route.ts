@@ -27,15 +27,26 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('POST /api/experiments - Starting request')
     const body = await request.json()
+    console.log('Request body received:', { 
+      experiment_name: body.experiment_name,
+      experiment_group: body.experiment_group,
+      mutation_mode: body.mutation_mode
+    })
     
     let supabase
     try {
       supabase = await createServerClient()
+      console.log('Supabase client created successfully')
     } catch (clientError) {
       console.error('Failed to create Supabase client:', clientError)
+      const errorMsg = clientError instanceof Error ? clientError.message : String(clientError)
       return NextResponse.json(
-        { error: 'Database connection failed. Please check Supabase configuration.' },
+        { 
+          error: 'Database connection failed. Please check Supabase configuration.',
+          details: errorMsg
+        },
         { status: 500 }
       )
     }
@@ -47,6 +58,7 @@ export async function POST(request: NextRequest) {
       random_seed,
       population_size,
       max_generations,
+      ticks_per_generation,
       mutation_rate,
       mutation_base,
       max_possible_elo,
@@ -62,37 +74,45 @@ export async function POST(request: NextRequest) {
       )
     }
     
+    const insertData = {
+      experiment_name,
+      experiment_group,
+      mutation_mode,
+      random_seed: random_seed || 42,
+      population_size: population_size || 1000,
+      max_generations: max_generations || 5000,
+      ticks_per_generation: ticks_per_generation || 500,
+      mutation_rate,
+      mutation_base,
+      max_possible_elo: max_possible_elo || 2000.0,
+      selection_pressure: selection_pressure || 0.2,
+      network_architecture: network_architecture || {
+        input_size: 24,
+        hidden_layers: [64],
+        output_size: 4
+      },
+      status: 'PENDING'
+    }
+    
+    console.log('Inserting experiment data:', insertData)
+    
     const { data, error } = await supabase
       .from('experiments')
-      .insert({
-        experiment_name,
-        experiment_group,
-        mutation_mode,
-        random_seed: random_seed || 42,
-        population_size: population_size || 1000,
-        max_generations: max_generations || 5000,
-        mutation_rate,
-        mutation_base,
-        max_possible_elo: max_possible_elo || 2000.0,
-        selection_pressure: selection_pressure || 0.2,
-        network_architecture: network_architecture || {
-          input_size: 24,
-          hidden_layers: [64],
-          output_size: 4
-        },
-        status: 'PENDING'
-      })
+      .insert(insertData)
       .select()
       .single()
     
     if (error) {
-      console.error('Supabase insert error:', error)
+      console.error('Supabase insert error:', JSON.stringify(error, null, 2))
       return NextResponse.json({ 
         error: error.message || 'Database error occurred',
         details: error.details || null,
-        hint: error.hint || null
+        hint: error.hint || null,
+        code: error.code || null
       }, { status: 500 })
     }
+    
+    console.log('Experiment created successfully:', data.id)
     
     // Return experiment config for worker
     const config: ExperimentConfig = {
@@ -106,6 +126,7 @@ export async function POST(request: NextRequest) {
       population_size: data.population_size,
       selection_pressure: data.selection_pressure,
       max_generations: data.max_generations,
+      ticks_per_generation: data.ticks_per_generation || 500,
       network_architecture: data.network_architecture,
       experiment_group: data.experiment_group
     }
@@ -114,8 +135,14 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error creating experiment:', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to create experiment'
+    const errorStack = error instanceof Error ? error.stack : undefined
+    console.error('Error stack:', errorStack)
     return NextResponse.json(
-      { error: errorMessage },
+      { 
+        error: errorMessage,
+        type: error instanceof Error ? error.constructor.name : 'Unknown',
+        message: error instanceof Error ? error.message : String(error)
+      },
       { status: 500 }
     )
   }

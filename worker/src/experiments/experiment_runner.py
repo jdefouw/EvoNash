@@ -47,7 +47,7 @@ class ExperimentRunner:
         
         # Initialize components
         self.ga = GeneticAlgorithm(config, device=self.device)
-        self.petri_dish = PetriDish()
+        self.petri_dish = PetriDish(ticks_per_generation=config.ticks_per_generation)
         
         # CSV logger
         self.logger = CSVLogger(
@@ -68,6 +68,29 @@ class ExperimentRunner:
             torch.cuda.manual_seed_all(seed)
         import random
         random.seed(seed)
+    
+    def _ensure_json_serializable(self, stats: Dict) -> Dict:
+        """
+        Convert all NumPy/PyTorch types in stats dict to native Python types for JSON serialization.
+        
+        Args:
+            stats: Dictionary with generation statistics
+            
+        Returns:
+            Dictionary with all values converted to native Python types
+        """
+        import numpy as np
+        result = {}
+        for key, value in stats.items():
+            if isinstance(value, (np.integer, np.floating)):
+                result[key] = float(value) if isinstance(value, np.floating) else int(value)
+            elif isinstance(value, np.ndarray):
+                result[key] = value.tolist()
+            elif hasattr(value, 'item'):  # PyTorch tensors
+                result[key] = float(value.item()) if hasattr(value.item(), '__float__') else value.item()
+            else:
+                result[key] = value
+        return result
     
     def _batch_inference(self, agents: list, inputs: torch.Tensor) -> torch.Tensor:
         """
@@ -331,6 +354,9 @@ class ExperimentRunner:
         # Add generation number and population size
         stats['generation'] = self.current_generation
         stats['population_size'] = len(self.ga.population)
+        
+        # Ensure all values are JSON-serializable (convert numpy types to native Python types)
+        stats = self._ensure_json_serializable(stats)
         
         gen_total_time = time.time() - gen_start_time
         print(f"[GEN {self.current_generation}] Generation complete in {gen_total_time:.2f}s total")

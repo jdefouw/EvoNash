@@ -148,7 +148,7 @@ class GeneticAlgorithm:
                 dist = np.linalg.norm(weights_list[idx_i] - weights_list[idx_j])
                 distances.append(dist)
         
-        return np.mean(distances) if distances else 0.0
+        return float(np.mean(distances)) if distances else 0.0
     
     def select_parents(self) -> List[Agent]:
         """
@@ -299,10 +299,10 @@ class GeneticAlgorithm:
             for agent in self.population[:100]:  # Sample for performance
                 entropy = self.calculate_policy_entropy(agent, sample_inputs)
                 policy_entropies.append(entropy)
-        avg_policy_entropy = np.mean(policy_entropies) if policy_entropies else 0.0
+        avg_policy_entropy = float(np.mean(policy_entropies)) if policy_entropies else 0.0
         
         # Calculate entropy variance
-        entropy_variance = np.var(policy_entropies) if len(policy_entropies) > 1 else 0.0
+        entropy_variance = float(np.var(policy_entropies)) if len(policy_entropies) > 1 else 0.0
         
         return {
             'avg_elo': float(np.mean(elo_ratings)),
@@ -314,7 +314,7 @@ class GeneticAlgorithm:
             'max_fitness': float(np.max(fitness_scores)),
             'std_fitness': float(np.std(fitness_scores)),
             'mutation_rate': float(np.mean(mutation_rates)) if mutation_rates else 0.0,
-            'policy_entropy': avg_policy_entropy,
-            'entropy_variance': entropy_variance,
-            'population_diversity': self.calculate_population_diversity()
+            'policy_entropy': float(avg_policy_entropy),
+            'entropy_variance': float(entropy_variance),
+            'population_diversity': float(self.calculate_population_diversity())
         }

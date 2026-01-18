@@ -16,6 +16,7 @@ export default function NewExperimentPage() {
     random_seed: 42,
     population_size: 1000,
     max_generations: 5000,
+    ticks_per_generation: 500,
     mutation_rate: 0.05,
     mutation_base: 0.1,
     max_possible_elo: 2000.0,
@@ -63,7 +64,7 @@ export default function NewExperimentPage() {
     const { name, value } = e.target
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'random_seed' || name === 'population_size' || name === 'max_generations'
+      [name]: name === 'random_seed' || name === 'population_size' || name === 'max_generations' || name === 'ticks_per_generation'
         ? parseInt(value) || 0
         : name === 'mutation_rate' || name === 'mutation_base' || name === 'max_possible_elo' || name === 'selection_pressure'
         ? parseFloat(value) || 0
@@ -187,6 +188,22 @@ export default function NewExperimentPage() {
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 />
               </div>
+            </div>
+
+            <div>
+              <label htmlFor="ticks_per_generation" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Ticks Per Generation
+              </label>
+              <input
+                type="number"
+                id="ticks_per_generation"
+                name="ticks_per_generation"
+                min="1"
+                value={formData.ticks_per_generation}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              />
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Number of simulation ticks per generation (default: 500)</p>
             </div>
 
             {formData.mutation_mode === 'STATIC' ? (

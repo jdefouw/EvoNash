@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
       population_size: experiment.population_size,
       selection_pressure: experiment.selection_pressure,
       max_generations: experiment.max_generations,
+      ticks_per_generation: experiment.ticks_per_generation || 500,
       network_architecture: experiment.network_architecture,
       experiment_group: experiment.experiment_group
     }

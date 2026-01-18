@@ -23,6 +23,7 @@ export interface ExperimentConfig {
   population_size: number;
   selection_pressure: number;
   max_generations: number;
+  ticks_per_generation?: number;
   network_architecture: NetworkArchitecture;
   experiment_group: ExperimentGroup;
 }
@@ -79,6 +80,7 @@ export interface Experiment {
   random_seed: number;
   population_size: number;
   max_generations: number;
+  ticks_per_generation?: number;
   status: ExperimentStatus;
   created_at: string;
   completed_at?: string;

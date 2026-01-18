@@ -49,12 +49,13 @@ class PetriDish:
     - Projectile system for predation
     """
     
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: Optional[str] = None, ticks_per_generation: Optional[int] = None):
         """
         Initialize the Petri Dish.
         
         Args:
             config_path: Path to simulation_config.json. If None, uses defaults.
+            ticks_per_generation: Override ticks_per_generation from config. If None, uses config value.
         """
         if config_path:
             with open(config_path, 'r', encoding='utf-8') as f:
@@ -100,7 +101,8 @@ class PetriDish:
         self.proj_lifetime = proj_config['lifetime']
         
         sim_config = self.config['simulation']
-        self.ticks_per_generation = sim_config['ticks_per_generation']
+        # Use provided ticks_per_generation or fall back to config
+        self.ticks_per_generation = ticks_per_generation if ticks_per_generation is not None else sim_config['ticks_per_generation']
         
         # State
         self.food: List[Food] = []
@@ -267,29 +269,36 @@ class PetriDish:
             enemy_dist = max_distance
             enemy_size = 0.0
             
-            # Cast ray
-            steps = int(max_distance / 2)
+            # Cast ray with optimized step size
+            step_size = 5.0  # Larger step size for performance
+            steps = int(max_distance / step_size)
+            
             for step in range(1, steps + 1):
-                check_x = agent.x + dx * step * 2
-                check_y = agent.y + dy * step * 2
+                check_x = agent.x + dx * step * step_size
+                check_y = agent.y + dy * step * step_size
                 check_x, check_y = self._wrap_position(check_x, check_y)
                 
-                dist = step * 2
+                dist = step * step_size
                 
-                # Check wall collision
+                # Check wall collision (only for non-toroidal)
                 if not self.toroidal:
                     if check_x < 0 or check_x > self.width or check_y < 0 or check_y > self.height:
                         if dist < wall_dist:
                             wall_dist = dist
                         break
                 
-                # Check food (optimized: only check if we haven't found food yet, and use pre-filtered list)
-                if food_dist >= max_distance:  # Only check if we haven't found food
+                # Check food using optimized distance calculation
+                if food_dist >= max_distance and len(active_food) > 0:
+                    # Check each food item (optimized: early exit when found)
                     for food in active_food:
                         food_dist_check = self._distance(check_x, check_y, food.x, food.y)
                         if food_dist_check < self.food_radius:
                             food_dist = dist
                             break  # Found food, no need to check further
+                
+                # Early exit if we found both wall and food
+                if wall_dist < max_distance and food_dist < max_distance:
+                    break
                 
                 # Check enemies (would need access to all agents)
                 # This is simplified - in full implementation, would check all agents

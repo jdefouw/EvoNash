@@ -162,6 +162,12 @@
           "type": "integer",
           "minimum": 1
         },
+        "ticks_per_generation": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 500,
+          "description": "Number of simulation ticks per generation"
+        },
         "network_architecture": {
           "type": "object",
           "required": ["input_size", "hidden_layers", "output_size"],

@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS experiments (
     mutation_base FLOAT,
     max_possible_elo FLOAT DEFAULT 2000.0,
     selection_pressure FLOAT DEFAULT 0.2,
+    ticks_per_generation INTEGER DEFAULT 500,
     network_architecture JSONB
 );
 
