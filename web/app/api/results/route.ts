@@ -1,97 +1,149 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 
-// Handle result uploads from workers
+// Handle result uploads from workers (supports both single and batch uploads)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const supabase = await createServerClient()
     
-    const { job_id, experiment_id, generation_stats, matches } = body
+    const { job_id, experiment_id, generation_stats, generation_stats_batch, matches } = body
     
     console.log(`[RESULTS] Received upload request for experiment ${experiment_id}, job ${job_id}`)
     
-    if (!experiment_id || !generation_stats) {
+    if (!experiment_id) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing required field: experiment_id' },
         { status: 400 }
       )
     }
     
-    // Get current generation number - prefer the one from stats, fallback to incrementing from DB
-    let generation_number: number
+    // Support both single generation_stats and batch generation_stats_batch
+    const statsArray = generation_stats_batch || (generation_stats ? [generation_stats] : [])
     
-    if (generation_stats.generation !== undefined && generation_stats.generation !== null) {
-      // Use generation number directly from stats (most reliable)
-      generation_number = generation_stats.generation
-      console.log(`[RESULTS] Using generation number from stats: ${generation_number}`)
-    } else {
-      // Fallback: increment from last generation in database
-      const { data: lastGenData } = await supabase
-        .from('generations')
-        .select('generation_number')
-        .eq('experiment_id', experiment_id)
-        .order('generation_number', { ascending: false })
-        .limit(1)
+    if (statsArray.length === 0) {
+      return NextResponse.json(
+        { error: 'Missing required field: generation_stats or generation_stats_batch' },
+        { status: 400 }
+      )
+    }
+    
+    // Validate job assignment exists
+    if (job_id) {
+      const { data: jobAssignment } = await supabase
+        .from('job_assignments')
+        .select('*')
+        .eq('job_id', job_id)
+        .single()
       
-      if (lastGenData && lastGenData.length > 0) {
-        generation_number = lastGenData[0].generation_number + 1
-        console.log(`[RESULTS] Incremented generation number from DB: ${generation_number}`)
-      } else {
-        generation_number = 0
-        console.log(`[RESULTS] No existing generations, starting at 0`)
+      if (!jobAssignment) {
+        return NextResponse.json(
+          { error: 'Job assignment not found' },
+          { status: 404 }
+        )
+      }
+      
+      // Update job assignment status to processing (if not already)
+      if (jobAssignment.status === 'assigned') {
+        await supabase
+          .from('job_assignments')
+          .update({ 
+            status: 'processing',
+            started_at: new Date().toISOString()
+          })
+          .eq('id', jobAssignment.id)
       }
     }
     
-    console.log(`[RESULTS] Uploading generation ${generation_number} for experiment ${experiment_id}`)
-    
-    // Insert generation stats
-    const { data: generation, error: genError } = await supabase
-      .from('generations')
-      .insert({
+    // Insert all generations in batch
+    const generationInserts = statsArray.map((stats: any) => {
+      const generation_number = stats.generation !== undefined ? stats.generation : null
+      
+      if (generation_number === null) {
+        throw new Error('Generation number is required in generation_stats')
+      }
+      
+      return {
         experiment_id,
         generation_number,
-        population_size: generation_stats.population_size || 1000,
-        avg_fitness: generation_stats.avg_fitness,
-        avg_elo: generation_stats.avg_elo,
-        peak_elo: generation_stats.peak_elo,
-        min_elo: generation_stats.min_elo,
-        std_elo: generation_stats.std_elo,
-        policy_entropy: generation_stats.policy_entropy,
-        entropy_variance: generation_stats.entropy_variance,
-        population_diversity: generation_stats.population_diversity,
-        mutation_rate: generation_stats.mutation_rate,
-        min_fitness: generation_stats.min_fitness,
-        max_fitness: generation_stats.max_fitness,
-        std_fitness: generation_stats.std_fitness
-      })
+        population_size: stats.population_size || 1000,
+        avg_fitness: stats.avg_fitness,
+        avg_elo: stats.avg_elo,
+        peak_elo: stats.peak_elo,
+        min_elo: stats.min_elo,
+        std_elo: stats.std_elo,
+        policy_entropy: stats.policy_entropy,
+        entropy_variance: stats.entropy_variance,
+        population_diversity: stats.population_diversity,
+        mutation_rate: stats.mutation_rate,
+        min_fitness: stats.min_fitness,
+        max_fitness: stats.max_fitness,
+        std_fitness: stats.std_fitness
+      }
+    })
+    
+    const { data: insertedGenerations, error: genError } = await supabase
+      .from('generations')
+      .insert(generationInserts)
       .select()
-      .single()
     
     if (genError) {
-      console.error(`[RESULTS] Error inserting generation ${generation_number} for experiment ${experiment_id}:`, genError)
+      console.error(`[RESULTS] Error inserting generations for experiment ${experiment_id}:`, genError)
       return NextResponse.json({ error: genError.message }, { status: 500 })
     }
     
-    console.log(`[RESULTS] Successfully saved generation ${generation_number} (ID: ${generation.id}) for experiment ${experiment_id}`)
+    console.log(`[RESULTS] Successfully saved ${insertedGenerations.length} generations for experiment ${experiment_id}`)
     
-    // Insert matches if provided
+    // Insert matches if provided (flatten matches array if it's an array of arrays)
     if (matches && matches.length > 0) {
-      const matchInserts = matches.map((match: any) => ({
-        experiment_id,
-        generation_id: generation.id,
-        agent_a_id: match.agent_a_id,
-        agent_b_id: match.agent_b_id,
-        winner_id: match.winner_id,
-        match_type: match.match_type || 'self_play',
-        move_history: match.move_history || [],
-        telemetry: match.telemetry || {}
-      }))
+      const allMatches = Array.isArray(matches[0]) ? matches.flat() : matches
+      const matchInserts = allMatches.map((match: any, idx: number) => {
+        // Find corresponding generation_id
+        const generation = insertedGenerations?.find((g: any) => 
+          g.generation_number === match.generation_number
+        )
+        if (!generation) {
+          // Fallback: use first generation if match doesn't specify generation_number
+          return null
+        }
+        
+        return {
+          experiment_id,
+          generation_id: generation.id,
+          agent_a_id: match.agent_a_id,
+          agent_b_id: match.agent_b_id,
+          winner_id: match.winner_id,
+          match_type: match.match_type || 'self_play',
+          move_history: match.move_history || [],
+          telemetry: match.telemetry || {}
+        }
+      }).filter((m: any) => m !== null)
       
-      await supabase.from('matches').insert(matchInserts)
+      if (matchInserts.length > 0) {
+        await supabase.from('matches').insert(matchInserts)
+      }
     }
     
-    // Update experiment status if this is the last generation
+    // Update job assignment status to completed
+    if (job_id) {
+      const { data: jobAssignment } = await supabase
+        .from('job_assignments')
+        .select('*')
+        .eq('job_id', job_id)
+        .single()
+      
+      if (jobAssignment) {
+        await supabase
+          .from('job_assignments')
+          .update({ 
+            status: 'completed',
+            completed_at: new Date().toISOString()
+          })
+          .eq('id', jobAssignment.id)
+      }
+    }
+    
+    // Check if all batches for experiment are complete
     const { data: experiment } = await supabase
       .from('experiments')
       .select('max_generations')
@@ -99,23 +151,40 @@ export async function POST(request: NextRequest) {
       .single()
     
     if (experiment) {
-      // Check if this is the last generation (generation numbers are 0-indexed)
-      // If max_generations is 100, we have generations 0-99, so last is generation 99
-      const is_last_generation = generation_number >= experiment.max_generations - 1
+      // Check if all job assignments are completed
+      const { data: allAssignments } = await supabase
+        .from('job_assignments')
+        .select('status')
+        .eq('experiment_id', experiment_id)
       
-      if (is_last_generation) {
-        console.log(`[RESULTS] Last generation (${generation_number}) reached, marking experiment as COMPLETED`)
+      const allCompleted = allAssignments && allAssignments.every((a: any) => a.status === 'completed')
+      
+      // Also check if we have all generations
+      const { data: allGenerations } = await supabase
+        .from('generations')
+        .select('generation_number')
+        .eq('experiment_id', experiment_id)
+      
+      const hasAllGenerations = allGenerations && allGenerations.length >= experiment.max_generations
+      
+      if (allCompleted && hasAllGenerations) {
+        console.log(`[RESULTS] All batches completed for experiment ${experiment_id}, marking as COMPLETED`)
         await supabase
           .from('experiments')
           .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
           .eq('id', experiment_id)
       } else {
-        const remaining = experiment.max_generations - generation_number - 1
-        console.log(`[RESULTS] Generation ${generation_number} saved, ${remaining} generations remaining`)
+        const completedBatches = allAssignments?.filter((a: any) => a.status === 'completed').length || 0
+        const totalBatches = allAssignments?.length || 0
+        console.log(`[RESULTS] Batch saved. Progress: ${completedBatches}/${totalBatches} batches, ${allGenerations?.length || 0}/${experiment.max_generations} generations`)
       }
     }
     
-    return NextResponse.json({ success: true, generation_id: generation.id })
+    return NextResponse.json({ 
+      success: true, 
+      generations_inserted: insertedGenerations?.length || 0,
+      generation_ids: insertedGenerations?.map((g: any) => g.id) || []
+    })
   } catch (error: any) {
     console.error(`[RESULTS] Unexpected error processing upload:`, error)
     return NextResponse.json(

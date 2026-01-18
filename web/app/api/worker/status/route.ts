@@ -8,7 +8,30 @@ export async function GET() {
   try {
     const supabase = await createServerClient()
     
-    // Check if there are any RUNNING experiments (indicates worker is active)
+    // Get workers information
+    const { data: workers, error: workersError } = await supabase
+      .from('workers')
+      .select('*')
+      .order('last_heartbeat', { ascending: false })
+    
+    // Mark workers as offline if they haven't sent a heartbeat in the last 2 minutes
+    const now = new Date()
+    const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000)
+    
+    const workersWithStatus = (workers || []).map((worker: any) => {
+      const lastHeartbeat = new Date(worker.last_heartbeat)
+      const isOffline = lastHeartbeat < twoMinutesAgo
+      return {
+        ...worker,
+        status: isOffline ? 'offline' : worker.status
+      }
+    })
+    
+    const activeWorkers = workersWithStatus.filter((w: any) => w.status !== 'offline')
+    const totalCapacity = workersWithStatus.reduce((sum: number, w: any) => sum + (w.max_parallel_jobs || 0), 0)
+    const utilizedCapacity = workersWithStatus.reduce((sum: number, w: any) => sum + (w.active_jobs_count || 0), 0)
+    
+    // Check if there are any RUNNING experiments
     const { data: runningExperiments, error: runningError } = await supabase
       .from('experiments')
       .select('id, experiment_name, status, created_at')
@@ -42,8 +65,8 @@ export async function GET() {
       return acc
     }, {}) || {}
     
-    // Check for recent activity - if there are RUNNING experiments or recent generations, worker is active
-    const worker_connected = runningExperiments && runningExperiments.length > 0
+    // Check for recent activity
+    const worker_connected = activeWorkers.length > 0
     
     // Also check if there are recent generations (within last 5 minutes) as a sign of worker activity
     const { data: recentGenerations } = await supabase
@@ -62,19 +85,27 @@ export async function GET() {
     
     return NextResponse.json({
       worker_connected: worker_connected || has_recent_activity,
+      active_workers_count: activeWorkers.length,
+      total_workers_count: workersWithStatus.length,
+      workers: workersWithStatus,
+      total_capacity,
+      utilized_capacity,
+      available_capacity: totalCapacity - utilizedCapacity,
       running_experiments: runningExperiments || [],
       pending_experiments: pendingExperiments || [],
       pending_count: pendingExperiments?.length || 0,
       status_counts: counts,
       has_recent_activity: has_recent_activity,
       last_generation_time: last_generation_time,
-      message: pendingExperiments && pendingExperiments.length > 0 
-        ? `${pendingExperiments.length} experiment(s) waiting for worker`
+      message: activeWorkers.length > 0
+        ? `${activeWorkers.length} active worker(s) (${utilizedCapacity}/${totalCapacity} jobs)`
+        : pendingExperiments && pendingExperiments.length > 0
+        ? `${pendingExperiments.length} experiment(s) waiting for workers`
         : runningExperiments && runningExperiments.length > 0
-        ? 'Worker is active (processing experiments)'
+        ? 'Experiments running'
         : has_recent_activity
-        ? `Worker recently active (last generation: ${last_generation_time ? new Date(last_generation_time).toLocaleString() : 'unknown'})`
-        : 'No pending experiments - worker will poll every 30 seconds'
+        ? `Workers recently active (last generation: ${last_generation_time ? new Date(last_generation_time).toLocaleString() : 'unknown'})`
+        : 'No active workers - workers will poll every 30 seconds'
     })
   } catch (error) {
     return NextResponse.json(

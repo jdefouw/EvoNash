@@ -27,7 +27,7 @@ class ExperimentRunner:
     - Generation statistics logging
     """
     
-    def __init__(self, config: ExperimentConfig, device: str = 'cuda', upload_callback: Optional[Callable[[Dict], None]] = None, stop_check_callback: Optional[Callable[[], bool]] = None):
+    def __init__(self, config: ExperimentConfig, device: str = 'cuda', upload_callback: Optional[Callable[[Dict], None]] = None, stop_check_callback: Optional[Callable[[], bool]] = None, generation_start: int = 0, generation_end: Optional[int] = None):
         """
         Initialize experiment runner.
         
@@ -36,13 +36,19 @@ class ExperimentRunner:
             device: Device to run on ('cuda' or 'cpu')
             upload_callback: Optional callback function called after each generation with stats dict
             stop_check_callback: Optional callback function that returns True if experiment should stop
+            generation_start: First generation to process (default: 0)
+            generation_end: Last generation to process (inclusive, default: max_generations - 1)
         """
         self.config = config
         self.device = device if torch.cuda.is_available() and device == 'cuda' else 'cpu'
         self.upload_callback = upload_callback
         self.stop_check_callback = stop_check_callback
+        self.generation_start = generation_start
+        self.generation_end = generation_end if generation_end is not None else (config.max_generations - 1)
         
         # Set all random seeds for reproducibility
+        # Use a seed that accounts for generation_start to ensure reproducibility
+        # Each generation should be deterministic based on the base seed
         self._set_seeds(config.random_seed)
         
         # Initialize components
@@ -56,7 +62,7 @@ class ExperimentRunner:
         )
         
         # Generation tracking
-        self.current_generation = 0
+        self.current_generation = generation_start
         self.generation_stats_history = []
     
     def _set_seeds(self, seed: int):
@@ -396,18 +402,21 @@ class ExperimentRunner:
     
     def run_experiment(self) -> Dict:
         """
-        Run the complete experiment for max_generations.
+        Run the experiment for the specified generation range.
         
         Returns:
             Dictionary with final experiment results
         """
+        num_generations = self.generation_end - self.generation_start + 1
+        
         print(f"\n{'='*80}")
-        print(f"🚀 STARTING EXPERIMENT EXECUTION")
+        print(f"🚀 STARTING EXPERIMENT EXECUTION (BATCH)")
         print(f"{'='*80}")
         print(f"Experiment: {self.config.experiment_name}")
         print(f"Mutation mode: {self.config.mutation_mode}")
         print(f"Random seed: {self.config.random_seed}")
-        print(f"Max generations: {self.config.max_generations}")
+        print(f"Generation range: {self.generation_start} to {self.generation_end} (inclusive)")
+        print(f"Batch size: {num_generations} generations")
         print(f"Population size: {self.config.population_size}")
         print(f"{'='*80}\n")
         
@@ -415,12 +424,25 @@ class ExperimentRunner:
         import time
         experiment_start_time = time.time()
         
-        for gen in range(self.config.max_generations):
+        # Initialize population if starting from generation 0
+        # TODO: For batches starting mid-experiment, we would need to load population state
+        # For now, each batch starts fresh (this is a limitation that should be addressed)
+        if self.generation_start == 0:
+            # Population is already initialized in GeneticAlgorithm.__init__
+            pass
+        else:
+            # For now, we'll start fresh even for mid-experiment batches
+            # In a full implementation, we'd load the population state from generation (generation_start - 1)
+            print(f"⚠️  WARNING: Starting batch at generation {self.generation_start} without loading previous state")
+            print(f"   This batch will start with a fresh population (not ideal for distributed processing)")
+        
+        for gen in range(self.generation_start, self.generation_end + 1):
             # Print generation start
-            progress_pct = ((gen + 1) / self.config.max_generations) * 100
+            batch_progress = gen - self.generation_start + 1
+            progress_pct = (batch_progress / num_generations) * 100
             elapsed_total = time.time() - experiment_start_time
             print(f"\n{'─'*80}")
-            print(f"Generation {gen + 1}/{self.config.max_generations} ({progress_pct:.1f}%) - Processing...")
+            print(f"Generation {gen} (Batch: {batch_progress}/{num_generations}, {progress_pct:.1f}%) - Processing...")
             print(f"Total elapsed time: {elapsed_total:.1f}s")
             print(f"{'─'*80}")
             
@@ -430,7 +452,7 @@ class ExperimentRunner:
             gen_elapsed = time.time() - gen_start
             
             # Print generation results immediately
-            print(f"\n✓ Generation {gen + 1}/{self.config.max_generations} Complete (took {gen_elapsed:.2f}s)")
+            print(f"\n✓ Generation {gen} Complete (took {gen_elapsed:.2f}s)")
             print(f"  Avg Elo: {stats.get('avg_elo', 0):7.2f} | "
                   f"Peak Elo: {stats.get('peak_elo', 0):7.2f} | "
                   f"Min Elo: {stats.get('min_elo', 0):7.2f}")
@@ -441,9 +463,9 @@ class ExperimentRunner:
                   f"Mutation Rate: {stats.get('mutation_rate', 0):.4f}")
             
             # Estimate time remaining
-            if gen > 0:
-                avg_time_per_gen = elapsed_total / (gen + 1)
-                remaining_gens = self.config.max_generations - (gen + 1)
+            if batch_progress > 1:
+                avg_time_per_gen = elapsed_total / batch_progress
+                remaining_gens = num_generations - batch_progress
                 estimated_remaining = avg_time_per_gen * remaining_gens
                 print(f"  Estimated time remaining: {estimated_remaining/60:.1f} minutes")
             
@@ -458,10 +480,10 @@ class ExperimentRunner:
                     print(f"Warning: Stop check callback failed: {e}")
                     # Continue execution even if stop check fails
             
-            # Detailed stats every 10 generations or first generation
-            if (gen + 1) % 10 == 0 or gen == 0:
+            # Detailed stats every 10 generations or first generation in batch
+            if (gen - self.generation_start) % 10 == 0 or gen == self.generation_start:
                 print(f"\n{'='*80}")
-                print(f"📊 DETAILED STATISTICS - Generation {gen + 1}/{self.config.max_generations}")
+                print(f"📊 DETAILED STATISTICS - Generation {gen} (Batch: {batch_progress}/{num_generations})")
                 print(f"{'='*80}")
                 print(f"  Elo Ratings:")
                 print(f"    Average: {stats.get('avg_elo', 0):.2f}")

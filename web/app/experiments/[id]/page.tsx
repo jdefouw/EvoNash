@@ -28,6 +28,7 @@ export default function ExperimentDetailPage() {
   const [pollingError, setPollingError] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
   const [workerStatus, setWorkerStatus] = useState<{connected: boolean, pending_count: number} | null>(null)
+  const [batches, setBatches] = useState<any[]>([])
   
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const lastGenerationNumberRef = useRef<number>(-1)
@@ -143,6 +144,27 @@ export default function ExperimentDetailPage() {
       .catch(err => {
         console.error('Error fetching worker status:', err)
       })
+    
+    // Fetch batch assignments
+    const fetchBatches = () => {
+      fetch(`/api/experiments/${experimentId}/batches`)
+        .then(res => res.json())
+        .then(data => {
+          setBatches(data.batches || [])
+        })
+        .catch(err => {
+          console.error('Error fetching batches:', err)
+        })
+    }
+    
+    fetchBatches()
+    
+    // Refresh batches every 10 seconds
+    const batchesInterval = setInterval(fetchBatches, 10000)
+    
+    return () => {
+      if (batchesInterval) clearInterval(batchesInterval)
+    }
 
     // Fetch generations
     fetch(`/api/generations?experiment_id=${experimentId}`)
@@ -483,6 +505,51 @@ export default function ExperimentDetailPage() {
                 <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
                   Worker has claimed the job and is initializing. First generation data will appear shortly.
                 </p>
+              </div>
+            )}
+            
+            {/* Batch Assignments */}
+            {experiment.status === 'RUNNING' && batches.length > 0 && (
+              <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+                  Generation Batches
+                </h4>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {batches.map((batch: any) => {
+                    const worker = batch.workers
+                    const getStatusColor = (status: string) => {
+                      switch (status) {
+                        case 'completed': return 'bg-green-500'
+                        case 'processing': return 'bg-blue-500'
+                        case 'assigned': return 'bg-yellow-500'
+                        case 'failed': return 'bg-red-500'
+                        default: return 'bg-gray-500'
+                      }
+                    }
+                    
+                    return (
+                      <div
+                        key={batch.id}
+                        className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900 rounded text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${getStatusColor(batch.status)} ${batch.status === 'processing' ? 'animate-pulse' : ''}`} />
+                          <span className="font-medium text-gray-900 dark:text-white">
+                            Generations {batch.generation_start}-{batch.generation_end}
+                          </span>
+                        </div>
+                        {worker && (
+                          <div className="text-gray-600 dark:text-gray-400">
+                            {worker.gpu_type || 'CPU'} ({worker.vram_gb}GB)
+                          </div>
+                        )}
+                        <span className="text-gray-500 dark:text-gray-400 capitalize">
+                          {batch.status}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
             

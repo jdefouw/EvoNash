@@ -8,8 +8,10 @@ import time
 import signal
 import sys
 import json
+import threading
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple
+from datetime import datetime
 import requests
 import torch
 import logging
@@ -40,12 +42,29 @@ class WorkerService:
         with open(config_path_obj, 'r', encoding='utf-8') as f:
             self.worker_config = json.load(f)
         
-        # Set up logger
+        # Generate timestamped log file name for this run
+        log_file_template = self.worker_config.get('log_file', 'logs/worker.log')
+        if log_file_template:
+            # Create timestamped filename: logs/worker_2026-01-17_16-19-08.log
+            log_path = Path(log_file_template)
+            timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+            log_dir = log_path.parent
+            log_stem = log_path.stem  # 'worker' from 'worker.log'
+            log_suffix = log_path.suffix  # '.log'
+            timestamped_log_file = log_dir / f"{log_stem}_{timestamp}{log_suffix}"
+        else:
+            timestamped_log_file = None
+        
+        # Set up logger with timestamped log file
         self.logger = setup_worker_logger(
-            log_file=self.worker_config.get('log_file'),
+            log_file=str(timestamped_log_file) if timestamped_log_file else None,
             log_level=self.worker_config.get('log_level', 'INFO'),
             console_output=True
         )
+        
+        # Log the log file location
+        if timestamped_log_file:
+            self.logger.info(f"📝 Logging to: {timestamped_log_file}")
         
         # Configuration
         self.controller_url = self.worker_config['controller_url']
@@ -58,6 +77,12 @@ class WorkerService:
         self.running = True
         self.current_job: Optional[Dict] = None
         self.status = 'idle'  # idle, processing, error
+        self.worker_id: Optional[str] = None
+        self.gpu_type: Optional[str] = None
+        self.vram_gb: int = 0
+        self.max_parallel_jobs: int = 0
+        self.active_jobs: list = []  # List of active job threads/tasks
+        self.active_jobs_count: int = 0
         
         # Setup signal handlers for graceful shutdown
         # Windows only supports SIGINT, SIGTERM is Unix-only
@@ -66,54 +91,174 @@ class WorkerService:
         if hasattr(signal, 'SIGTERM'):
             signal.signal(signal.SIGTERM, self._signal_handler)
         
-        # Check GPU availability
+        # Check GPU availability and get GPU info
         self._check_gpu()
+        
+        # Register worker with controller
+        self._register_worker()
+        
+        # Start heartbeat thread
+        self._start_heartbeat_thread()
     
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals gracefully."""
         self.logger.info(f"Received signal {signum}, shutting down gracefully...")
         self.running = False
     
+    def _get_gpu_info(self) -> Tuple[Optional[str], int]:
+        """
+        Get GPU type and VRAM information.
+        
+        Returns:
+            Tuple of (gpu_type, vram_gb). Returns (None, 0) if no GPU available.
+        """
+        if self.device == 'cuda' and torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            # Get total memory in bytes, convert to GB
+            vram_bytes = torch.cuda.get_device_properties(0).total_memory
+            vram_gb = int(vram_bytes / (1024 ** 3))
+            return gpu_name, vram_gb
+        return None, 0
+    
     def _check_gpu(self):
         """Check GPU availability and log status."""
+        self.gpu_type, self.vram_gb = self._get_gpu_info()
+        
         if self.device == 'cuda':
             if torch.cuda.is_available():
-                gpu_name = torch.cuda.get_device_name(0)
-                self.logger.info(f"GPU available: {gpu_name}")
+                self.logger.info(f"GPU available: {self.gpu_type}")
+                self.logger.info(f"VRAM: {self.vram_gb} GB")
                 self.logger.info(f"CUDA version: {torch.version.cuda}")
+                # Calculate max parallel jobs: floor(vram_gb / 2)
+                self.max_parallel_jobs = self.vram_gb // 2
+                self.logger.info(f"Max parallel jobs: {self.max_parallel_jobs} (based on 2GB per job)")
             else:
                 self.logger.warning("CUDA requested but not available, falling back to CPU")
                 self.device = 'cpu'
+                self.max_parallel_jobs = 1  # CPU can handle 1 job at a time
         else:
             self.logger.info("Running on CPU")
+            self.max_parallel_jobs = 1
     
-    def _create_upload_callback(self, job_id: str, experiment_id: str) -> callable:
+    def _register_worker(self):
+        """Register worker with controller and get worker_id."""
+        try:
+            worker_name = self.worker_config.get('worker_name', None)
+            
+            payload = {
+                'worker_name': worker_name,
+                'gpu_type': self.gpu_type or 'CPU',
+                'vram_gb': self.vram_gb
+            }
+            
+            self.logger.info("Registering worker with controller...")
+            response = requests.post(
+                f"{self.controller_url}/api/workers/register",
+                json=payload,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.worker_id = data.get('worker_id')
+                self.max_parallel_jobs = data.get('max_parallel_jobs', self.max_parallel_jobs)
+                self.logger.info(f"✓ Worker registered: {self.worker_id}")
+                self.logger.info(f"  GPU: {self.gpu_type or 'CPU'}, VRAM: {self.vram_gb}GB")
+                self.logger.info(f"  Max parallel jobs: {self.max_parallel_jobs}")
+            else:
+                self.logger.warning(f"⚠ Worker registration failed: {response.status_code}")
+                self.logger.warning(f"  Response: {response.text}")
+        except Exception as e:
+            self.logger.error(f"✗ Error registering worker: {e}")
+            self.logger.error("  Worker will continue but may not be tracked by controller")
+    
+    def _send_heartbeat(self):
+        """Send heartbeat to controller."""
+        if not self.worker_id:
+            return
+        
+        try:
+            payload = {
+                'worker_id': self.worker_id,
+                'status': self.status,
+                'active_jobs_count': self.active_jobs_count
+            }
+            
+            response = requests.post(
+                f"{self.controller_url}/api/workers/heartbeat",
+                json=payload,
+                timeout=5
+            )
+            
+            if response.status_code != 200:
+                self.logger.warning(f"Heartbeat failed: {response.status_code}")
+        except Exception as e:
+            # Don't log heartbeat errors as they're frequent and not critical
+            pass
+    
+    def _start_heartbeat_thread(self):
+        """Start background thread for sending heartbeats."""
+        def heartbeat_loop():
+            while self.running:
+                self._send_heartbeat()
+                time.sleep(30)  # Send heartbeat every 30 seconds
+        
+        heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
+        heartbeat_thread.start()
+        self.logger.info("Heartbeat thread started")
+    
+    def _can_accept_job(self) -> bool:
+        """Check if worker can accept another job based on VRAM capacity."""
+        return self.active_jobs_count < self.max_parallel_jobs
+    
+    def _create_batch_upload_callback(self, job_id: str, experiment_id: str, generation_start: int, generation_end: int) -> callable:
         """
-        Create upload callback function for incremental generation uploads.
+        Create batch upload callback function that collects all generations and uploads as batch.
         
         Args:
             job_id: Job ID
             experiment_id: Experiment ID
+            generation_start: First generation in batch
+            generation_end: Last generation in batch
             
         Returns:
-            Callback function that takes generation stats dict
+            Callback function that takes generation stats dict and collects them for batch upload
         """
+        batch_stats: list = []
+        
         def upload_callback(generation_stats: Dict):
-            """Upload single generation stats to controller."""
+            """Collect generation stats for batch upload."""
             gen_num = generation_stats.get('generation', 'unknown')
-            self.logger.info(f"📤 Uploading generation {gen_num} stats to controller...")
-            success = upload_generation_stats(
-                self.controller_url,
-                job_id,
-                experiment_id,
-                generation_stats,
-                max_retries=self.max_retries,
-                retry_delay=self.retry_delay
-            )
-            if success:
-                self.logger.info(f"✅ Successfully uploaded generation {gen_num} stats")
-            else:
-                self.logger.warning(f"⚠️ Failed to upload generation {gen_num} stats after retries")
+            batch_stats.append(generation_stats)
+            self.logger.info(f"📝 Collected generation {gen_num} for batch upload")
+            
+            # Check if this is the last generation in the batch
+            if gen_num >= generation_end:
+                # Upload entire batch
+                self.logger.info(f"📤 Uploading batch of {len(batch_stats)} generations ({generation_start}-{generation_end})...")
+                
+                try:
+                    payload = {
+                        "job_id": job_id,
+                        "experiment_id": experiment_id,
+                        "generation_stats_batch": batch_stats,
+                        "matches": []  # Empty for now
+                    }
+                    
+                    response = requests.post(
+                        f"{self.controller_url}/api/results",
+                        json=payload,
+                        timeout=60
+                    )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        self.logger.info(f"✅ Successfully uploaded batch: {result.get('generations_inserted', 0)} generations")
+                    else:
+                        self.logger.warning(f"⚠️ Batch upload failed: {response.status_code}")
+                        self.logger.warning(f"  Response: {response.text[:200]}")
+                except Exception as e:
+                    self.logger.error(f"✗ Error uploading batch: {e}")
         
         return upload_callback
     
@@ -140,37 +285,38 @@ class WorkerService:
     
     def process_job(self, job: Dict):
         """
-        Process a single job (experiment).
+        Process a single job (generation batch).
         
         Args:
-            job: Job dictionary from controller
+            job: Job dictionary from controller with generation_start and generation_end
         """
         job_id = job.get('job_id')
         experiment_id = job.get('experiment_id')
         experiment_config = job.get('experiment_config', {})
+        generation_start = job.get('generation_start', 0)
+        generation_end = job.get('generation_end', None)
         
         if not experiment_config:
             self.logger.error("Invalid job: missing experiment_config")
             return
         
-        self.logger.info("=" * 80)
-        self.logger.info(f"🎯 JOB RECEIVED - Starting Processing")
-        self.logger.info("=" * 80)
-        self.logger.info(f"Job ID:     {job_id}")
-        self.logger.info(f"Experiment: {experiment_id}")
-        self.logger.info("=" * 80)
-        
-        self.status = 'processing'
-        self.current_job = job
+        # Increment active jobs count
+        self.active_jobs_count += 1
         
         try:
+            self.logger.info("=" * 80)
+            self.logger.info(f"🎯 JOB RECEIVED - Starting Processing")
+            self.logger.info("=" * 80)
+            self.logger.info(f"Job ID:     {job_id}")
+            self.logger.info(f"Experiment: {experiment_id}")
+            self.logger.info(f"Generations: {generation_start}-{generation_end}")
+            self.logger.info("=" * 80)
+            
             # Check if experiment is already stopped before starting
             from .main import check_experiment_status
             current_status = check_experiment_status(self.controller_url, experiment_id)
             if current_status == 'STOPPED':
                 self.logger.warning(f"⚠ Experiment {experiment_id} is already STOPPED, skipping")
-                self.status = 'idle'
-                self.current_job = None
                 return
             
             # Create ExperimentConfig from job
@@ -192,88 +338,57 @@ class WorkerService:
             self.logger.info(f"  Selection Press: {config.selection_pressure}")
             self.logger.info(f"  Max Possible Elo: {config.max_possible_elo}")
             self.logger.info("=" * 80)
-            self.logger.info("🚀 STARTING EXPERIMENT ON GPU")
+            self.logger.info("🚀 STARTING BATCH ON GPU")
             self.logger.info("=" * 80)
             
-            # Create upload callback for incremental uploads
-            upload_callback = self._create_upload_callback(job_id, experiment_id)
+            # Create batch upload callback
+            upload_callback = self._create_batch_upload_callback(job_id, experiment_id, generation_start, generation_end)
             
             # Create stop check callback
             stop_check_callback = self._create_stop_check_callback(experiment_id)
             
-            # Initialize and run experiment
+            # Initialize and run experiment batch
             runner = ExperimentRunner(
                 config,
                 device=self.device,
                 upload_callback=upload_callback,
-                stop_check_callback=stop_check_callback
+                stop_check_callback=stop_check_callback,
+                generation_start=generation_start,
+                generation_end=generation_end
             )
             
             self.logger.info("=" * 80)
-            self.logger.info("🔄 Starting experiment execution...")
+            self.logger.info("🔄 Starting batch execution...")
             self.logger.info("=" * 80)
             
             results = runner.run_experiment()
             
             if results.get('stopped', False):
                 self.logger.info("=" * 80)
-                self.logger.info("⏹ Experiment stopped by user")
+                self.logger.info("⏹ Batch stopped by user")
                 self.logger.info("=" * 80)
             else:
                 self.logger.info("=" * 80)
-                self.logger.info("✅ Experiment completed successfully")
+                self.logger.info("✅ Batch completed successfully")
                 self.logger.info("=" * 80)
             
-            self.logger.info(f"📁 CSV data saved to: {results['csv_path']}")
-            
-            # Log summary of uploaded generations
+            # Log summary
             all_stats = results.get('all_stats', [])
             if all_stats:
                 self.logger.info(f"📊 Total generations processed: {len(all_stats)}")
-                self.logger.info(f"📤 All generations should have been uploaded incrementally")
-            
-            # Final stats summary
-            final_stats = results.get('final_stats', {})
-            if final_stats:
-                self.logger.info("=" * 80)
-                self.logger.info("FINAL EXPERIMENT STATISTICS")
-                self.logger.info("=" * 80)
-                self.logger.info(f"  Elo Ratings:")
-                self.logger.info(f"    Average: {final_stats.get('avg_elo', 0):.2f}")
-                self.logger.info(f"    Peak:    {final_stats.get('peak_elo', 0):.2f}")
-                self.logger.info(f"    Min:     {final_stats.get('min_elo', 0):.2f}")
-                self.logger.info(f"    Std Dev: {final_stats.get('std_elo', 0):.2f}")
-                self.logger.info(f"  Fitness:")
-                self.logger.info(f"    Average: {final_stats.get('avg_fitness', 0):.2f}")
-                self.logger.info(f"    Min:     {final_stats.get('min_fitness', 0):.2f}")
-                self.logger.info(f"    Max:     {final_stats.get('max_fitness', 0):.2f}")
-                self.logger.info(f"  Policy Metrics:")
-                self.logger.info(f"    Entropy:        {final_stats.get('policy_entropy', 0):.4f}")
-                self.logger.info(f"    Entropy Var:    {final_stats.get('entropy_variance', 0):.4f}")
-                self.logger.info(f"    Diversity:      {final_stats.get('population_diversity', 0):.4f}")
-                self.logger.info(f"  Evolution:")
-                self.logger.info(f"    Mutation Rate:  {final_stats.get('mutation_rate', 0):.4f}")
-                self.logger.info("=" * 80)
-            
-            self.status = 'idle'
-            self.current_job = None
+                self.logger.info(f"📤 Batch should have been uploaded")
             
         except KeyboardInterrupt:
             self.logger.warning("Job processing interrupted by user")
-            self.status = 'idle'
-            self.current_job = None
             raise  # Re-raise to stop service
         except torch.cuda.OutOfMemoryError as e:
             self.logger.error(f"GPU out of memory error: {e}")
-            self.logger.error("Try reducing population_size or max_generations")
-            self.status = 'error'
-            self.current_job = None
+            self.logger.error("Try reducing population_size or batch size")
         except Exception as e:
             self.logger.error(f"Error processing job {job_id}: {e}", exc_info=True)
-            self.status = 'error'
-            self.current_job = None
-            # Note: Experiment status will remain RUNNING in database
-            # Could add API call to mark as FAILED here if needed
+        finally:
+            # Decrement active jobs count
+            self.active_jobs_count = max(0, self.active_jobs_count - 1)
     
     def run(self):
         """Main service loop - continuously poll for jobs."""
@@ -304,31 +419,67 @@ class WorkerService:
         consecutive_errors = 0
         max_consecutive_errors = 5
         
+        def process_job_in_thread(job: Dict):
+            """Process a job in a separate thread."""
+            try:
+                self.process_job(job)
+            except Exception as e:
+                self.logger.error(f"Error in job thread: {e}", exc_info=True)
+        
         while self.running:
             try:
-                # Request job from controller
-                if self.status == 'idle':
-                    self.logger.info(f"🔍 Polling {self.controller_url}/api/queue for jobs...")
-                job = request_job(self.controller_url, timeout=30)
+                # Request jobs until we're at capacity
+                while self._can_accept_job() and self.running:
+                    # Request job from controller with worker_id
+                    payload = {}
+                    if self.worker_id:
+                        payload['worker_id'] = self.worker_id
+                    
+                    try:
+                        response = requests.post(
+                            f"{self.controller_url}/api/queue",
+                            json=payload,
+                            timeout=30
+                        )
+                        
+                        if response.status_code == 404:
+                            # No jobs available
+                            break
+                        elif response.status_code == 429:
+                            # Worker at capacity (shouldn't happen, but handle it)
+                            break
+                        
+                        response.raise_for_status()
+                        job = response.json()
+                        
+                        if job:
+                            consecutive_errors = 0
+                            # Process job in separate thread
+                            job_thread = threading.Thread(
+                                target=process_job_in_thread,
+                                args=(job,),
+                                daemon=False
+                            )
+                            job_thread.start()
+                            self.active_jobs.append(job_thread)
+                            self.logger.info(f"✅ Job {job.get('job_id')} started in thread (active: {self.active_jobs_count}/{self.max_parallel_jobs})")
+                    except requests.exceptions.RequestException as e:
+                        self.logger.warning(f"Error requesting job: {e}")
+                        break
                 
-                if job:
-                    consecutive_errors = 0
-                    self.logger.info("")
-                    self.logger.info("=" * 80)
-                    self.logger.info("✅ JOB RECEIVED - Worker Starting")
-                    self.logger.info("=" * 80)
-                    self.process_job(job)
-                    self.logger.info("")
-                    self.logger.info("=" * 80)
-                    self.logger.info("✅ Job Processing Complete - Returning to Polling")
-                    self.logger.info("=" * 80)
-                    self.logger.info("")
+                # Clean up finished threads
+                self.active_jobs = [t for t in self.active_jobs if t.is_alive()]
+                
+                # Update status
+                if self.active_jobs_count > 0:
+                    self.status = 'processing'
                 else:
-                    # No job available - this is normal, not an error
-                    consecutive_errors = 0
-                    if self.status == 'idle':
-                        self.logger.info(f"ℹ No pending experiments, polling again in {self.poll_interval}s")
-                    time.sleep(self.poll_interval)
+                    self.status = 'idle'
+                
+                # Sleep before next polling cycle
+                if self.status == 'idle':
+                    self.logger.info(f"ℹ No jobs available or at capacity, polling again in {self.poll_interval}s")
+                time.sleep(self.poll_interval)
                 
             except KeyboardInterrupt:
                 self.logger.info("Interrupted by user")
