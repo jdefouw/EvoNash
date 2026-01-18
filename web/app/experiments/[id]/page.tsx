@@ -14,6 +14,7 @@ import PetriDishViewer from '@/components/PetriDishViewer'
 import MatchReplay from '@/components/MatchReplay'
 import LiveViewLegend from '@/components/LiveViewLegend'
 import SimulationReplay from '@/components/SimulationReplay'
+import Tooltip from '@/components/Tooltip'
 
 export default function ExperimentDetailPage() {
   const params = useParams()
@@ -559,30 +560,42 @@ export default function ExperimentDetailPage() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-gray-600 dark:text-gray-400">Population Size:</span>
-                  <span className="ml-2 font-medium text-gray-900 dark:text-white">{experiment.population_size}</span>
+                  <Tooltip content="Number of neural network agents in each generation">
+                    <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{experiment.population_size}</span>
+                  </Tooltip>
                 </div>
                 <div>
                   <span className="text-gray-600 dark:text-gray-400">Max Generations:</span>
-                  <span className="ml-2 font-medium text-gray-900 dark:text-white">{experiment.max_generations}</span>
+                  <Tooltip content="Total number of generations the experiment will run">
+                    <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{experiment.max_generations}</span>
+                  </Tooltip>
                 </div>
                 <div>
                   <span className="text-gray-600 dark:text-gray-400">Random Seed:</span>
-                  <span className="ml-2 font-medium text-gray-900 dark:text-white">{experiment.random_seed}</span>
+                  <Tooltip content="Random seed value ensuring reproducible starting conditions">
+                    <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{experiment.random_seed}</span>
+                  </Tooltip>
                 </div>
                 <div>
                   <span className="text-gray-600 dark:text-gray-400">Selection Pressure:</span>
-                  <span className="ml-2 font-medium text-gray-900 dark:text-white">{experiment.selection_pressure}</span>
+                  <Tooltip content="Strength of selection favoring high-performing agents (higher = stronger selection)">
+                    <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{experiment.selection_pressure}</span>
+                  </Tooltip>
                 </div>
                 {experiment.mutation_mode === 'STATIC' && experiment.mutation_rate && (
                   <div>
                     <span className="text-gray-600 dark:text-gray-400">Mutation Rate:</span>
-                    <span className="ml-2 font-medium text-gray-900 dark:text-white">{experiment.mutation_rate}</span>
+                    <Tooltip content="Fixed mutation rate for static mode - probability of random genetic changes">
+                      <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{experiment.mutation_rate}</span>
+                    </Tooltip>
                   </div>
                 )}
                 {experiment.mutation_mode === 'ADAPTIVE' && experiment.mutation_base && (
                   <div>
                     <span className="text-gray-600 dark:text-gray-400">Mutation Base:</span>
-                    <span className="ml-2 font-medium text-gray-900 dark:text-white">{experiment.mutation_base}</span>
+                    <Tooltip content="Base mutation rate for adaptive mode - starting point for dynamic mutation scaling">
+                      <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{experiment.mutation_base}</span>
+                    </Tooltip>
                   </div>
                 )}
               </div>

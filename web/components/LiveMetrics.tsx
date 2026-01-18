@@ -1,6 +1,7 @@
 'use client'
 
 import { Generation } from '@/types/protocol'
+import Tooltip from './Tooltip'
 
 interface LiveMetricsProps {
   generation: Generation | null
@@ -32,53 +33,69 @@ export default function LiveMetrics({ generation }: LiveMetricsProps) {
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg">
               <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Avg Elo</div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {generation.avg_elo?.toFixed(2) || 'N/A'}
-              </div>
+              <Tooltip content="Population average Elo rating - the mean skill level across all agents">
+                <div className="text-2xl font-bold text-gray-900 dark:text-white cursor-help">
+                  {generation.avg_elo?.toFixed(2) || 'N/A'}
+                </div>
+              </Tooltip>
             </div>
             <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg">
               <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Peak Elo</div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {generation.peak_elo?.toFixed(2) || 'N/A'}
-              </div>
+              <Tooltip content="Highest individual agent Elo rating - the best performing agent in the population">
+                <div className="text-2xl font-bold text-gray-900 dark:text-white cursor-help">
+                  {generation.peak_elo?.toFixed(2) || 'N/A'}
+                </div>
+              </Tooltip>
             </div>
             <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg">
               <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Policy Entropy</div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {generation.policy_entropy?.toFixed(4) || 'N/A'}
-              </div>
+              <Tooltip content="Average action distribution entropy - measures randomness of AI moves (higher = more exploration)">
+                <div className="text-2xl font-bold text-gray-900 dark:text-white cursor-help">
+                  {generation.policy_entropy?.toFixed(4) || 'N/A'}
+                </div>
+              </Tooltip>
             </div>
             <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg">
               <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Generation</div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {generation.generation_number}
-              </div>
+              <Tooltip content="Current generation number in the evolutionary process">
+                <div className="text-2xl font-bold text-gray-900 dark:text-white cursor-help">
+                  {generation.generation_number}
+                </div>
+              </Tooltip>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4 text-sm pt-2 border-t border-gray-200 dark:border-gray-700">
             <div>
               <span className="text-gray-600 dark:text-gray-400">Entropy Variance:</span>
-              <span className="ml-2 font-medium text-gray-900 dark:text-white">
-                {generation.entropy_variance?.toFixed(6) || 'N/A'}
-              </span>
+              <Tooltip content="Spread of entropy values across population - lower values indicate convergence to Nash Equilibrium">
+                <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">
+                  {generation.entropy_variance?.toFixed(6) || 'N/A'}
+                </span>
+              </Tooltip>
             </div>
             <div>
               <span className="text-gray-600 dark:text-gray-400">Diversity:</span>
-              <span className="ml-2 font-medium text-gray-900 dark:text-white">
-                {generation.population_diversity?.toFixed(4) || 'N/A'}
-              </span>
+              <Tooltip content="Average Euclidean distance between agent weight vectors - measures genetic diversity in the population">
+                <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">
+                  {generation.population_diversity?.toFixed(4) || 'N/A'}
+                </span>
+              </Tooltip>
             </div>
             <div>
               <span className="text-gray-600 dark:text-gray-400">Min Elo:</span>
-              <span className="ml-2 font-medium text-gray-900 dark:text-white">
-                {generation.min_elo?.toFixed(2) || 'N/A'}
-              </span>
+              <Tooltip content="Lowest Elo rating in population - the worst performing agent">
+                <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">
+                  {generation.min_elo?.toFixed(2) || 'N/A'}
+                </span>
+              </Tooltip>
             </div>
             <div>
               <span className="text-gray-600 dark:text-gray-400">Avg Fitness:</span>
-              <span className="ml-2 font-medium text-gray-900 dark:text-white">
-                {generation.avg_fitness?.toFixed(2) || 'N/A'}
-              </span>
+              <Tooltip content="Average fitness score combining energy and survival time - measures overall agent performance">
+                <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">
+                  {generation.avg_fitness?.toFixed(2) || 'N/A'}
+                </span>
+              </Tooltip>
             </div>
           </div>
         </div>

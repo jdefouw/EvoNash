@@ -1,6 +1,7 @@
 'use client'
 
 import { Experiment, Generation } from '@/types/protocol'
+import Tooltip from './Tooltip'
 
 interface GenerationProgressProps {
   experiment: Experiment
@@ -44,8 +45,12 @@ export default function GenerationProgress({
       <div className="space-y-4">
         <div>
           <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
-            <span>Generation {generations.length > 0 ? generations.length : (currentGenNum + 1)} of {experiment.max_generations}</span>
-            <span className="font-semibold text-gray-900 dark:text-white">{progress.toFixed(1)}%</span>
+            <Tooltip content="Current generation number out of total planned generations">
+              <span className="cursor-help">Generation {generations.length > 0 ? generations.length : (currentGenNum + 1)} of {experiment.max_generations}</span>
+            </Tooltip>
+            <Tooltip content="Percentage of generations completed">
+              <span className="font-semibold text-gray-900 dark:text-white cursor-help">{progress.toFixed(1)}%</span>
+            </Tooltip>
           </div>
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
             <div 
@@ -58,11 +63,15 @@ export default function GenerationProgress({
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-gray-600 dark:text-gray-400">Remaining:</span>
-              <span className="ml-2 font-medium text-gray-900 dark:text-white">{remaining.toLocaleString()}</span>
+              <Tooltip content="Number of generations remaining to complete">
+                <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{remaining.toLocaleString()}</span>
+              </Tooltip>
             </div>
             <div>
               <span className="text-gray-600 dark:text-gray-400">Total Completed:</span>
-              <span className="ml-2 font-medium text-gray-900 dark:text-white">{generations.length || (currentGenNum + 1)}</span>
+              <Tooltip content="Total number of generations that have been completed">
+                <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{generations.length || (currentGenNum + 1)}</span>
+              </Tooltip>
             </div>
           </div>
         )}

@@ -41,25 +41,30 @@ export default function PetriDishViewer({
       <svg width={width} height={height} className="absolute inset-0">
         {/* Food */}
         {food.map((f, i) => (
-          <circle
-            key={`food-${i}`}
-            cx={(f.x / dishWidth) * width}
-            cy={(f.y / dishHeight) * height}
-            r={3}
-            fill={f.consumed ? '#ef4444' : '#22c55e'}
-            opacity={f.consumed ? 0.3 : 1}
-          />
+          <g key={`food-${i}`}>
+            <title>{f.consumed ? 'Consumed food pellets - red dots (faded) represent food that has already been eaten by agents' : 'Available food pellets - green dots represent unconsumed food that agents can collect for energy'}</title>
+            <circle
+              cx={(f.x / dishWidth) * width}
+              cy={(f.y / dishHeight) * height}
+              r={3}
+              fill={f.consumed ? '#ef4444' : '#22c55e'}
+              opacity={f.consumed ? 0.3 : 1}
+              className="cursor-help"
+            />
+          </g>
         ))}
         
         {/* Agents */}
         {agents.map((agent) => (
           <g key={agent.id}>
+            <title>Neural network agents in the population - blue circles represent individual AI agents navigating the environment</title>
             <circle
               cx={(agent.x / dishWidth) * width}
               cy={(agent.y / dishHeight) * height}
               r={8}
               fill="#3b82f6"
               opacity={0.8}
+              className="cursor-help"
             />
             <line
               x1={(agent.x / dishWidth) * width}
