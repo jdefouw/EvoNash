@@ -8,6 +8,11 @@ import argparse
 import sys
 from pathlib import Path
 
+# Add the worker directory to Python path so imports work
+worker_dir = Path(__file__).parent.resolve()
+if str(worker_dir) not in sys.path:
+    sys.path.insert(0, str(worker_dir))
+
 from src.worker_service import WorkerService
 
 
