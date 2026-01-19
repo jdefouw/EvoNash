@@ -185,15 +185,7 @@ export async function POST(request: NextRequest) {
       .single()
     
     if (experiment) {
-      // Check if all job assignments are completed
-      const { data: allAssignments } = await supabase
-        .from('job_assignments')
-        .select('status')
-        .eq('experiment_id', experiment_id)
-      
-      const allCompleted = allAssignments && allAssignments.every((a: any) => a.status === 'completed')
-      
-      // Also check if we have all generations
+      // Check if we have all generations (this is the primary indicator of completion)
       const { data: allGenerations } = await supabase
         .from('generations')
         .select('generation_number')
@@ -201,8 +193,21 @@ export async function POST(request: NextRequest) {
       
       const hasAllGenerations = allGenerations && allGenerations.length >= experiment.max_generations
       
-      if (allCompleted && hasAllGenerations) {
-        console.log(`[RESULTS] All batches completed for experiment ${experiment_id}, marking as COMPLETED`)
+      // Also check job assignments to see if there are any still active
+      const { data: allAssignments } = await supabase
+        .from('job_assignments')
+        .select('status')
+        .eq('experiment_id', experiment_id)
+      
+      // Check if there are any active assignments (assigned or processing)
+      const hasActiveAssignments = allAssignments && allAssignments.some((a: any) => 
+        a.status === 'assigned' || a.status === 'processing'
+      )
+      
+      // Mark as COMPLETED if we have all generations and no active assignments
+      // This ensures completion even if some job assignments failed
+      if (hasAllGenerations && !hasActiveAssignments) {
+        console.log(`[RESULTS] All generations complete for experiment ${experiment_id}, marking as COMPLETED`)
         await supabase
           .from('experiments')
           .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
@@ -210,7 +215,8 @@ export async function POST(request: NextRequest) {
       } else {
         const completedBatches = allAssignments?.filter((a: any) => a.status === 'completed').length || 0
         const totalBatches = allAssignments?.length || 0
-        console.log(`[RESULTS] Batch saved. Progress: ${completedBatches}/${totalBatches} batches, ${allGenerations?.length || 0}/${experiment.max_generations} generations`)
+        const activeBatches = allAssignments?.filter((a: any) => a.status === 'assigned' || a.status === 'processing').length || 0
+        console.log(`[RESULTS] Batch saved. Progress: ${completedBatches}/${totalBatches} batches (${activeBatches} active), ${allGenerations?.length || 0}/${experiment.max_generations} generations`)
       }
     }
     
