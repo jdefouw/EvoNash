@@ -39,7 +39,8 @@ async function buildWorkerZip(): Promise<Buffer> {
     process.env.EVONASH_DIST_DIR = DIST_DIR
     
     try {
-      // Use dynamic import to run the script
+      // Use dynamic require to run the packaging script
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { packageWorker } = require(scriptPath)
       await packageWorker()
     } finally {
@@ -91,8 +92,14 @@ export async function GET(request: NextRequest) {
       ? await buildWorkerZip()
       : readFileSync(ZIP_PATH)
     
+    // Convert Buffer to ArrayBuffer for NextResponse
+    const arrayBuffer = zipBuffer.buffer.slice(
+      zipBuffer.byteOffset,
+      zipBuffer.byteOffset + zipBuffer.byteLength
+    )
+    
     // Return as download
-    return new NextResponse(zipBuffer, {
+    return new NextResponse(arrayBuffer, {
       headers: {
         'Content-Type': 'application/zip',
         'Content-Disposition': `attachment; filename="${ZIP_NAME}"`,
