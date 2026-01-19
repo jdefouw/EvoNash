@@ -67,12 +67,64 @@ export async function POST(request: NextRequest) {
           .eq('id', experiment.id)
       }
       
-      // Get all assigned batches for this experiment
+      // Get all assigned batches for this experiment with worker info
       const { data: assignedBatches } = await supabase
         .from('job_assignments')
-        .select('generation_start, generation_end, status')
+        .select('generation_start, generation_end, status, worker_id, assigned_at, started_at')
         .eq('experiment_id', experiment.id)
         .in('status', ['assigned', 'processing'])
+      
+      // Recovery: Check for orphaned assignments from offline workers
+      if (assignedBatches && assignedBatches.length > 0) {
+        const now = new Date()
+        const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000) // 5 minutes timeout
+        
+        // Get worker statuses for assigned batches
+        const workerIds = [...new Set(assignedBatches.map((b: any) => b.worker_id))]
+        const { data: workers } = await supabase
+          .from('workers')
+          .select('id, status, last_heartbeat')
+          .in('id', workerIds)
+        
+        const workerMap = new Map((workers || []).map((w: any) => [w.id, w]))
+        const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000)
+        
+        // Mark orphaned assignments as failed
+        for (const batch of assignedBatches) {
+          const worker = workerMap.get(batch.worker_id)
+          const isWorkerOffline = !worker || 
+            (worker.last_heartbeat && new Date(worker.last_heartbeat) < twoMinutesAgo) ||
+            worker.status === 'offline'
+          
+          const assignedTime = batch.assigned_at ? new Date(batch.assigned_at) : null
+          const startedTime = batch.started_at ? new Date(batch.started_at) : null
+          const checkTime = startedTime || assignedTime
+          
+          // If worker is offline OR assignment is stuck for > 5 minutes, mark as failed
+          if (isWorkerOffline || (checkTime && checkTime < fiveMinutesAgo)) {
+            console.log(`[QUEUE] Recovering orphaned assignment: batch ${batch.generation_start}-${batch.generation_end}, worker offline or timeout`)
+            await supabase
+              .from('job_assignments')
+              .update({ status: 'failed' })
+              .eq('experiment_id', experiment.id)
+              .eq('generation_start', batch.generation_start)
+              .eq('generation_end', batch.generation_end)
+              .in('status', ['assigned', 'processing'])
+          }
+        }
+        
+        // Re-fetch assigned batches after recovery
+        const { data: updatedBatches } = await supabase
+          .from('job_assignments')
+          .select('generation_start, generation_end, status')
+          .eq('experiment_id', experiment.id)
+          .in('status', ['assigned', 'processing'])
+        
+        assignedBatches.length = 0
+        if (updatedBatches) {
+          assignedBatches.push(...updatedBatches)
+        }
+      }
       
       // Get last completed generation from checkpoints
       const { data: latestCheckpoint } = await supabase
