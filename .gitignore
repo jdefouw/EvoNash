@@ -47,3 +47,7 @@ worker/data/*.csv
 
 # Vercel
 .vercel
+
+# NSSM binaries (excluded due to security warnings)
+worker/nssm.exe
+worker/nssm.pdb
