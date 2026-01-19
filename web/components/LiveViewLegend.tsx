@@ -1,11 +1,37 @@
 'use client'
 
+import { useState } from 'react'
+
 export default function LiveViewLegend() {
+  const [isExpanded, setIsExpanded] = useState(false)
+
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
-      <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Legend</h2>
+    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+      {/* Collapsible Header */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors rounded-t-lg"
+      >
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Legend</h2>
+        <svg
+          className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${
+            isExpanded ? 'rotate-180' : ''
+          }`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
       
-      <div className="space-y-4">
+      {/* Collapsible Content */}
+      <div
+        className={`overflow-hidden transition-all duration-300 ease-in-out ${
+          isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+        }`}
+      >
+        <div className="p-4 pt-0 space-y-4">
         {/* Chart Metrics */}
         <div>
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Convergence Velocity Chart</h3>
@@ -143,6 +169,7 @@ export default function LiveViewLegend() {
               <span className="text-gray-600 dark:text-gray-400">Red (#ef4444)</span>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
