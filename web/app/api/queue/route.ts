@@ -68,11 +68,13 @@ export async function POST(request: NextRequest) {
       }
       
       // Get all assigned batches for this experiment with worker info
-      const { data: assignedBatches } = await supabase
+      const { data: initialAssignedBatches } = await supabase
         .from('job_assignments')
         .select('generation_start, generation_end, status, worker_id, assigned_at, started_at')
         .eq('experiment_id', experiment.id)
         .in('status', ['assigned', 'processing'])
+      
+      let assignedBatches = initialAssignedBatches || []
       
       // Recovery: Check for orphaned assignments from offline workers
       // Also allow workers to recover their own jobs
