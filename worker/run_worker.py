@@ -13,17 +13,21 @@ worker_dir = Path(__file__).parent.resolve()
 if str(worker_dir) not in sys.path:
     sys.path.insert(0, str(worker_dir))
 
-# Import the src package first to ensure it's recognized as a package
-# This is necessary for relative imports in worker_service.py to work
-import src
-import src.experiments
-import src.ga
-import src.simulation
-import src.logging
-import src.analysis
+# Change to the worker directory so relative imports work correctly
+# This ensures Python recognizes src as a package in the current directory
+import os
+original_cwd = os.getcwd()
+os.chdir(worker_dir)
 
-# Now we can import worker_service which uses relative imports
-from src.worker_service import WorkerService
+try:
+    # Import src as a package - this initializes the package structure
+    import src
+    
+    # Import worker_service - relative imports inside will now work
+    from src.worker_service import WorkerService
+finally:
+    # Restore original working directory
+    os.chdir(original_cwd)
 
 
 def main():
