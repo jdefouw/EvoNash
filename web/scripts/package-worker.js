@@ -8,8 +8,31 @@ const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 
-const WORKER_DIR = path.join(__dirname, '../../worker');
-const OUTPUT_DIR = process.env.EVONASH_DIST_DIR || path.join(__dirname, '../../dist');
+// Resolve worker directory - try multiple possible locations
+function findWorkerDir() {
+  // Try relative to script location (local development)
+  const relativePath = path.join(__dirname, '../../worker');
+  if (fs.existsSync(relativePath)) {
+    return relativePath;
+  }
+  
+  // Try relative to current working directory (Vercel build - if cwd is web/)
+  const cwdPath = path.join(process.cwd(), '../worker');
+  if (fs.existsSync(cwdPath)) {
+    return cwdPath;
+  }
+  
+  // Try from repo root (if cwd is already at repo root)
+  const repoRootPath = path.join(process.cwd(), 'worker');
+  if (fs.existsSync(repoRootPath)) {
+    return repoRootPath;
+  }
+  
+  throw new Error(`Worker directory not found. Tried: ${relativePath}, ${cwdPath}, ${repoRootPath}`);
+}
+
+const WORKER_DIR = findWorkerDir();
+const OUTPUT_DIR = process.env.EVONASH_DIST_DIR || path.join(process.cwd(), 'public');
 const ZIP_NAME = 'evonash-worker-windows.zip';
 
 // Files and directories to include
@@ -121,10 +144,18 @@ function copyDirectory(src, dest, basePath = '') {
 
 async function packageWorker() {
   console.log('Packaging EvoNash Worker for Windows...\n');
+  console.log(`Worker directory: ${WORKER_DIR}`);
+  console.log(`Output directory: ${OUTPUT_DIR}`);
   
-  // Create output directory
+  // Verify worker directory exists
+  if (!fs.existsSync(WORKER_DIR)) {
+    throw new Error(`Worker directory does not exist: ${WORKER_DIR}`);
+  }
+  
+  // Create output directory (public folder for Next.js static files)
   if (!fs.existsSync(OUTPUT_DIR)) {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+    console.log(`Created output directory: ${OUTPUT_DIR}`);
   }
   
   const tempDir = path.join(OUTPUT_DIR, 'worker-package');
