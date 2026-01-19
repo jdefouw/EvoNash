@@ -92,14 +92,11 @@ export async function GET(request: NextRequest) {
       ? await buildWorkerZip()
       : readFileSync(ZIP_PATH)
     
-    // Convert Buffer to ArrayBuffer for NextResponse
-    const arrayBuffer = zipBuffer.buffer.slice(
-      zipBuffer.byteOffset,
-      zipBuffer.byteOffset + zipBuffer.byteLength
-    )
+    // Convert Buffer to Uint8Array for NextResponse (which accepts it as BodyInit)
+    const uint8Array = new Uint8Array(zipBuffer)
     
     // Return as download
-    return new NextResponse(arrayBuffer, {
+    return new NextResponse(uint8Array, {
       headers: {
         'Content-Type': 'application/zip',
         'Content-Disposition': `attachment; filename="${ZIP_NAME}"`,
