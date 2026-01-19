@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Insert all generations in batch
+    // Prepare generation inserts
     const generationInserts = statsArray.map((stats: any) => {
       const generation_number = stats.generation !== undefined ? stats.generation : null
       
@@ -82,17 +82,51 @@ export async function POST(request: NextRequest) {
       }
     })
     
-    const { data: insertedGenerations, error: genError } = await supabase
+    // Check which generations already exist to avoid duplicate key errors
+    const generationNumbers = generationInserts.map((g: any) => g.generation_number)
+    const { data: existingGenerations, error: checkError } = await supabase
       .from('generations')
-      .insert(generationInserts)
-      .select()
+      .select('generation_number')
+      .eq('experiment_id', experiment_id)
+      .in('generation_number', generationNumbers)
     
-    if (genError) {
-      console.error(`[RESULTS] Error inserting generations for experiment ${experiment_id}:`, genError)
-      return NextResponse.json({ error: genError.message }, { status: 500 })
+    if (checkError) {
+      console.error(`[RESULTS] Error checking existing generations:`, checkError)
+      return NextResponse.json({ error: checkError.message }, { status: 500 })
     }
     
-    console.log(`[RESULTS] Successfully saved ${insertedGenerations.length} generations for experiment ${experiment_id}`)
+    // Filter out generations that already exist
+    const existingNumbers = new Set((existingGenerations || []).map((g: any) => g.generation_number))
+    const newGenerationInserts = generationInserts.filter((g: any) => !existingNumbers.has(g.generation_number))
+    
+    let insertedGenerations: any[] = []
+    
+    // Only insert if there are new generations
+    if (newGenerationInserts.length > 0) {
+      const { data: inserted, error: genError } = await supabase
+        .from('generations')
+        .insert(newGenerationInserts)
+        .select()
+      
+      if (genError) {
+        console.error(`[RESULTS] Error inserting generations for experiment ${experiment_id}:`, genError)
+        return NextResponse.json({ error: genError.message }, { status: 500 })
+      }
+      
+      insertedGenerations = inserted || []
+      console.log(`[RESULTS] Successfully saved ${insertedGenerations.length} new generations for experiment ${experiment_id} (${existingNumbers.size} already existed)`)
+    } else {
+      console.log(`[RESULTS] All ${generationNumbers.length} generations already exist for experiment ${experiment_id}, skipping insert`)
+      
+      // Fetch existing generations for return value
+      const { data: existing } = await supabase
+        .from('generations')
+        .select('*')
+        .eq('experiment_id', experiment_id)
+        .in('generation_number', generationNumbers)
+      
+      insertedGenerations = existing || []
+    }
     
     // Insert matches if provided (flatten matches array if it's an array of arrays)
     if (matches && matches.length > 0) {
