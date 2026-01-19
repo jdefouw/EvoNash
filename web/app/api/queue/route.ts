@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
         .in('status', ['assigned', 'processing'])
       
       // Recovery: Check for orphaned assignments from offline workers
+      // Also allow workers to recover their own jobs
       if (assignedBatches && assignedBatches.length > 0) {
         const now = new Date()
         const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000) // 5 minutes timeout
@@ -89,8 +90,22 @@ export async function POST(request: NextRequest) {
         const workerMap = new Map((workers || []).map((w: any) => [w.id, w]))
         const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000)
         
-        // Mark orphaned assignments as failed
+        // Separate batches into: own jobs (can recover) vs other workers' jobs (check for orphaned)
+        const ownBatches: any[] = []
+        const otherBatches: any[] = []
+        
         for (const batch of assignedBatches) {
+          if (worker_id && batch.worker_id === worker_id) {
+            // This is the requesting worker's own job - allow recovery
+            ownBatches.push(batch)
+          } else {
+            // This is another worker's job - check if orphaned
+            otherBatches.push(batch)
+          }
+        }
+        
+        // Mark orphaned assignments from other workers as failed
+        for (const batch of otherBatches) {
           const worker = workerMap.get(batch.worker_id)
           const isWorkerOffline = !worker || 
             (worker.last_heartbeat && new Date(worker.last_heartbeat) < twoMinutesAgo) ||
@@ -116,13 +131,22 @@ export async function POST(request: NextRequest) {
         // Re-fetch assigned batches after recovery
         const { data: updatedBatches } = await supabase
           .from('job_assignments')
-          .select('generation_start, generation_end, status')
+          .select('generation_start, generation_end, status, worker_id')
           .eq('experiment_id', experiment.id)
           .in('status', ['assigned', 'processing'])
         
-        assignedBatches.length = 0
-        if (updatedBatches) {
-          assignedBatches.push(...updatedBatches)
+        // If worker is recovering its own jobs, exclude them from the assigned list
+        if (worker_id && ownBatches.length > 0) {
+          const ownBatchRanges = new Set(ownBatches.map((b: any) => 
+            `${b.generation_start}-${b.generation_end}`
+          ))
+          assignedBatches = (updatedBatches || []).filter((b: any) => {
+            // Exclude batches that match the worker's own jobs
+            const batchKey = `${b.generation_start}-${b.generation_end}`
+            return !ownBatchRanges.has(batchKey)
+          })
+        } else {
+          assignedBatches = updatedBatches || []
         }
       }
       
@@ -135,7 +159,7 @@ export async function POST(request: NextRequest) {
         .limit(1)
         .single()
       
-      // Calculate which generations are already assigned
+      // Calculate which generations are already assigned (excluding worker's own recoverable jobs)
       const assignedRanges: Array<{start: number, end: number}> = (assignedBatches || []).map((b: any) => ({
         start: b.generation_start,
         end: b.generation_end

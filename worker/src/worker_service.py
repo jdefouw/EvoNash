@@ -75,11 +75,22 @@ class WorkerService:
         self.retry_delay = self.worker_config.get('retry_delay_seconds', 5)
         self.device = self.worker_config.get('device', 'cuda')
         
+        # Get or generate persistent worker_id
+        import uuid
+        if 'worker_id' not in self.worker_config or not self.worker_config['worker_id']:
+            # Generate new UUID and save to config
+            self.worker_config['worker_id'] = str(uuid.uuid4())
+            # Save updated config back to file
+            with open(config_path_obj, 'w', encoding='utf-8') as f:
+                json.dump(self.worker_config, f, indent=2)
+            self.logger.info(f"Generated persistent worker_id: {self.worker_config['worker_id']}")
+        self.persistent_worker_id = self.worker_config['worker_id']
+        
         # State
         self.running = True
         self.current_job: Optional[Dict] = None
         self.status = 'idle'  # idle, processing, error
-        self.worker_id: Optional[str] = None
+        self.worker_id: Optional[str] = None  # Will be set after registration
         self.gpu_type: Optional[str] = None
         self.vram_gb: int = 0
         self.max_parallel_jobs: int = 0
@@ -143,17 +154,18 @@ class WorkerService:
             self.max_parallel_jobs = 1
     
     def _register_worker(self):
-        """Register worker with controller and get worker_id."""
+        """Register worker with controller using persistent worker_id."""
         try:
             worker_name = self.worker_config.get('worker_name', None)
             
             payload = {
+                'worker_id': self.persistent_worker_id,  # Send persistent ID
                 'worker_name': worker_name,
                 'gpu_type': self.gpu_type or 'CPU',
                 'vram_gb': self.vram_gb
             }
             
-            self.logger.info("Registering worker with controller...")
+            self.logger.info(f"Registering worker with controller (persistent ID: {self.persistent_worker_id})...")
             response = requests.post(
                 f"{self.controller_url}/api/workers/register",
                 json=payload,

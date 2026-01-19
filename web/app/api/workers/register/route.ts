@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     const supabase = await createServerClient()
     const body = await request.json()
     
-    const { worker_name, gpu_type, vram_gb } = body
+    const { worker_id, worker_name, gpu_type, vram_gb } = body
     
     // Validate required fields
     if (!gpu_type || vram_gb === undefined || vram_gb === null) {
@@ -31,26 +31,97 @@ export async function POST(request: NextRequest) {
     // Calculate max_parallel_jobs: floor(vram_gb / 2)
     const max_parallel_jobs = Math.floor(vram / 2)
     
-    // Check if worker already exists (by GPU type and VRAM - could be improved with unique identifier)
-    // For now, we'll create a new worker each time (workers can be identified by ID)
-    // In production, you might want to use a unique worker identifier
-    
-    // Insert or update worker
-    // Since we don't have a unique identifier yet, we'll always create new
-    // TODO: Consider adding worker_id from worker config or MAC address for persistence
-    const { data: worker, error } = await supabase
-      .from('workers')
-      .insert({
-        worker_name: worker_name || null,
-        gpu_type,
-        vram_gb: vram,
-        max_parallel_jobs,
-        status: 'idle',
-        active_jobs_count: 0,
-        last_heartbeat: new Date().toISOString()
-      })
-      .select()
-      .single()
+    // If worker_id provided, try to find existing worker
+    let worker
+    if (worker_id) {
+      const { data: existingWorker } = await supabase
+        .from('workers')
+        .select('*')
+        .eq('id', worker_id)
+        .single()
+      
+      if (existingWorker) {
+        // Update existing worker
+        const { data: updatedWorker, error: updateError } = await supabase
+          .from('workers')
+          .update({
+            worker_name: worker_name || existingWorker.worker_name,
+            gpu_type,
+            vram_gb: vram,
+            max_parallel_jobs,
+            status: 'idle',  // Reset to idle on re-registration
+            active_jobs_count: 0,  // Reset job count
+            last_heartbeat: new Date().toISOString()
+          })
+          .eq('id', worker_id)
+          .select()
+          .single()
+        
+        if (updateError) {
+          console.error('Error updating worker:', updateError)
+          return NextResponse.json(
+            { error: updateError.message || 'Failed to update worker' },
+            { status: 500 }
+          )
+        }
+        
+        worker = updatedWorker
+        console.log(`[WORKER REGISTER] Updated existing worker: ${worker.id} (${gpu_type}, ${vram}GB VRAM)`)
+      } else {
+        // Worker ID provided but doesn't exist - create new with that ID
+        const { data: newWorker, error: insertError } = await supabase
+          .from('workers')
+          .insert({
+            id: worker_id,
+            worker_name: worker_name || null,
+            gpu_type,
+            vram_gb: vram,
+            max_parallel_jobs,
+            status: 'idle',
+            active_jobs_count: 0,
+            last_heartbeat: new Date().toISOString()
+          })
+          .select()
+          .single()
+        
+        if (insertError) {
+          console.error('Error creating worker with ID:', insertError)
+          return NextResponse.json(
+            { error: insertError.message || 'Failed to create worker' },
+            { status: 500 }
+          )
+        }
+        
+        worker = newWorker
+        console.log(`[WORKER REGISTER] Created new worker with provided ID: ${worker.id}`)
+      }
+    } else {
+      // No worker_id provided - create new worker
+      const { data: newWorker, error: insertError } = await supabase
+        .from('workers')
+        .insert({
+          worker_name: worker_name || null,
+          gpu_type,
+          vram_gb: vram,
+          max_parallel_jobs,
+          status: 'idle',
+          active_jobs_count: 0,
+          last_heartbeat: new Date().toISOString()
+        })
+        .select()
+        .single()
+      
+      if (insertError) {
+        console.error('Error creating worker:', insertError)
+        return NextResponse.json(
+          { error: insertError.message || 'Failed to create worker' },
+          { status: 500 }
+        )
+      }
+      
+      worker = newWorker
+      console.log(`[WORKER REGISTER] Created new worker: ${worker.id}`)
+    }
     
     if (error) {
       console.error('Error registering worker:', error)
