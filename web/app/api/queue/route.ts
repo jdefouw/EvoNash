@@ -161,6 +161,14 @@ export async function POST(request: NextRequest) {
         .limit(1)
         .single()
       
+      // Get all existing generations to avoid duplicate work
+      const { data: existingGenerations } = await supabase
+        .from('generations')
+        .select('generation_number')
+        .eq('experiment_id', experiment.id)
+      
+      const existingGenerationNumbers = new Set((existingGenerations || []).map((g: any) => g.generation_number))
+      
       // Calculate which generations are already assigned (excluding worker's own recoverable jobs)
       const assignedRanges: Array<{start: number, end: number}> = (assignedBatches || []).map((b: any) => ({
         start: b.generation_start,
@@ -181,7 +189,11 @@ export async function POST(request: NextRequest) {
           !(generationEnd < range.start || generationStart > range.end)
         )
         
-        if (!isAssigned) {
+        // Check if all generations in this range already exist
+        const allGenerationsExist = Array.from({ length: generationEnd - generationStart + 1 }, (_, i) => generationStart + i)
+          .every(genNum => existingGenerationNumbers.has(genNum))
+        
+        if (!isAssigned && !allGenerationsExist) {
           // Found an unassigned batch!
           foundBatch = true
           

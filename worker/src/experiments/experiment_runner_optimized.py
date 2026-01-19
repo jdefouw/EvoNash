@@ -37,7 +37,9 @@ class OptimizedExperimentRunner:
         stop_check_callback: Optional[Callable[[], bool]] = None,
         generation_start: int = 0,
         generation_end: Optional[int] = None,
-        checkpoint_callback: Optional[Callable[[Dict], None]] = None
+        checkpoint_callback: Optional[Callable[[Dict], None]] = None,
+        generation_check_callback: Optional[Callable[[int], bool]] = None,
+        checkpoint_loader_callback: Optional[Callable[[int], Optional[Dict]]] = None
     ):
         """
         Initialize optimized experiment runner.
@@ -49,12 +51,17 @@ class OptimizedExperimentRunner:
             stop_check_callback: Optional callback to check if should stop
             generation_start: First generation to process
             generation_end: Last generation to process (inclusive)
+            checkpoint_callback: Optional callback to save checkpoints
+            generation_check_callback: Optional callback to check if generation already exists
+            checkpoint_loader_callback: Optional callback to load checkpoints (takes gen_num, returns state dict or None)
         """
         self.config = config
         self.device = device if torch.cuda.is_available() and device == 'cuda' else 'cpu'
         self.upload_callback = upload_callback
         self.stop_check_callback = stop_check_callback
         self.checkpoint_callback = checkpoint_callback
+        self.generation_check_callback = generation_check_callback
+        self.checkpoint_loader_callback = checkpoint_loader_callback
         self.generation_start = generation_start
         self.generation_end = generation_end if generation_end is not None else (config.max_generations - 1)
         
@@ -386,6 +393,33 @@ class OptimizedExperimentRunner:
             print(f"Generation {gen} (Batch: {batch_progress}/{num_generations}, {progress_pct:.1f}%)")
             print(f"Total elapsed time: {elapsed_total:.1f}s")
             print(f"{'─'*80}")
+            
+            # Check if generation already exists before processing
+            if self.generation_check_callback:
+                try:
+                    if self.generation_check_callback(gen):
+                        print(f"⏭️  Generation {gen} already exists in database, skipping to save GPU time")
+                        # CRITICAL: Load checkpoint from this generation to get the evolved population state
+                        # This is necessary because the next generation needs the evolved population from this one
+                        if self.checkpoint_loader_callback:
+                            try:
+                                population_state = self.checkpoint_loader_callback(gen)
+                                if population_state:
+                                    self.ga.load_population_state(population_state)
+                                    print(f"✓ Loaded checkpoint from generation {gen} to maintain population state continuity")
+                                else:
+                                    print(f"⚠️  Warning: No checkpoint found for generation {gen}, population state may be incorrect")
+                            except Exception as checkpoint_error:
+                                print(f"⚠️  Warning: Error loading checkpoint for generation {gen}: {checkpoint_error}")
+                                print(f"   Population state may be incorrect for subsequent generations")
+                        else:
+                            print(f"⚠️  Warning: No checkpoint loader available, population state may be incorrect after skipping generation {gen}")
+                        
+                        # Update current generation counter
+                        self.current_generation = gen + 1
+                        continue
+                except Exception as e:
+                    print(f"Warning: Generation check callback failed: {e}, proceeding with generation")
             
             gen_start = time.time()
             stats = self.run_generation()

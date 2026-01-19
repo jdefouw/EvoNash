@@ -312,6 +312,46 @@ class WorkerService:
         
         return stop_check_callback
     
+    def _create_generation_check_callback(self, experiment_id: str) -> callable:
+        """
+        Create generation check callback function that queries if a generation already exists.
+        
+        Args:
+            experiment_id: Experiment ID to check
+            
+        Returns:
+            Callback function that returns True if generation already exists
+        """
+        import requests
+        
+        def generation_check_callback(generation_number: int) -> bool:
+            """Check if generation already exists in database."""
+            try:
+                # Query the generations endpoint to check if this generation exists
+                response = requests.get(
+                    f"{self.controller_url}/api/generations",
+                    params={'experiment_id': experiment_id, 'generation_number': generation_number},
+                    timeout=10
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    # If we get data back, the generation exists
+                    return len(data) > 0
+                elif response.status_code == 404:
+                    # Generation doesn't exist
+                    return False
+                else:
+                    # On error, assume it doesn't exist (safer to process than skip)
+                    self.logger.warning(f"⚠️ Error checking generation {generation_number}: {response.status_code}, assuming not exists")
+                    return False
+            except Exception as e:
+                # On exception, assume it doesn't exist (safer to process than skip)
+                self.logger.warning(f"⚠️ Exception checking generation {generation_number}: {e}, assuming not exists")
+                return False
+        
+        return generation_check_callback
+    
     def _create_checkpoint_callback(self, experiment_id: str) -> callable:
         """
         Create checkpoint callback function that saves population state.
@@ -420,14 +460,34 @@ class WorkerService:
             # Create ExperimentConfig from job
             config = ExperimentManager.load_from_dict(experiment_config)
             
+            # Check which generations already exist to avoid duplicate work
+            generation_check_callback = self._create_generation_check_callback(experiment_id)
+            existing_generations = set()
+            for gen in range(generation_start, generation_end + 1):
+                try:
+                    if generation_check_callback(gen):
+                        existing_generations.add(gen)
+                        self.logger.info(f"ℹ️  Generation {gen} already exists, will skip")
+                except Exception as e:
+                    self.logger.warning(f"⚠️  Error checking generation {gen}: {e}")
+            
+            # Find the first generation that doesn't exist, or use generation_start
+            actual_start = generation_start
+            for gen in range(generation_start, generation_end + 1):
+                if gen not in existing_generations:
+                    actual_start = gen
+                    break
+            
             # Load checkpoint if starting from a non-zero generation
             checkpoint_state = None
-            if generation_start > 0:
+            if actual_start > 0:
+                # Try to load checkpoint from the generation before actual_start
+                checkpoint_gen = actual_start - 1
                 try:
-                    self.logger.info(f"📥 Attempting to load checkpoint for generation {generation_start - 1}...")
+                    self.logger.info(f"📥 Attempting to load checkpoint for generation {checkpoint_gen}...")
                     checkpoint_response = requests.get(
                         f"{self.controller_url}/api/experiments/{experiment_id}/checkpoint",
-                        params={'generation': str(generation_start - 1)},
+                        params={'generation': str(checkpoint_gen)},
                         timeout=30
                     )
                     
@@ -436,11 +496,33 @@ class WorkerService:
                         checkpoint_state = checkpoint_data.get('population_state')
                         self.logger.info(f"✓ Checkpoint loaded for generation {checkpoint_data.get('generation_number')}")
                     elif checkpoint_response.status_code == 404:
-                        self.logger.warning(f"⚠ No checkpoint found for generation {generation_start - 1}, starting fresh")
+                        # If checkpoint not found, try loading from actual_start if it exists
+                        if actual_start in existing_generations:
+                            try:
+                                self.logger.info(f"📥 Attempting to load checkpoint for generation {actual_start}...")
+                                checkpoint_response = requests.get(
+                                    f"{self.controller_url}/api/experiments/{experiment_id}/checkpoint",
+                                    params={'generation': str(actual_start)},
+                                    timeout=30
+                                )
+                                if checkpoint_response.status_code == 200:
+                                    checkpoint_data = checkpoint_response.json()
+                                    checkpoint_state = checkpoint_data.get('population_state')
+                                    self.logger.info(f"✓ Checkpoint loaded for generation {checkpoint_data.get('generation_number')}")
+                                    actual_start = actual_start + 1  # Start from next generation
+                            except Exception as e2:
+                                self.logger.warning(f"⚠ Error loading checkpoint from {actual_start}: {e2}")
+                        else:
+                            self.logger.warning(f"⚠ No checkpoint found for generation {checkpoint_gen}, starting fresh")
                     else:
                         self.logger.warning(f"⚠ Failed to load checkpoint: {checkpoint_response.status_code}")
                 except Exception as e:
                     self.logger.warning(f"⚠ Error loading checkpoint: {e}, starting fresh")
+            
+            # Update generation_start to skip existing generations
+            if actual_start > generation_start:
+                self.logger.info(f"📝 Adjusting generation_start from {generation_start} to {actual_start} to skip existing generations")
+                generation_start = actual_start
             
             self.logger.info("=" * 80)
             self.logger.info("📋 EXPERIMENT CONFIGURATION")
@@ -470,6 +552,26 @@ class WorkerService:
             # Create checkpoint callback
             checkpoint_callback = self._create_checkpoint_callback(experiment_id)
             
+            # Create generation check callback to avoid duplicate work
+            generation_check_callback = self._create_generation_check_callback(experiment_id)
+            
+            # Create checkpoint loader callback for loading checkpoints when skipping generations
+            def checkpoint_loader_callback(generation_number: int) -> Optional[Dict]:
+                """Load checkpoint for a specific generation number."""
+                try:
+                    checkpoint_response = requests.get(
+                        f"{self.controller_url}/api/experiments/{experiment_id}/checkpoint",
+                        params={'generation': str(generation_number)},
+                        timeout=30
+                    )
+                    if checkpoint_response.status_code == 200:
+                        checkpoint_data = checkpoint_response.json()
+                        return checkpoint_data.get('population_state')
+                    return None
+                except Exception as e:
+                    self.logger.warning(f"⚠️  Error loading checkpoint for generation {generation_number}: {e}")
+                    return None
+            
             # Initialize and run experiment batch
             runner = OptimizedExperimentRunner(
                 config,
@@ -478,7 +580,9 @@ class WorkerService:
                 stop_check_callback=stop_check_callback,
                 generation_start=generation_start,
                 generation_end=generation_end,
-                checkpoint_callback=checkpoint_callback
+                checkpoint_callback=checkpoint_callback,
+                generation_check_callback=generation_check_callback,
+                checkpoint_loader_callback=checkpoint_loader_callback
             )
             
             # Load checkpoint state if available
