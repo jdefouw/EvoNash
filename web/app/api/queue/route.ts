@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
         // Re-fetch assigned batches after recovery
         const { data: updatedBatches } = await supabase
           .from('job_assignments')
-          .select('generation_start, generation_end, status, worker_id')
+          .select('generation_start, generation_end, status, worker_id, assigned_at, started_at')
           .eq('experiment_id', experiment.id)
           .in('status', ['assigned', 'processing'])
         
@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
             `${b.generation_start}-${b.generation_end}`
           ))
           assignedBatches = (updatedBatches || []).filter((b: any) => {
-            // Exclude batches that match the worker's own jobs
+            // Exclude batches that match the worker's own jobs (allow recovery)
             const batchKey = `${b.generation_start}-${b.generation_end}`
             return !ownBatchRanges.has(batchKey)
           })
