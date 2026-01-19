@@ -169,6 +169,35 @@ export async function POST(request: NextRequest) {
       
       const existingGenerationNumbers = new Set((existingGenerations || []).map((g: any) => g.generation_number))
       
+      // CRITICAL: Check if there's already an active batch for this experiment
+      // Since generations are sequential and depend on previous ones, only ONE batch can be active at a time
+      // BUT: Allow workers to recover their own jobs
+      const activeBatches = (assignedBatches || []).filter((b: any) => 
+        b.status === 'assigned' || b.status === 'processing'
+      )
+      
+      // Check if there are active batches from OTHER workers (not the requesting worker)
+      const otherWorkersActiveBatches = activeBatches.filter((b: any) => 
+        !worker_id || b.worker_id !== worker_id
+      )
+      
+      if (otherWorkersActiveBatches.length > 0) {
+        // There's already an active batch from another worker - don't assign another one
+        // This prevents race conditions where multiple workers try to process the same experiment
+        console.log(`[QUEUE] Experiment ${experiment.id} already has ${otherWorkersActiveBatches.length} active batch(es) from other workers, skipping assignment`)
+        console.log(`[QUEUE] Active batches: ${otherWorkersActiveBatches.map((b: any) => `${b.generation_start}-${b.generation_end}`).join(', ')}`)
+        continue // Try next experiment
+      }
+      
+      // If worker has their own active batch, they're recovering - that's allowed
+      const ownActiveBatches = activeBatches.filter((b: any) => 
+        worker_id && b.worker_id === worker_id
+      )
+      if (ownActiveBatches.length > 0) {
+        console.log(`[QUEUE] Worker ${worker_id} is recovering their own batch(es): ${ownActiveBatches.map((b: any) => `${b.generation_start}-${b.generation_end}`).join(', ')}`)
+        // Continue to allow the worker to get their own job back
+      }
+      
       // Calculate which generations are already assigned (excluding worker's own recoverable jobs)
       const assignedRanges: Array<{start: number, end: number}> = (assignedBatches || []).map((b: any) => ({
         start: b.generation_start,
@@ -230,6 +259,7 @@ export async function POST(request: NextRequest) {
           }
           
           // Create job assignment
+          // The database trigger will prevent overlapping batches, but we check first to avoid unnecessary errors
           const { data: jobAssignment, error: assignmentError } = await supabase
             .from('job_assignments')
             .insert({
@@ -244,6 +274,12 @@ export async function POST(request: NextRequest) {
             .single()
           
           if (assignmentError) {
+            // Check if error is due to overlapping batch constraint
+            if (assignmentError.message?.includes('overlapping') || assignmentError.message?.includes('already active')) {
+              console.log(`[QUEUE] Batch ${generationStart}-${generationEnd} overlaps with existing batch (race condition prevented)`)
+              // Try next experiment - this one already has an active batch
+              break
+            }
             console.error(`[QUEUE] Failed to create job assignment: ${assignmentError.message}`)
             continue
           }
