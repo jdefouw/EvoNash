@@ -44,7 +44,7 @@ class CSVLogger:
     def _initialize_file(self):
         """Initialize CSV file with headers if it doesn't exist."""
         if not self.filename.exists():
-            with open(self.filename, 'w', newline='') as f:
+            with open(self.filename, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([
                     'generation',
@@ -103,7 +103,7 @@ class CSVLogger:
         
         timestamp = datetime.now().isoformat()
         
-        with open(self.filename, 'a', newline='') as f:
+        with open(self.filename, 'a', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             writer.writerow([
                 generation,

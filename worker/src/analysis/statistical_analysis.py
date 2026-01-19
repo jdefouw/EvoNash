@@ -23,8 +23,8 @@ class StatisticalAnalyzer:
             control_csv_path: Path to control_data.csv
             experimental_csv_path: Path to experimental_data.csv
         """
-        self.control_df = pd.read_csv(control_csv_path)
-        self.experimental_df = pd.read_csv(experimental_csv_path)
+        self.control_df = pd.read_csv(control_csv_path, encoding='utf-8')
+        self.experimental_df = pd.read_csv(experimental_csv_path, encoding='utf-8')
     
     def calculate_convergence_generation(self, df: pd.DataFrame, threshold: float = 0.01) -> Optional[int]:
         """
@@ -223,7 +223,7 @@ class StatisticalAnalyzer:
         }
         
         # Save results to JSON
-        with open(output_path / 'analysis_results.json', 'w') as f:
+        with open(output_path / 'analysis_results.json', 'w', encoding='utf-8') as f:
             json.dump(results, f, indent=2)
         
         return results
