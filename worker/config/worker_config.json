@@ -1,0 +1,9 @@
+{
+  "controller_url": "https://your-app.vercel.app",
+  "poll_interval_seconds": 30,
+  "max_retries": 3,
+  "retry_delay_seconds": 5,
+  "device": "cuda",
+  "log_level": "INFO",
+  "log_file": "logs/worker.log"
+}

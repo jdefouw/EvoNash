@@ -46,6 +46,30 @@ export default function Home() {
           </div>
         </div>
         
+        <div className="mt-8 p-8 border-2 border-green-200 dark:border-green-800 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex-1">
+              <h2 className="text-2xl font-semibold mb-2 text-gray-900 dark:text-white">
+                Download Worker
+              </h2>
+              <p className="text-gray-600 dark:text-gray-400 mb-2">
+                Run experiments on your local Windows machine with GPU support. 
+                The worker package includes everything you need to get started.
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-500">
+                Includes: Python dependencies installer, Windows service setup, and comprehensive documentation.
+              </p>
+            </div>
+            <a
+              href="/api/worker/download"
+              download="evonash-worker-windows.zip"
+              className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all transform hover:scale-105 whitespace-nowrap"
+            >
+              📦 Download Worker
+            </a>
+          </div>
+        </div>
+        
         <div className="mt-12 p-6 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
           <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
             About This Project

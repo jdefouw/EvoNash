@@ -6,14 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "package-worker": "node scripts/package-worker.js"
   },
   "dependencies": {
     "next": "^14.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "@supabase/supabase-js": "^2.38.0",
-    "recharts": "^2.10.0"
+    "recharts": "^2.10.0",
+    "archiver": "^6.0.1"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
