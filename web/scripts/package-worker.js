@@ -71,7 +71,6 @@ const EXCLUDE_PATTERNS = [
   /^service\./,
   /^settings\./,
   /^utf8\./,
-  /^main\.py$/, // Not needed for worker
   /^version\./,
   /^messages\./,
   /^resource\./,
