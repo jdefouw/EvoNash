@@ -215,7 +215,7 @@ class WorkerService:
     
     def _create_batch_upload_callback(self, job_id: str, experiment_id: str, generation_start: int, generation_end: int) -> callable:
         """
-        Create batch upload callback function that collects all generations and uploads as batch.
+        Create batch upload callback function that uploads generations frequently for live UI updates.
         
         Args:
             job_id: Job ID
@@ -224,43 +224,58 @@ class WorkerService:
             generation_end: Last generation in batch
             
         Returns:
-            Callback function that takes generation stats dict and collects them for batch upload
+            Callback function that takes generation stats dict and uploads them periodically
         """
         batch_stats: list = []
+        UPLOAD_INTERVAL = 3  # Upload every 3 generations for live updates
+        
+        def upload_batch(stats_to_upload: list, reason: str):
+            """Helper function to upload a batch of stats."""
+            if not stats_to_upload:
+                return
+            
+            try:
+                payload = {
+                    "job_id": job_id,
+                    "experiment_id": experiment_id,
+                    "generation_stats_batch": stats_to_upload,
+                    "matches": []  # Empty for now
+                }
+                
+                response = requests.post(
+                    f"{self.controller_url}/api/results",
+                    json=payload,
+                    timeout=60
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    self.logger.info(f"✅ Successfully uploaded {len(stats_to_upload)} generations ({reason}): {result.get('generations_inserted', 0)} inserted")
+                else:
+                    self.logger.warning(f"⚠️ Batch upload failed: {response.status_code}")
+                    self.logger.warning(f"  Response: {response.text[:200]}")
+            except Exception as e:
+                self.logger.error(f"✗ Error uploading batch: {e}")
         
         def upload_callback(generation_stats: Dict):
-            """Collect generation stats for batch upload."""
+            """Collect generation stats and upload periodically for live UI updates."""
             gen_num = generation_stats.get('generation', 'unknown')
             batch_stats.append(generation_stats)
             self.logger.info(f"📝 Collected generation {gen_num} for batch upload")
             
-            # Check if this is the last generation in the batch
-            if gen_num >= generation_end:
-                # Upload entire batch
-                self.logger.info(f"📤 Uploading batch of {len(batch_stats)} generations ({generation_start}-{generation_end})...")
-                
-                try:
-                    payload = {
-                        "job_id": job_id,
-                        "experiment_id": experiment_id,
-                        "generation_stats_batch": batch_stats,
-                        "matches": []  # Empty for now
-                    }
-                    
-                    response = requests.post(
-                        f"{self.controller_url}/api/results",
-                        json=payload,
-                        timeout=60
-                    )
-                    
-                    if response.status_code == 200:
-                        result = response.json()
-                        self.logger.info(f"✅ Successfully uploaded batch: {result.get('generations_inserted', 0)} generations")
-                    else:
-                        self.logger.warning(f"⚠️ Batch upload failed: {response.status_code}")
-                        self.logger.warning(f"  Response: {response.text[:200]}")
-                except Exception as e:
-                    self.logger.error(f"✗ Error uploading batch: {e}")
+            # Upload every N generations for live UI updates
+            if len(batch_stats) >= UPLOAD_INTERVAL:
+                stats_to_upload = batch_stats[:UPLOAD_INTERVAL]
+                # Remove uploaded stats from the list
+                del batch_stats[:UPLOAD_INTERVAL]
+                upload_batch(stats_to_upload, f"periodic upload (every {UPLOAD_INTERVAL} gens)")
+            
+            # Always upload remaining stats at the end of the batch
+            if gen_num >= generation_end and batch_stats:
+                self.logger.info(f"📤 Uploading final batch of {len(batch_stats)} generations...")
+                stats_to_upload = list(batch_stats)  # Copy the list
+                batch_stats.clear()
+                upload_batch(stats_to_upload, "final batch")
         
         return upload_callback
     
