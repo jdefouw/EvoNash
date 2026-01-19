@@ -43,6 +43,7 @@ const INCLUDES = [
   'install_service.bat',
   'start_worker.bat',
   'nssm.exe',
+  'nssm.pdb',
   'config/',
   'src/',
 ];
