@@ -123,14 +123,7 @@ export async function POST(request: NextRequest) {
       console.log(`[WORKER REGISTER] Created new worker: ${worker.id}`)
     }
     
-    if (error) {
-      console.error('Error registering worker:', error)
-      return NextResponse.json(
-        { error: error.message || 'Failed to register worker' },
-        { status: 500 }
-      )
-    }
-    
+    // Worker successfully registered/updated
     console.log(`[WORKER REGISTER] Registered worker: ${worker.id} (${gpu_type}, ${vram}GB VRAM, ${max_parallel_jobs} max parallel jobs)`)
     
     return NextResponse.json({
