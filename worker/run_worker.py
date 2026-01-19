@@ -13,6 +13,9 @@ worker_dir = Path(__file__).parent.resolve()
 if str(worker_dir) not in sys.path:
     sys.path.insert(0, str(worker_dir))
 
+# Ensure src is recognized as a package
+import src
+
 from src.worker_service import WorkerService
 
 
