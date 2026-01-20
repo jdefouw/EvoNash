@@ -374,16 +374,46 @@ class WorkerService:
                 # Try to compress the population_state to reduce payload size
                 # Convert to JSON string, compress with gzip, then base64 encode
                 use_compression = True
+                compressed_b64 = None
+                payload_size_bytes = 0
                 try:
                     json_str = json.dumps(population_state)
+                    uncompressed_size = len(json_str.encode('utf-8'))
                     compressed = gzip.compress(json_str.encode('utf-8'))
                     compressed_b64 = base64.b64encode(compressed).decode('utf-8')
+                    compressed_size = len(compressed_b64.encode('utf-8'))
+                    
+                    # Estimate final payload size (JSON overhead + base64 data)
+                    # Base64 encoding increases size by ~33%, JSON wrapper adds ~100 bytes
+                    payload_size_bytes = compressed_size + 200  # Add buffer for JSON wrapper
+                    
+                    # Log size information for debugging
+                    compression_ratio = (1 - compressed_size / uncompressed_size) * 100 if uncompressed_size > 0 else 0
+                    self.logger.debug(f"Checkpoint size: {uncompressed_size:,} bytes uncompressed, {compressed_size:,} bytes compressed ({compression_ratio:.1f}% reduction)")
+                    
+                    # Warn if payload is approaching the limit (4.5MB = 4,500,000 bytes)
+                    if payload_size_bytes > 4_000_000:  # 4MB threshold
+                        self.logger.warning(f"⚠ Checkpoint payload is large ({payload_size_bytes:,} bytes), may exceed Vercel 4.5MB limit")
+                    
                 except Exception as compress_error:
                     self.logger.warning(f"⚠ Compression failed, sending uncompressed: {compress_error}")
                     use_compression = False
+                    # Estimate uncompressed size
+                    try:
+                        json_str = json.dumps(population_state)
+                        payload_size_bytes = len(json_str.encode('utf-8')) + 200
+                    except:
+                        pass
+                
+                # Check if payload is too large before sending
+                MAX_PAYLOAD_SIZE = 4_500_000  # Vercel limit is 4.5MB
+                if payload_size_bytes > MAX_PAYLOAD_SIZE:
+                    self.logger.error(f"⚠ Checkpoint payload too large ({payload_size_bytes:,} bytes > {MAX_PAYLOAD_SIZE:,} bytes). Skipping checkpoint save.")
+                    self.logger.error(f"   Consider reducing max_agents in save_population_state() or using a different storage mechanism.")
+                    return
                 
                 # Prepare request payload - always include generation_number at top level
-                if use_compression:
+                if use_compression and compressed_b64:
                     payload = {
                         'generation_number': int(generation_number),  # Ensure it's an integer
                         'population_state_compressed': compressed_b64,

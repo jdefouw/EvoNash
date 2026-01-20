@@ -4,6 +4,8 @@ import { gunzipSync } from 'zlib'
 
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
+// Increase max duration for large payload processing
+export const maxDuration = 60
 
 // Maximum number of checkpoints to keep per experiment
 const MAX_CHECKPOINTS = 5
@@ -19,7 +21,32 @@ export async function POST(
     const resolvedParams = await Promise.resolve(params)
     const experimentId = resolvedParams.id
     
-    const body = await request.json()
+    // Handle payload size errors gracefully
+    let body
+    try {
+      body = await request.json()
+    } catch (parseError: any) {
+      const errorMessage = (parseError?.message || String(parseError)).toLowerCase()
+      // Check for various payload size error messages
+      if (errorMessage.includes('too large') || 
+          errorMessage.includes('413') || 
+          errorMessage.includes('payload') ||
+          errorMessage.includes('request entity too large') ||
+          errorMessage.includes('body size limit') ||
+          errorMessage.includes('max body size')) {
+        console.error(`[CHECKPOINT] Payload too large error:`, parseError?.message || String(parseError))
+        return NextResponse.json(
+          { 
+            error: 'Payload too large', 
+            details: 'The checkpoint data exceeds the maximum allowed size (typically 4.5MB for serverless functions). Please ensure compression is enabled on the worker.',
+            hint: 'Check worker configuration to ensure compression is enabled for checkpoints. If compression is already enabled, consider reducing population size or saving fewer agents in checkpoints.'
+          },
+          { status: 413 }
+        )
+      }
+      // Re-throw if it's a different error
+      throw parseError
+    }
     const { generation_number, population_state, population_state_compressed, compressed } = body
     
     // Check if generation_number exists (including 0, which is falsy but valid)

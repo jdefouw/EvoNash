@@ -1,10 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 
+// Increase max duration for large payload processing
+export const maxDuration = 60
+
 // Handle result uploads from workers (supports both single and batch uploads)
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    // Handle payload size errors gracefully
+    let body
+    try {
+      body = await request.json()
+    } catch (parseError: any) {
+      const errorMessage = (parseError?.message || String(parseError)).toLowerCase()
+      // Check for various payload size error messages
+      if (errorMessage.includes('too large') || 
+          errorMessage.includes('413') || 
+          errorMessage.includes('payload') ||
+          errorMessage.includes('request entity too large') ||
+          errorMessage.includes('body size limit') ||
+          errorMessage.includes('max body size')) {
+        console.error(`[RESULTS] Payload too large error:`, parseError?.message || String(parseError))
+        return NextResponse.json(
+          { 
+            error: 'Payload too large', 
+            details: 'The results data exceeds the maximum allowed size (typically 4.5MB for serverless functions). Consider reducing batch size or splitting the upload.',
+            hint: 'Try reducing the number of generations per batch, matches per upload, or limit the amount of telemetry data included'
+          },
+          { status: 413 }
+        )
+      }
+      // Re-throw if it's a different error
+      throw parseError
+    }
     const supabase = await createServerClient()
     
     const { job_id, experiment_id, generation_stats, generation_stats_batch, matches } = body
