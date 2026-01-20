@@ -46,14 +46,26 @@ export async function GET(
       
       if (hasAllGenerations) {
         // Check if there are any active job assignments
-        const { data: activeAssignments } = await supabase
+        // Use the same logic as results route: ignore stuck assignments older than 10 minutes
+        const { data: allAssignments } = await supabase
           .from('job_assignments')
-          .select('status')
+          .select('status, started_at, assigned_at')
           .eq('experiment_id', experimentId)
-          .in('status', ['assigned', 'processing'])
+        
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+        const hasActiveAssignments = allAssignments && allAssignments.some((a: any) => {
+          if (a.status === 'assigned') return true
+          if (a.status === 'processing') {
+            // Only consider it active if it started recently (within 10 minutes)
+            // Stuck assignments older than 10 minutes won't block completion
+            const checkTime = a.started_at || a.assigned_at
+            return checkTime && checkTime > tenMinutesAgo
+          }
+          return false
+        })
         
         // If we have all generations and no active assignments, mark as COMPLETED
-        if (!activeAssignments || activeAssignments.length === 0) {
+        if (!hasActiveAssignments) {
           console.log(`[EXPERIMENTS] Auto-marking experiment ${experimentId} as COMPLETED (all generations exist)`)
           const { data: updatedExperiment } = await supabase
             .from('experiments')

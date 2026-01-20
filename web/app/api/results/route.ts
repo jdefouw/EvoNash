@@ -167,20 +167,24 @@ export async function POST(request: NextRequest) {
         .single()
       
       if (jobAssignment) {
-        await supabase
+        const { error: updateError } = await supabase
           .from('job_assignments')
           .update({ 
             status: 'completed',
             completed_at: new Date().toISOString()
           })
           .eq('id', jobAssignment.id)
+        
+        if (updateError) {
+          console.error(`[RESULTS] Error updating job assignment status:`, updateError)
+        }
       }
     }
     
     // Check if all batches for experiment are complete
     const { data: experiment } = await supabase
       .from('experiments')
-      .select('max_generations')
+      .select('max_generations, status')
       .eq('id', experiment_id)
       .single()
     
@@ -193,26 +197,52 @@ export async function POST(request: NextRequest) {
       
       const hasAllGenerations = allGenerations && allGenerations.length >= experiment.max_generations
       
-      // Also check job assignments to see if there are any still active
+      // Re-fetch job assignments AFTER the update to ensure we see the latest status
+      // This avoids race conditions where the update hasn't been committed yet
       const { data: allAssignments } = await supabase
         .from('job_assignments')
-        .select('status')
+        .select('status, started_at, assigned_at')
         .eq('experiment_id', experiment_id)
       
-      // Check if there are any active assignments (assigned or processing)
-      const hasActiveAssignments = allAssignments && allAssignments.some((a: any) => 
-        a.status === 'assigned' || a.status === 'processing'
-      )
-      
-      // Mark as COMPLETED if we have all generations and no active assignments
-      // This ensures completion even if some job assignments failed
-      if (hasAllGenerations && !hasActiveAssignments) {
-        console.log(`[RESULTS] All generations complete for experiment ${experiment_id}, marking as COMPLETED`)
-        await supabase
-          .from('experiments')
-          .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
-          .eq('id', experiment_id)
+      // Only check for completion if experiment is still RUNNING or PENDING
+      if (hasAllGenerations && (experiment.status === 'RUNNING' || experiment.status === 'PENDING')) {
+        // Check if there are any truly active assignments (assigned or recently started processing)
+        // Allow some grace period for assignments that might be stuck
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+        const hasActiveAssignments = allAssignments && allAssignments.some((a: any) => {
+          if (a.status === 'assigned') return true
+          if (a.status === 'processing') {
+            // Only consider it active if it started recently (within 10 minutes)
+            // Stuck assignments older than 10 minutes won't block completion
+            const checkTime = a.started_at || a.assigned_at
+            return checkTime && checkTime > tenMinutesAgo
+          }
+          return false
+        })
+        
+        // Mark as COMPLETED if we have all generations and no active assignments
+        // This ensures completion even if some assignments are stuck or failed
+        if (!hasActiveAssignments) {
+          console.log(`[RESULTS] All generations complete for experiment ${experiment_id}, marking as COMPLETED`)
+          const { error: updateError } = await supabase
+            .from('experiments')
+            .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
+            .eq('id', experiment_id)
+          
+          if (updateError) {
+            console.error(`[RESULTS] Error updating experiment status:`, updateError)
+          }
+        } else {
+          const completedBatches = allAssignments?.filter((a: any) => a.status === 'completed').length || 0
+          const totalBatches = allAssignments?.length || 0
+          const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+          const activeBatches = allAssignments?.filter((a: any) => 
+            a.status === 'assigned' || (a.status === 'processing' && (a.started_at || a.assigned_at) > tenMinutesAgo)
+          ).length || 0
+          console.log(`[RESULTS] Batch saved. Progress: ${completedBatches}/${totalBatches} batches (${activeBatches} active), ${allGenerations?.length || 0}/${experiment.max_generations} generations`)
+        }
       } else {
+        // Log progress even if not checking for completion
         const completedBatches = allAssignments?.filter((a: any) => a.status === 'completed').length || 0
         const totalBatches = allAssignments?.length || 0
         const activeBatches = allAssignments?.filter((a: any) => a.status === 'assigned' || a.status === 'processing').length || 0
