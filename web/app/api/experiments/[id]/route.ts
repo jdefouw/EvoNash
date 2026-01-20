@@ -42,7 +42,12 @@ export async function GET(
         .select('generation_number')
         .eq('experiment_id', experimentId)
       
-      const hasAllGenerations = allGenerations && allGenerations.length >= data.max_generations
+      const generationNumbers = new Set((allGenerations || []).map((g: any) => g.generation_number))
+      const expectedGenerations = new Set(Array.from({ length: data.max_generations }, (_, i) => i))
+      
+      // Check if we have all required generations (0 to max_generations-1)
+      const hasAllGenerations = generationNumbers.size >= data.max_generations && 
+        Array.from(expectedGenerations).every(gen => generationNumbers.has(gen))
       
       if (hasAllGenerations) {
         // Check if there are any active job assignments
@@ -66,7 +71,7 @@ export async function GET(
         
         // If we have all generations and no active assignments, mark as COMPLETED
         if (!hasActiveAssignments) {
-          console.log(`[EXPERIMENTS] Auto-marking experiment ${experimentId} as COMPLETED (all generations exist)`)
+          console.log(`[EXPERIMENTS] Auto-marking experiment ${experimentId} as COMPLETED (${generationNumbers.size}/${data.max_generations} generations exist)`)
           const { data: updatedExperiment } = await supabase
             .from('experiments')
             .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
@@ -75,9 +80,18 @@ export async function GET(
             .single()
           
           if (updatedExperiment) {
+            console.log(`[EXPERIMENTS] ✓ Successfully marked experiment ${experimentId} as COMPLETED`)
             return NextResponse.json(updatedExperiment)
           }
+        } else {
+          const activeBatches = allAssignments?.filter((a: any) => 
+            a.status === 'assigned' || (a.status === 'processing' && (a.started_at || a.assigned_at) > tenMinutesAgo)
+          ).length || 0
+          console.log(`[EXPERIMENTS] Experiment ${experimentId} has all generations but ${activeBatches} active assignments, not marking as COMPLETED yet`)
         }
+      } else {
+        const missingGenerations = Array.from(expectedGenerations).filter(gen => !generationNumbers.has(gen))
+        console.log(`[EXPERIMENTS] Experiment ${experimentId} missing ${missingGenerations.length} generations: ${missingGenerations.slice(0, 10).join(',')}${missingGenerations.length > 10 ? '...' : ''}`)
       }
     }
     

@@ -190,12 +190,18 @@ export async function POST(request: NextRequest) {
     
     if (experiment) {
       // Check if we have all generations (this is the primary indicator of completion)
+      // Generation numbers are 0-indexed, so for max_generations=500, we need generations 0-499
       const { data: allGenerations } = await supabase
         .from('generations')
         .select('generation_number')
         .eq('experiment_id', experiment_id)
       
-      const hasAllGenerations = allGenerations && allGenerations.length >= experiment.max_generations
+      const generationNumbers = new Set((allGenerations || []).map((g: any) => g.generation_number))
+      const expectedGenerations = new Set(Array.from({ length: experiment.max_generations }, (_, i) => i))
+      
+      // Check if we have all required generations (0 to max_generations-1)
+      const hasAllGenerations = generationNumbers.size >= experiment.max_generations && 
+        Array.from(expectedGenerations).every(gen => generationNumbers.has(gen))
       
       // Re-fetch job assignments AFTER the update to ensure we see the latest status
       // This avoids race conditions where the update hasn't been committed yet
@@ -223,7 +229,7 @@ export async function POST(request: NextRequest) {
         // Mark as COMPLETED if we have all generations and no active assignments
         // This ensures completion even if some assignments are stuck or failed
         if (!hasActiveAssignments) {
-          console.log(`[RESULTS] All generations complete for experiment ${experiment_id}, marking as COMPLETED`)
+          console.log(`[RESULTS] All generations complete for experiment ${experiment_id} (${generationNumbers.size}/${experiment.max_generations} generations), marking as COMPLETED`)
           const { error: updateError } = await supabase
             .from('experiments')
             .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
@@ -231,6 +237,8 @@ export async function POST(request: NextRequest) {
           
           if (updateError) {
             console.error(`[RESULTS] Error updating experiment status:`, updateError)
+          } else {
+            console.log(`[RESULTS] ✓ Successfully marked experiment ${experiment_id} as COMPLETED`)
           }
         } else {
           const completedBatches = allAssignments?.filter((a: any) => a.status === 'completed').length || 0
@@ -239,14 +247,16 @@ export async function POST(request: NextRequest) {
           const activeBatches = allAssignments?.filter((a: any) => 
             a.status === 'assigned' || (a.status === 'processing' && (a.started_at || a.assigned_at) > tenMinutesAgo)
           ).length || 0
-          console.log(`[RESULTS] Batch saved. Progress: ${completedBatches}/${totalBatches} batches (${activeBatches} active), ${allGenerations?.length || 0}/${experiment.max_generations} generations`)
+          const missingGenerations = Array.from(expectedGenerations).filter(gen => !generationNumbers.has(gen))
+          console.log(`[RESULTS] Batch saved. Progress: ${completedBatches}/${totalBatches} batches (${activeBatches} active), ${generationNumbers.size}/${experiment.max_generations} generations. Missing: ${missingGenerations.length > 0 ? missingGenerations.slice(0, 10).join(',') + (missingGenerations.length > 10 ? '...' : '') : 'none'}`)
         }
       } else {
         // Log progress even if not checking for completion
         const completedBatches = allAssignments?.filter((a: any) => a.status === 'completed').length || 0
         const totalBatches = allAssignments?.length || 0
         const activeBatches = allAssignments?.filter((a: any) => a.status === 'assigned' || a.status === 'processing').length || 0
-        console.log(`[RESULTS] Batch saved. Progress: ${completedBatches}/${totalBatches} batches (${activeBatches} active), ${allGenerations?.length || 0}/${experiment.max_generations} generations`)
+        const missingGenerations = Array.from(expectedGenerations).filter(gen => !generationNumbers.has(gen))
+        console.log(`[RESULTS] Batch saved. Status: ${experiment.status}, Progress: ${completedBatches}/${totalBatches} batches (${activeBatches} active), ${generationNumbers.size}/${experiment.max_generations} generations. Missing: ${missingGenerations.length > 0 ? missingGenerations.slice(0, 10).join(',') + (missingGenerations.length > 10 ? '...' : '') : 'none'}`)
       }
     }
     
