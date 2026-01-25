@@ -144,11 +144,11 @@ export async function GET() {
 
     // Find convergence points (entropy variance < 0.01)
     const controlConvergenceGen = controlGenerations.find(
-      (g: Generation) => g.entropy_variance !== null && g.entropy_variance < 0.01
+      (g: Generation) => g.entropy_variance != null && g.entropy_variance < 0.01
     )?.generation_number ?? null
 
     const experimentalConvergenceGen = experimentalGenerations.find(
-      (g: Generation) => g.entropy_variance !== null && g.entropy_variance < 0.01
+      (g: Generation) => g.entropy_variance != null && g.entropy_variance < 0.01
     )?.generation_number ?? null
 
     // Calculate convergence improvement
