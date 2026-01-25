@@ -116,7 +116,7 @@ const PROJECT_CONTENT = {
       {
         phase: 'Phase I',
         title: 'Control Run (Static)',
-        description: 'The system was configured to Mode: STATIC and ran for 1,500 generations (750 ticks each).',
+        description: 'The system was configured to Mode: STATIC and ran for 1,500 generations (750 ticks each ≈ 12 sec simulated lifetime per generation).',
         details: [
           'Static mutation rate ε = 0.05',
           'Every 10 generations, Mean Elo and Policy Entropy were logged'
@@ -128,7 +128,7 @@ const PROJECT_CONTENT = {
         description: 'The system was reset with the same seed and configured to Mode: ADAPTIVE.',
         details: [
           'Adaptive mutation rate: ε = Base × (1 - NormalizedElo)',
-          'Ran for 1,500 generations (750 ticks each) with identical conditions'
+          'Ran for 1,500 generations (750 ticks each ≈ 12 sec simulated lifetime) with identical conditions'
         ]
       },
       {

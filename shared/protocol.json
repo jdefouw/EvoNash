@@ -165,8 +165,8 @@
         "ticks_per_generation": {
           "type": "integer",
           "minimum": 1,
-          "default": 500,
-          "description": "Number of simulation ticks per generation"
+          "default": 750,
+          "description": "Number of simulation ticks per generation. A tick is one discrete simulation step (dt=0.016s) where agent physics, neural network decisions, collisions, and food respawning are processed. At 750 ticks, each generation represents ~12 seconds of simulated agent lifetime."
         },
         "network_architecture": {
           "type": "object",

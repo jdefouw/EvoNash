@@ -26,6 +26,7 @@ Deep Reinforcement Learning (DRL) is computationally expensive and often acts as
 * **Nash Equilibrium:** A state in game theory where no player can increase their payoff by changing their strategy unilaterally. In this simulation, it represents the "perfect" unexploitable strategy.
 * **The Genetic Algorithm (GA):** An optimization search inspired by natural selection. It relies on *Selection* (survival of the fittest), *Crossover* (mating), and *Mutation* (random variation).
 * **Evolutionary Stable Strategy (ESS):** A strategy which, if adopted by a population, cannot be invaded by any alternative mutant strategy.
+* **Simulation Tick:** A tick is one discrete simulation step (dt = 0.016s of simulated time). Each tick updates agent physics, processes neural network decisions, resolves collisions, and respawns food. At 750 ticks per generation, agents have approximately 12 seconds of simulated lifetime to accumulate fitness before selection occurs.
 
 ---
 

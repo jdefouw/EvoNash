@@ -41,6 +41,23 @@ To ensure validity, the environment is **deterministic** and **biological**, not
 
 * **Topology:** 2D Continuous Toroidal Space (Wrap-around borders).
 * **Physics:** Frictionless Euler Integration.
+
+### 3.1. Simulation Ticks
+A **tick** is the fundamental unit of simulation time—one discrete step in the Petri Dish environment.
+
+**What happens in one tick (dt = 0.016 seconds of simulated time):**
+1. **Physics Update:** Agent positions and velocities are updated via Euler integration.
+2. **Energy Decay:** Each agent loses 0.1 energy per tick (metabolism cost).
+3. **Neural Network Inference:** Each agent's brain processes sensory inputs and outputs actions.
+4. **Action Execution:** Thrust, turn, shoot, and split commands are applied.
+5. **Collision Detection:** Food consumption and projectile hits are resolved.
+6. **Projectile Lifecycle:** Projectiles move and expire after their lifetime.
+7. **Food Respawning:** Consumed food respawns periodically.
+
+**Default Configuration:** 750 ticks per generation ≈ 12 seconds of simulated agent lifetime.
+
+At ~62.5 ticks per simulated second, agents have approximately 12 seconds to forage, evade predators, and accumulate fitness before the generation ends and selection occurs.
+
 * **Entities:**
     * **Agents:** Circles with `Energy` (Health).
     * **Metabolism:** Constant energy decay (-0.1/tick). Movement costs energy.

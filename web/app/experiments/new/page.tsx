@@ -215,7 +215,7 @@ export default function NewExperimentPage() {
               </div>
 
               <div>
-                <Tooltip content="The number of discrete simulation steps or time units during which each agent is evaluated within a single generation to determine its performance or fitness.">
+                <Tooltip content="A tick is one discrete simulation step (~16ms of simulated time). Each tick updates agent physics (energy decay, movement), processes neural network decisions, handles collisions, and respawns food. At 750 ticks, agents have ~12 seconds of simulated lifetime per generation.">
                   <label htmlFor="ticks_per_generation" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
                     Ticks Per Generation
                   </label>
@@ -229,7 +229,7 @@ export default function NewExperimentPage() {
                   onChange={handleChange}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 />
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Simulation ticks per generation</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">750 ticks ≈ 12 seconds of simulated agent lifetime</p>
               </div>
             </div>
 

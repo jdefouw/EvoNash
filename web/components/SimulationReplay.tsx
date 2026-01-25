@@ -178,7 +178,7 @@ export default function SimulationReplay({
             <span className="text-gray-300">Generation: </span>
             <span className="font-bold">{currentGeneration?.generation_number ?? 0} / {totalGenerations - 1}</span>
           </div>
-          <div>
+          <div title="One tick = one simulation step (~16ms). Agents act, physics updates, and collisions are resolved each tick.">
             <span className="text-gray-300">Tick: </span>
             <span className="font-bold">{currentTick} / {ticksPerGeneration - 1}</span>
           </div>

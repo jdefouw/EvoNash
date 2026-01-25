@@ -23,6 +23,12 @@ export interface ExperimentConfig {
   population_size: number;
   selection_pressure: number;
   max_generations: number;
+  /**
+   * Number of simulation ticks per generation.
+   * A tick is one discrete simulation step (dt=0.016s) where agent physics,
+   * neural network decisions, collisions, and food respawning are processed.
+   * Default: 750 ticks ≈ 12 seconds of simulated agent lifetime.
+   */
   ticks_per_generation?: number;
   network_architecture: NetworkArchitecture;
   experiment_group: ExperimentGroup;
@@ -80,6 +86,12 @@ export interface Experiment {
   random_seed: number;
   population_size: number;
   max_generations: number;
+  /**
+   * Number of simulation ticks per generation.
+   * A tick is one discrete simulation step (dt=0.016s) where agent physics,
+   * neural network decisions, collisions, and food respawning are processed.
+   * Default: 750 ticks ≈ 12 seconds of simulated agent lifetime.
+   */
   ticks_per_generation?: number;
   status: ExperimentStatus;
   created_at: string;
