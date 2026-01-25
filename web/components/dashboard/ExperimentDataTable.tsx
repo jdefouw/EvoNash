@@ -92,28 +92,18 @@ export default function ExperimentDataTable({
       data = data.filter(row => row.group === filterGroup)
     }
 
-    // Sort
+    // Sort (all sortable fields are numeric)
     data.sort((a, b) => {
       const aVal = a[sortField]
       const bVal = b[sortField]
 
-      // Handle null values
-      const aNum = aVal === null ? -Infinity : aVal
-      const bNum = bVal === null ? -Infinity : bVal
-
-      if (typeof aNum === 'string' && typeof bNum === 'string') {
-        return sortDirection === 'asc' 
-          ? aNum.localeCompare(bNum)
-          : bNum.localeCompare(aNum)
-      }
-
-      // Treat as numbers
-      const aNumeric = typeof aNum === 'number' ? aNum : -Infinity
-      const bNumeric = typeof bNum === 'number' ? bNum : -Infinity
+      // Handle null values - treat as -Infinity for sorting
+      const aNum = aVal ?? -Infinity
+      const bNum = bVal ?? -Infinity
 
       return sortDirection === 'asc' 
-        ? aNumeric - bNumeric
-        : bNumeric - aNumeric
+        ? aNum - bNum
+        : bNum - aNum
     })
 
     return data
