@@ -12,7 +12,7 @@ set SCRIPT_DIR=%~dp0
 cd /d %SCRIPT_DIR%
 
 REM Check if Python is installed
-echo [1/5] Checking Python installation...
+echo [1/6] Checking Python installation...
 where python >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -26,7 +26,7 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 python --version
-echo ✓ Python found
+echo OK: Python found
 echo.
 
 REM Check Python version (should be 3.8+)
@@ -45,34 +45,67 @@ if %MAJOR% EQU 3 if %MINOR% LSS 8 (
     exit /b 1
 )
 
-echo [2/5] Upgrading pip...
+echo [2/6] Upgrading pip...
 python -m pip install --upgrade pip
 if %ERRORLEVEL% NEQ 0 (
     echo WARNING: Failed to upgrade pip, continuing anyway...
 )
 echo.
 
-echo [3/5] Installing PyTorch with CUDA support...
-echo IMPORTANT: This will install PyTorch with CUDA 12.8 support.
-echo If you need a different CUDA version, see: https://pytorch.org/get-started/locally/
+REM Uninstall existing PyTorch to avoid conflicts
+echo [3/6] Removing any existing PyTorch installation...
+python -m pip uninstall torch torchvision torchaudio -y >nul 2>&1
+echo OK: Cleared existing PyTorch
 echo.
-python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+
+echo [4/6] Installing PyTorch with CUDA support...
+echo.
+echo Available CUDA versions:
+echo   1. CUDA 12.8 (Latest - requires NVIDIA driver 570+)
+echo   2. CUDA 12.4 (Stable - requires NVIDIA driver 550+)
+echo   3. CUDA 12.1 (Older - requires NVIDIA driver 530+)
+echo   4. CUDA 11.8 (Legacy - requires NVIDIA driver 520+)
+echo   5. CPU only (No GPU acceleration)
+echo.
+echo To check your NVIDIA driver version, run: nvidia-smi
+echo.
+
+set /p CUDA_CHOICE="Select CUDA version [1-5, default=2]: "
+if "%CUDA_CHOICE%"=="" set CUDA_CHOICE=2
+
+if "%CUDA_CHOICE%"=="1" (
+    echo Installing PyTorch with CUDA 12.8...
+    python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+) else if "%CUDA_CHOICE%"=="2" (
+    echo Installing PyTorch with CUDA 12.4...
+    python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+) else if "%CUDA_CHOICE%"=="3" (
+    echo Installing PyTorch with CUDA 12.1...
+    python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+) else if "%CUDA_CHOICE%"=="4" (
+    echo Installing PyTorch with CUDA 11.8...
+    python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+) else if "%CUDA_CHOICE%"=="5" (
+    echo Installing PyTorch CPU-only version...
+    python -m pip install torch torchvision torchaudio
+) else (
+    echo Invalid choice. Installing default (CUDA 12.4)...
+    python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+)
+
 if %ERRORLEVEL% NEQ 0 (
     echo.
-    echo ERROR: Failed to install PyTorch with CUDA support
+    echo ERROR: Failed to install PyTorch
     echo.
-    echo If you don't have a CUDA-compatible GPU, you can install CPU-only PyTorch:
-    echo   python -m pip install torch torchvision torchaudio
-    echo.
-    echo However, the worker will run much slower on CPU.
+    echo Try running as Administrator or check your internet connection.
     echo.
     pause
     exit /b 1
 )
-echo ✓ PyTorch installed
+echo OK: PyTorch installed
 echo.
 
-echo [4/5] Installing other dependencies...
+echo [5/6] Installing other dependencies...
 python -m pip install -r requirements.txt
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -81,17 +114,42 @@ if %ERRORLEVEL% NEQ 0 (
     pause
     exit /b 1
 )
-echo ✓ Dependencies installed
+echo OK: Dependencies installed
 echo.
 
-echo [5/5] Verifying CUDA installation...
-python -c "import torch; print('CUDA available:', torch.cuda.is_available()); print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A')"
-if %ERRORLEVEL% NEQ 0 (
-    echo WARNING: Could not verify CUDA installation
-) else (
-    echo ✓ CUDA verification complete
-)
+echo [6/6] Verifying installation...
 echo.
+echo ----------------------------------------
+echo PyTorch and CUDA Diagnostics:
+echo ----------------------------------------
+python -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA built with: {torch.version.cuda if torch.version.cuda else \"None (CPU build)\"}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'Device count: {torch.cuda.device_count() if torch.cuda.is_available() else 0}'); print(f'GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}'); print(f'VRAM: {torch.cuda.get_device_properties(0).total_memory // (1024**3)} GB' if torch.cuda.is_available() else '')"
+echo ----------------------------------------
+echo.
+
+REM Check if CUDA is working
+python -c "import torch; exit(0 if torch.cuda.is_available() else 1)" 2>nul
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo ========================================
+    echo WARNING: CUDA is NOT available!
+    echo ========================================
+    echo.
+    echo Possible causes:
+    echo   1. No NVIDIA GPU installed
+    echo   2. NVIDIA driver not installed or outdated
+    echo   3. Wrong CUDA version selected for your driver
+    echo   4. PyTorch installed without CUDA support
+    echo.
+    echo To check your GPU and driver:
+    echo   nvidia-smi
+    echo.
+    echo The worker will run on CPU, which is much slower.
+    echo To fix this, run install.bat again and select the correct CUDA version.
+    echo.
+) else (
+    echo OK: CUDA is available and working!
+    echo.
+)
 
 echo ========================================
 echo Installation Complete!
