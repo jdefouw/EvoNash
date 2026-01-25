@@ -19,17 +19,17 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Validate vram_gb is a positive integer
+    // Validate vram_gb is a non-negative integer (0 is allowed for CPU workers)
     const vram = parseInt(vram_gb)
-    if (isNaN(vram) || vram <= 0) {
+    if (isNaN(vram) || vram < 0) {
       return NextResponse.json(
-        { error: 'vram_gb must be a positive integer' },
+        { error: 'vram_gb must be a non-negative integer' },
         { status: 400 }
       )
     }
     
-    // Calculate max_parallel_jobs: floor(vram_gb / 2)
-    const max_parallel_jobs = Math.floor(vram / 2)
+    // Calculate max_parallel_jobs: floor(vram_gb / 2), minimum 1 for CPU workers
+    const max_parallel_jobs = Math.max(1, Math.floor(vram / 2))
     
     // If worker_id provided, try to find existing worker
     let worker

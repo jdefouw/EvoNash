@@ -134,57 +134,131 @@ class WorkerService:
         return None, 0
     
     def _check_gpu(self):
-        """Check GPU availability and log status."""
-        self.gpu_type, self.vram_gb = self._get_gpu_info()
+        """Check GPU availability and log status with detailed diagnostics."""
+        import os
+        
+        # Log PyTorch and CUDA build info for diagnostics
+        self.logger.info(f"PyTorch version: {torch.__version__}")
+        self.logger.info(f"PyTorch CUDA built with: {torch.version.cuda if torch.version.cuda else 'None (CPU-only build)'}")
         
         if self.device == 'cuda':
-            if torch.cuda.is_available():
-                self.logger.info(f"GPU available: {self.gpu_type}")
-                self.logger.info(f"VRAM: {self.vram_gb} GB")
-                self.logger.info(f"CUDA version: {torch.version.cuda}")
-                # Calculate max parallel jobs: floor(vram_gb / 2)
-                self.max_parallel_jobs = self.vram_gb // 2
-                self.logger.info(f"Max parallel jobs: {self.max_parallel_jobs} (based on 2GB per job)")
+            # Detailed CUDA availability check
+            cuda_available = torch.cuda.is_available()
+            self.logger.info(f"torch.cuda.is_available(): {cuda_available}")
+            
+            if not cuda_available:
+                # Additional diagnostics when CUDA appears unavailable
+                self.logger.warning("=" * 60)
+                self.logger.warning("CUDA DIAGNOSTICS - Investigating why CUDA is unavailable")
+                self.logger.warning("=" * 60)
+                
+                # Check if CUDA was built into PyTorch
+                if not torch.version.cuda:
+                    self.logger.error("❌ PyTorch was built WITHOUT CUDA support!")
+                    self.logger.error("   Install PyTorch with CUDA: pip install torch --index-url https://download.pytorch.org/whl/cu121")
+                else:
+                    self.logger.info(f"✓ PyTorch was built with CUDA {torch.version.cuda}")
+                    
+                    # Try to get more info about why CUDA isn't working
+                    try:
+                        device_count = torch.cuda.device_count()
+                        self.logger.info(f"  Device count: {device_count}")
+                    except Exception as e:
+                        self.logger.error(f"  Error getting device count: {e}")
+                    
+                    # Check CUDA_VISIBLE_DEVICES
+                    cuda_visible = os.environ.get('CUDA_VISIBLE_DEVICES', 'not set')
+                    self.logger.info(f"  CUDA_VISIBLE_DEVICES: {cuda_visible}")
+                    
+                    # Try to initialize CUDA explicitly
+                    try:
+                        self.logger.info("  Attempting explicit CUDA initialization...")
+                        torch.cuda.init()
+                        # Check again after explicit init
+                        if torch.cuda.is_available():
+                            self.logger.info("  ✓ CUDA now available after explicit init!")
+                            cuda_available = True
+                        else:
+                            self.logger.warning("  ✗ CUDA still unavailable after explicit init")
+                    except Exception as e:
+                        self.logger.error(f"  CUDA init error: {e}")
+                
+                self.logger.warning("=" * 60)
+            
+            if cuda_available:
+                self.gpu_type, self.vram_gb = self._get_gpu_info()
+                self.logger.info(f"✓ GPU available: {self.gpu_type}")
+                self.logger.info(f"  VRAM: {self.vram_gb} GB")
+                self.logger.info(f"  CUDA version: {torch.version.cuda}")
+                # Calculate max parallel jobs: floor(vram_gb / 2), minimum 1
+                self.max_parallel_jobs = max(1, self.vram_gb // 2)
+                self.logger.info(f"  Max parallel jobs: {self.max_parallel_jobs} (based on 2GB per job)")
             else:
-                self.logger.warning("CUDA requested but not available, falling back to CPU")
+                self.logger.warning("⚠ CUDA requested but not available, falling back to CPU")
                 self.device = 'cpu'
+                self.gpu_type = 'CPU'
+                self.vram_gb = 0
                 self.max_parallel_jobs = 1  # CPU can handle 1 job at a time
         else:
-            self.logger.info("Running on CPU")
+            self.logger.info("Running on CPU (configured)")
+            self.gpu_type = 'CPU'
+            self.vram_gb = 0
             self.max_parallel_jobs = 1
     
     def _register_worker(self):
         """Register worker with controller using persistent worker_id."""
-        try:
-            worker_name = self.worker_config.get('worker_name', None)
-            
-            payload = {
-                'worker_id': self.persistent_worker_id,  # Send persistent ID
-                'worker_name': worker_name,
-                'gpu_type': self.gpu_type or 'CPU',
-                'vram_gb': self.vram_gb
-            }
-            
-            self.logger.info(f"Registering worker with controller (persistent ID: {self.persistent_worker_id})...")
-            response = requests.post(
-                f"{self.controller_url}/api/workers/register",
-                json=payload,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                self.worker_id = data.get('worker_id')
-                self.max_parallel_jobs = data.get('max_parallel_jobs', self.max_parallel_jobs)
-                self.logger.info(f"✓ Worker registered: {self.worker_id}")
-                self.logger.info(f"  GPU: {self.gpu_type or 'CPU'}, VRAM: {self.vram_gb}GB")
-                self.logger.info(f"  Max parallel jobs: {self.max_parallel_jobs}")
-            else:
-                self.logger.warning(f"⚠ Worker registration failed: {response.status_code}")
-                self.logger.warning(f"  Response: {response.text}")
-        except Exception as e:
-            self.logger.error(f"✗ Error registering worker: {e}")
-            self.logger.error("  Worker will continue but may not be tracked by controller")
+        max_retries = 3
+        retry_delay = 5
+        
+        for attempt in range(max_retries):
+            try:
+                worker_name = self.worker_config.get('worker_name', None)
+                
+                payload = {
+                    'worker_id': self.persistent_worker_id,  # Send persistent ID
+                    'worker_name': worker_name,
+                    'gpu_type': self.gpu_type or 'CPU',
+                    'vram_gb': self.vram_gb
+                }
+                
+                self.logger.info(f"Registering worker with controller (persistent ID: {self.persistent_worker_id})...")
+                self.logger.info(f"  Payload: gpu_type={payload['gpu_type']}, vram_gb={payload['vram_gb']}")
+                
+                response = requests.post(
+                    f"{self.controller_url}/api/workers/register",
+                    json=payload,
+                    timeout=10
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    self.worker_id = data.get('worker_id')
+                    self.max_parallel_jobs = data.get('max_parallel_jobs', self.max_parallel_jobs)
+                    self.logger.info(f"✓ Worker registered: {self.worker_id}")
+                    self.logger.info(f"  GPU: {self.gpu_type or 'CPU'}, VRAM: {self.vram_gb}GB")
+                    self.logger.info(f"  Max parallel jobs: {self.max_parallel_jobs}")
+                    return  # Success
+                else:
+                    self.logger.warning(f"⚠ Worker registration failed: {response.status_code}")
+                    self.logger.warning(f"  Response: {response.text}")
+                    
+                    if attempt < max_retries - 1:
+                        self.logger.info(f"  Retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                    
+            except Exception as e:
+                self.logger.error(f"✗ Error registering worker (attempt {attempt + 1}/{max_retries}): {e}")
+                
+                if attempt < max_retries - 1:
+                    self.logger.info(f"  Retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+        
+        # All retries failed - use persistent ID as fallback
+        self.logger.warning("⚠ All registration attempts failed. Using persistent ID as worker_id.")
+        self.worker_id = self.persistent_worker_id
+        self.logger.warning(f"  Worker will continue with ID: {self.worker_id}")
     
     def _send_heartbeat(self):
         """Send heartbeat to controller."""
