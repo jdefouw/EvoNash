@@ -220,8 +220,9 @@ export default function ScienceFairDashboard() {
   }
 
   // Determine if hypothesis is supported based on data
-  const isHypothesisSupported = data?.statistics?.isSignificant && 
-    (data?.statistics?.convergenceImprovement ?? 0) > 0
+  const isHypothesisSupported: boolean = Boolean(
+    data?.statistics?.isSignificant && (data?.statistics?.convergenceImprovement ?? 0) > 0
+  )
 
   const supportingEvidence = data?.statistics ? 
     `The Experimental group converged ${data.statistics.convergenceImprovement?.toFixed(0) ?? '?'}% faster (Generation ${data.statistics.experimentalConvergenceGen ?? '?'} vs ${data.statistics.controlConvergenceGen ?? '?'}). T-test p-value: ${data.statistics.pValue?.toFixed(4) ?? 'N/A'}` : 
