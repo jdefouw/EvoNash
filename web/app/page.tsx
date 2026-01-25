@@ -96,7 +96,7 @@ const PROJECT_CONTENT = {
       }
     ],
     controlled: [
-      { name: 'Random Seed', description: 'Ensures identical starting populations', value: '12345' },
+      { name: 'Random Seed', description: 'Ensures identical starting populations', value: '42' },
       { name: 'Population Size', description: 'Number of agents per generation', value: 'N = 1000' },
       { name: 'Neural Architecture', description: 'Network structure for all agents', value: '24 → 64 → 4' },
       { name: 'Compute Environment', description: 'Hardware used for simulation', value: 'RTX 3090' },

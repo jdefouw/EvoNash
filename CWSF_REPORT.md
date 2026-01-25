@@ -51,7 +51,7 @@ To ensure scientific validity, this project utilizes a **Controlled Comparative 
     * *Convergence Velocity:* The number of generations required for the population's Policy Entropy variance to drop below $\sigma < 0.01$.
     * *Peak Performance:* The maximum Elo rating achieved after 1,500 generations.
 * **Controlled Variables (Constants):**
-    * **The Random Seed:** Set to `12345` for both runs to ensure identical starting populations.
+    * **The Random Seed:** Set to `42` for both runs to ensure identical starting populations.
     * **Population Size:** $N = 1000$ agents.
     * **Neural Architecture:** Input(24) $\rightarrow$ Hidden(64) $\rightarrow$ Output(4).
     * **Compute Environment:** NVIDIA RTX 3090 (Allocated CUDA Cores fixed).
@@ -71,7 +71,7 @@ To ensure scientific validity, this project utilizes a **Controlled Comparative 
     * The simulation ran for 1,500 generations (750 ticks each).
     * Every 10 generations, the `Mean Elo` and `Policy Entropy` were logged to the database.
 3.  **Phase II: Experimental Run (Adaptive):**
-    * The system was reset. The Random Seed was re-entered (`12345`).
+    * The system was reset. The Random Seed was re-entered (`42`).
     * The system was configured to `Mode: ADAPTIVE`.
     * The simulation ran for 1,500 generations (750 ticks each).
 4.  **Data Extraction:** Raw telemetry was exported to CSV format for statistical analysis using SciPy.

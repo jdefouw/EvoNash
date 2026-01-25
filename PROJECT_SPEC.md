@@ -76,7 +76,7 @@ The system uses a **Controller-Worker** pattern to decouple visualization from t
     * **Headless:** No rendering during training. Rendering only generated for "Replay Files."
 * **Workflow:**
     1.  Request Config (e.g., "Run Experiment Group B").
-    2.  Init Population (Random Seed `12345`).
+    2.  Init Population (Random Seed `42`).
     3.  Loop 1,500 Generations (750 ticks each).
     4.  Log metrics to CSV.
     5.  Upload results to Controller.

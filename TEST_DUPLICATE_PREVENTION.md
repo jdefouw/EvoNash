@@ -140,7 +140,7 @@ This document outlines tests to verify that duplicate generation processing is p
    ```sql
    -- Insert test experiment
    INSERT INTO experiments (experiment_name, experiment_group, mutation_mode, random_seed, population_size, max_generations, status)
-   VALUES ('Test Duplicate Prevention', 'CONTROL', 'STATIC', 12345, 100, 10, 'RUNNING');
+   VALUES ('Test Duplicate Prevention', 'CONTROL', 'STATIC', 42, 100, 10, 'RUNNING');
    ```
 
 2. **Manually insert some generations**:
