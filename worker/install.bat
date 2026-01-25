@@ -61,36 +61,40 @@ echo.
 echo [4/6] Installing PyTorch with CUDA support...
 echo.
 echo Available CUDA versions:
-echo   1. CUDA 12.8 (Latest - requires NVIDIA driver 570+)
-echo   2. CUDA 12.4 (Stable - requires NVIDIA driver 550+)
-echo   3. CUDA 12.1 (Older - requires NVIDIA driver 530+)
-echo   4. CUDA 11.8 (Legacy - requires NVIDIA driver 520+)
-echo   5. CPU only (No GPU acceleration)
+echo   1. CUDA 13.1 (Latest - requires NVIDIA driver 580+)
+echo   2. CUDA 12.8 (Stable - requires NVIDIA driver 570+)
+echo   3. CUDA 12.4 (Older - requires NVIDIA driver 550+)
+echo   4. CUDA 12.1 (Older - requires NVIDIA driver 530+)
+echo   5. CUDA 11.8 (Legacy - requires NVIDIA driver 520+)
+echo   6. CPU only (No GPU acceleration)
 echo.
 echo To check your NVIDIA driver version, run: nvidia-smi
 echo.
 
-set /p CUDA_CHOICE="Select CUDA version [1-5, default=2]: "
-if "%CUDA_CHOICE%"=="" set CUDA_CHOICE=2
+set /p CUDA_CHOICE="Select CUDA version [1-6, default=1]: "
+if "%CUDA_CHOICE%"=="" set CUDA_CHOICE=1
 
 if "%CUDA_CHOICE%"=="1" (
+    echo Installing PyTorch with CUDA 13.1...
+    python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu131
+) else if "%CUDA_CHOICE%"=="2" (
     echo Installing PyTorch with CUDA 12.8...
     python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-) else if "%CUDA_CHOICE%"=="2" (
+) else if "%CUDA_CHOICE%"=="3" (
     echo Installing PyTorch with CUDA 12.4...
     python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-) else if "%CUDA_CHOICE%"=="3" (
+) else if "%CUDA_CHOICE%"=="4" (
     echo Installing PyTorch with CUDA 12.1...
     python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-) else if "%CUDA_CHOICE%"=="4" (
+) else if "%CUDA_CHOICE%"=="5" (
     echo Installing PyTorch with CUDA 11.8...
     python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-) else if "%CUDA_CHOICE%"=="5" (
+) else if "%CUDA_CHOICE%"=="6" (
     echo Installing PyTorch CPU-only version...
     python -m pip install torch torchvision torchaudio
 ) else (
-    echo Invalid choice. Installing default (CUDA 12.4)...
-    python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+    echo Invalid choice. Installing default (CUDA 13.1)...
+    python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu131
 )
 
 if %ERRORLEVEL% NEQ 0 (
