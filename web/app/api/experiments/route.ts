@@ -80,8 +80,8 @@ export async function POST(request: NextRequest) {
       mutation_mode,
       random_seed: random_seed || 42,
       population_size: population_size || 1000,
-      max_generations: max_generations || 5000,
-      ticks_per_generation: ticks_per_generation || 500,
+      max_generations: max_generations || 1500,
+      ticks_per_generation: ticks_per_generation || 750,
       mutation_rate,
       mutation_base,
       max_possible_elo: max_possible_elo || 2000.0,
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
       population_size: data.population_size,
       selection_pressure: data.selection_pressure,
       max_generations: data.max_generations,
-      ticks_per_generation: data.ticks_per_generation || 500,
+      ticks_per_generation: data.ticks_per_generation || 750,
       network_architecture: data.network_architecture,
       experiment_group: data.experiment_group
     }

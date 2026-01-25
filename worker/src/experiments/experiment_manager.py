@@ -20,8 +20,8 @@ class ExperimentConfig:
     random_seed: int = 42
     population_size: int = 1000
     selection_pressure: float = 0.2
-    max_generations: int = 5000
-    ticks_per_generation: int = 500  # Number of simulation ticks per generation
+    max_generations: int = 1500
+    ticks_per_generation: int = 750  # Number of simulation ticks per generation
     network_architecture: Dict = None
     experiment_group: str = 'CONTROL'  # 'CONTROL' or 'EXPERIMENTAL'
     
