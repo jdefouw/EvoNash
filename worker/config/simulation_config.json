@@ -33,7 +33,7 @@
     "lifetime": 200
   },
   "simulation": {
-    "ticks_per_generation": 1000,
+    "ticks_per_generation": 750,
     "max_agents": 1000
   },
   "raycast": {

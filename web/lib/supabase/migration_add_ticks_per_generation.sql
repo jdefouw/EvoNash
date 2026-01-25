@@ -11,11 +11,11 @@ BEGIN
         AND column_name = 'ticks_per_generation'
     ) THEN
         ALTER TABLE experiments 
-        ADD COLUMN ticks_per_generation INTEGER DEFAULT 500;
+        ADD COLUMN ticks_per_generation INTEGER DEFAULT 750;
         
         -- Update existing rows to have the default value
         UPDATE experiments 
-        SET ticks_per_generation = 500 
+        SET ticks_per_generation = 750 
         WHERE ticks_per_generation IS NULL;
     END IF;
 END $$;

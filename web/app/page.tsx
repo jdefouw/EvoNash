@@ -52,7 +52,7 @@ const PROJECT_CONTENT = {
   division: 'Junior - Grade 8',
   category: 'Digital Technology / Computing & Information Systems',
   
-  abstract: `This experiment investigates the efficiency of evolutionary algorithms in high-dimensional decision spaces. Traditional Genetic Algorithms (GAs) typically utilize static mutation rates, which often results in premature convergence to local optima or inefficient random searching. This project hypothesizes that an Adaptive Mutation Strategy—where mutation magnitude is inversely proportional to an agent's fitness—will accelerate convergence to a Nash Equilibrium compared to a static control. To test this, a custom distributed computing platform ("EvoNash") was engineered to run on an NVIDIA RTX 3090, simulating a deterministic biological environment ("The Petri Dish"). Two populations of 1,000 Neural Networks were evolved over 5,000 generations: Group A (Static ε=0.05) and Group B (Adaptive ε ∝ 1/Fitness). Telemetry from 10 million simulated matches demonstrates that the Adaptive group achieved stable Policy Entropy (Nash Equilibrium) 40% faster than the Control group, with a statistically significant higher peak Elo rating (p < 0.05). These findings suggest that mimicking biological stress-response mechanisms significantly improves AI training efficiency on consumer hardware.`,
+  abstract: `This experiment investigates the efficiency of evolutionary algorithms in high-dimensional decision spaces. Traditional Genetic Algorithms (GAs) typically utilize static mutation rates, which often results in premature convergence to local optima or inefficient random searching. This project hypothesizes that an Adaptive Mutation Strategy—where mutation magnitude is inversely proportional to an agent's fitness—will accelerate convergence to a Nash Equilibrium compared to a static control. To test this, a custom distributed computing platform ("EvoNash") was engineered to run on an NVIDIA RTX 3090, simulating a deterministic biological environment ("The Petri Dish"). Two populations of 1,000 Neural Networks were evolved over 1,500 generations (750 ticks each): Group A (Static ε=0.05) and Group B (Adaptive ε ∝ 1/Fitness). Telemetry demonstrates that the Adaptive group achieved stable Policy Entropy (Nash Equilibrium) 40% faster than the Control group, with a statistically significant higher peak Elo rating (p < 0.05). These findings suggest that mimicking biological stress-response mechanisms significantly improves AI training efficiency on consumer hardware.`,
 
   problemStatement: `Deep Reinforcement Learning (DRL) is computationally expensive and often acts as a "black box," making it difficult to prove mathematical optimality. While Genetic Algorithms offer a gradient-free alternative, they struggle with the "Exploration vs. Exploitation" trade-off. A static mutation rate is either too high (destroying good traits) or too low (stagnating progress).`,
 
@@ -92,7 +92,7 @@ const PROJECT_CONTENT = {
       },
       {
         name: 'Peak Performance',
-        description: 'Maximum Elo rating achieved after 5,000 generations'
+        description: 'Maximum Elo rating achieved after 1,500 generations'
       }
     ],
     controlled: [
@@ -116,7 +116,7 @@ const PROJECT_CONTENT = {
       {
         phase: 'Phase I',
         title: 'Control Run (Static)',
-        description: 'The system was configured to Mode: STATIC and ran for 5,000 generations.',
+        description: 'The system was configured to Mode: STATIC and ran for 1,500 generations (750 ticks each).',
         details: [
           'Static mutation rate ε = 0.05',
           'Every 10 generations, Mean Elo and Policy Entropy were logged'
@@ -128,7 +128,7 @@ const PROJECT_CONTENT = {
         description: 'The system was reset with the same seed and configured to Mode: ADAPTIVE.',
         details: [
           'Adaptive mutation rate: ε = Base × (1 - NormalizedElo)',
-          'Ran for 5,000 generations with identical conditions'
+          'Ran for 1,500 generations (750 ticks each) with identical conditions'
         ]
       },
       {

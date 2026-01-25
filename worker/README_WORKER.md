@@ -141,7 +141,7 @@ nssm status EvoNashWorker
 1. **Polling:** Worker polls `/api/queue` every 30 seconds
 2. **Job Request:** If a PENDING experiment exists, Vercel returns job config
 3. **Processing:** Worker runs experiment on local GPU:
-   - 5,000 generations (configurable)
+   - 1,500 generations, 750 ticks each (configurable)
    - Each generation: Petri Dish simulation + GA evolution
 4. **Incremental Upload:** After each generation, stats are uploaded to `/api/results`
 5. **Completion:** When all generations complete, experiment status changes to COMPLETED

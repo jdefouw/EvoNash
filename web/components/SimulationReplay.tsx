@@ -22,7 +22,7 @@ export default function SimulationReplay({
   const [isPlaying, setIsPlaying] = useState(true)
   const [animationSpeed, setAnimationSpeed] = useState(50) // ms per frame
 
-  const ticksPerGeneration = experiment.ticks_per_generation || 500
+  const ticksPerGeneration = experiment.ticks_per_generation || 750
   const totalGenerations = generations.length
 
   // Debug: Log when component receives generations
