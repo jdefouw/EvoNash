@@ -76,12 +76,24 @@ export default function NewExperimentPage() {
   return (
     <main className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900">
       <div className="max-w-4xl mx-auto">
-        <Link 
-          href="/experiments"
-          className="text-blue-600 dark:text-blue-400 hover:underline mb-6 inline-block"
-        >
-          ← Back to experiments
-        </Link>
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-2 text-sm mb-6">
+          <Link 
+            href="/"
+            className="text-blue-600 dark:text-blue-400 hover:underline transition-colors"
+          >
+            Dashboard
+          </Link>
+          <span className="text-gray-400">/</span>
+          <Link 
+            href="/experiments"
+            className="text-blue-600 dark:text-blue-400 hover:underline transition-colors"
+          >
+            Experiments
+          </Link>
+          <span className="text-gray-400">/</span>
+          <span className="text-gray-600 dark:text-gray-400">New</span>
+        </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">
