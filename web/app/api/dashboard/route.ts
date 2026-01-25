@@ -52,6 +52,8 @@ function normalCDF(x: number): number {
   return 0.5 * (1.0 + sign * y)
 }
 
+export type StatisticalPowerLevel = 'insufficient' | 'minimum' | 'recommended' | 'robust'
+
 export interface DashboardData {
   controlExperiments: Experiment[]
   experimentalExperiments: Experiment[]
@@ -70,7 +72,39 @@ export interface DashboardData {
     isSignificant: boolean
     totalGenerationsControl: number
     totalGenerationsExperimental: number
+    // New fields for statistical power analysis
+    controlExperimentCount: number
+    experimentalExperimentCount: number
+    controlAvgGenerations: number
+    experimentalAvgGenerations: number
+    statisticalPowerLevel: StatisticalPowerLevel
   }
+}
+
+// Calculate statistical power level based on experiment counts and generations
+function calculatePowerLevel(
+  controlCount: number,
+  experimentalCount: number,
+  controlAvgGens: number,
+  experimentalAvgGens: number
+): StatisticalPowerLevel {
+  const minCount = Math.min(controlCount, experimentalCount)
+  const minAvgGens = Math.min(controlAvgGens, experimentalAvgGens)
+
+  // Robust: 5+ experiments per group with 2000+ generations each
+  if (minCount >= 5 && minAvgGens >= 2000) {
+    return 'robust'
+  }
+  // Recommended: 2-3 experiments per group with 1000+ generations each
+  if (minCount >= 2 && minAvgGens >= 1000) {
+    return 'recommended'
+  }
+  // Minimum: 1+ experiment per group with 500+ generations each
+  if (minCount >= 1 && minAvgGens >= 500) {
+    return 'minimum'
+  }
+  // Insufficient: < 1 experiment per group OR < 100 generations
+  return 'insufficient'
 }
 
 export async function GET() {
@@ -176,6 +210,25 @@ export async function GET() {
       isSignificant = pValue < 0.05
     }
 
+    // Calculate average generations per experiment
+    const controlExperimentCount = controlExperiments.length
+    const experimentalExperimentCount = experimentalExperiments.length
+    
+    const controlAvgGenerations = controlExperimentCount > 0
+      ? Math.round(controlGenerations.length / controlExperimentCount)
+      : 0
+    const experimentalAvgGenerations = experimentalExperimentCount > 0
+      ? Math.round(experimentalGenerations.length / experimentalExperimentCount)
+      : 0
+
+    // Calculate statistical power level
+    const statisticalPowerLevel = calculatePowerLevel(
+      controlExperimentCount,
+      experimentalExperimentCount,
+      controlAvgGenerations,
+      experimentalAvgGenerations
+    )
+
     const response: DashboardData = {
       controlExperiments,
       experimentalExperiments,
@@ -193,7 +246,12 @@ export async function GET() {
         tStatistic,
         isSignificant,
         totalGenerationsControl: controlGenerations.length,
-        totalGenerationsExperimental: experimentalGenerations.length
+        totalGenerationsExperimental: experimentalGenerations.length,
+        controlExperimentCount,
+        experimentalExperimentCount,
+        controlAvgGenerations,
+        experimentalAvgGenerations,
+        statisticalPowerLevel
       }
     }
 

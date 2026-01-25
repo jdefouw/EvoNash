@@ -1,5 +1,7 @@
 'use client'
 
+type StatisticalPowerLevel = 'insufficient' | 'minimum' | 'recommended' | 'robust'
+
 interface StatsSummaryProps {
   controlConvergenceGen: number | null
   experimentalConvergenceGen: number | null
@@ -12,6 +14,10 @@ interface StatsSummaryProps {
   isSignificant: boolean
   totalGenerationsControl: number
   totalGenerationsExperimental: number
+  // New fields for statistical power
+  controlExperimentCount?: number
+  experimentalExperimentCount?: number
+  statisticalPowerLevel?: StatisticalPowerLevel
 }
 
 export default function StatsSummary({
@@ -25,9 +31,27 @@ export default function StatsSummary({
   pValue,
   isSignificant,
   totalGenerationsControl,
-  totalGenerationsExperimental
+  totalGenerationsExperimental,
+  controlExperimentCount = 0,
+  experimentalExperimentCount = 0,
+  statisticalPowerLevel = 'insufficient'
 }: StatsSummaryProps) {
   const hasData = totalGenerationsControl > 0 || totalGenerationsExperimental > 0
+
+  const getConfidenceLabel = (level: StatisticalPowerLevel) => {
+    switch (level) {
+      case 'robust':
+        return { label: 'High Confidence', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-900/30' }
+      case 'recommended':
+        return { label: 'Moderate Confidence', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30' }
+      case 'minimum':
+        return { label: 'Limited Confidence', color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-100 dark:bg-yellow-900/30' }
+      case 'insufficient':
+        return { label: 'Insufficient Data', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-100 dark:bg-red-900/30' }
+    }
+  }
+
+  const confidence = getConfidenceLabel(statisticalPowerLevel)
 
   const StatCard = ({ 
     label, 
@@ -126,6 +150,21 @@ export default function StatsSummary({
                     {isSignificant ? 'Significant' : 'Not Significant'}
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Confidence Level Indicator */}
+            <div className={`mb-6 p-4 rounded-lg flex items-center justify-between ${confidence.bg}`}>
+              <div className="flex items-center gap-3">
+                <div className={`font-semibold ${confidence.color}`}>
+                  {confidence.label}
+                </div>
+                <span className="text-gray-500 dark:text-gray-400 text-sm">
+                  Based on {controlExperimentCount} control + {experimentalExperimentCount} experimental experiments
+                </span>
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Power Level: {statisticalPowerLevel.charAt(0).toUpperCase() + statisticalPowerLevel.slice(1)}
               </div>
             </div>
 

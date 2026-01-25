@@ -11,9 +11,12 @@ import {
   ComparisonChart,
   ExperimentDataTable,
   StatsSummary,
-  ConclusionCard
+  ConclusionCard,
+  SampleSizeGuidance
 } from '@/components/dashboard'
 import { Experiment, Generation } from '@/types/protocol'
+
+type StatisticalPowerLevel = 'insufficient' | 'minimum' | 'recommended' | 'robust'
 
 interface DashboardData {
   controlExperiments: Experiment[]
@@ -33,6 +36,11 @@ interface DashboardData {
     isSignificant: boolean
     totalGenerationsControl: number
     totalGenerationsExperimental: number
+    controlExperimentCount: number
+    experimentalExperimentCount: number
+    controlAvgGenerations: number
+    experimentalAvgGenerations: number
+    statisticalPowerLevel: StatisticalPowerLevel
   }
 }
 
@@ -396,6 +404,15 @@ export default function ScienceFairDashboard() {
                 experimentalConvergenceGen={data?.statistics?.experimentalConvergenceGen}
               />
 
+              {/* Sample Size Guidance */}
+              <SampleSizeGuidance
+                controlExperimentCount={data?.statistics?.controlExperimentCount ?? 0}
+                experimentalExperimentCount={data?.statistics?.experimentalExperimentCount ?? 0}
+                controlAvgGenerations={data?.statistics?.controlAvgGenerations ?? 0}
+                experimentalAvgGenerations={data?.statistics?.experimentalAvgGenerations ?? 0}
+                statisticalPowerLevel={data?.statistics?.statisticalPowerLevel ?? 'insufficient'}
+              />
+
               {/* Statistical Significance */}
               <StatsSummary
                 controlConvergenceGen={data?.statistics?.controlConvergenceGen ?? null}
@@ -409,6 +426,9 @@ export default function ScienceFairDashboard() {
                 isSignificant={data?.statistics?.isSignificant ?? false}
                 totalGenerationsControl={data?.statistics?.totalGenerationsControl ?? 0}
                 totalGenerationsExperimental={data?.statistics?.totalGenerationsExperimental ?? 0}
+                controlExperimentCount={data?.statistics?.controlExperimentCount ?? 0}
+                experimentalExperimentCount={data?.statistics?.experimentalExperimentCount ?? 0}
+                statisticalPowerLevel={data?.statistics?.statisticalPowerLevel ?? 'insufficient'}
               />
             </section>
 
