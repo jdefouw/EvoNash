@@ -75,16 +75,25 @@ class WorkerService:
         self.retry_delay = self.worker_config.get('retry_delay_seconds', 5)
         self.device = self.worker_config.get('device', 'cuda')
         
-        # Get or generate persistent worker_id
+        # Get or generate machine-specific worker ID
+        # IMPORTANT: This is stored in a SEPARATE file (machine_id.txt) that should NEVER be copied
+        # between machines. This ensures each machine has a unique identity even if worker_config.json
+        # is shared/copied during deployment.
         import uuid
-        if 'worker_id' not in self.worker_config or not self.worker_config['worker_id']:
-            # Generate new UUID and save to config
-            self.worker_config['worker_id'] = str(uuid.uuid4())
-            # Save updated config back to file
-            with open(config_path_obj, 'w', encoding='utf-8') as f:
-                json.dump(self.worker_config, f, indent=2)
-            self.logger.info(f"Generated persistent worker_id: {self.worker_config['worker_id']}")
-        self.persistent_worker_id = self.worker_config['worker_id']
+        machine_id_path = Path(__file__).parent.parent / 'data' / 'machine_id.txt'
+        
+        if machine_id_path.exists():
+            # Load existing machine ID
+            self.persistent_worker_id = machine_id_path.read_text().strip()
+            self.logger.info(f"Loaded machine ID from {machine_id_path}: {self.persistent_worker_id}")
+        else:
+            # Generate new machine-specific UUID
+            self.persistent_worker_id = str(uuid.uuid4())
+            machine_id_path.parent.mkdir(parents=True, exist_ok=True)
+            machine_id_path.write_text(self.persistent_worker_id)
+            self.logger.info(f"Generated new machine ID: {self.persistent_worker_id}")
+            self.logger.info(f"  Saved to: {machine_id_path}")
+            self.logger.info(f"  NOTE: This file should NOT be copied between machines!")
         
         # State
         self.running = True
@@ -743,6 +752,15 @@ class WorkerService:
             # Instead of checking generations one-by-one (O(n) calls), we query the max in O(1)
             self.logger.info(f"🔍 Checking for existing progress (efficient single-query recovery)...")
             last_completed = self._get_last_completed_generation(experiment_id)
+            
+            # VALIDATION: Check if batch is completely obsolete (all generations already done)
+            # This can happen if the queue assigned an old batch that was completed by another worker
+            if generation_end <= last_completed:
+                self.logger.warning(f"⚠️ OBSOLETE BATCH DETECTED: Batch {generation_start}-{generation_end} is entirely before last completed ({last_completed})")
+                self.logger.warning(f"   This batch has already been completed. Releasing job without processing.")
+                # Release the job so it doesn't block the queue
+                self._release_job(job_id, "batch_obsolete")
+                return
             
             # Calculate actual_start efficiently based on last completed generation
             if last_completed >= generation_start:

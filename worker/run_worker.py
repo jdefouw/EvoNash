@@ -58,11 +58,8 @@ def prompt_worker_name(config_path: Path, config: dict) -> dict:
     """
     config_changed = False
     
-    # Generate worker_id if not present
-    if not config.get('worker_id'):
-        config['worker_id'] = str(uuid.uuid4())
-        config_changed = True
-        print(f"Generated worker ID: {config['worker_id']}")
+    # NOTE: worker_id is now generated per-machine in worker_service.py using machine_id.txt
+    # This ensures each machine has a unique ID even if config files are copied
     
     # Prompt for worker name if not set
     if not config.get('worker_name'):
@@ -79,8 +76,8 @@ def prompt_worker_name(config_path: Path, config: dict) -> dict:
             worker_name = ""
         
         if not worker_name:
-            # Generate a default name using worker_id prefix
-            worker_name = f"Worker-{config['worker_id'][:8]}"
+            # Generate a default name using random suffix
+            worker_name = f"Worker-{uuid.uuid4().hex[:8]}"
             print(f"Using default name: {worker_name}")
         
         config['worker_name'] = worker_name
@@ -134,9 +131,7 @@ def main():
     # If --name argument provided, use it directly
     if args.name:
         config['worker_name'] = args.name
-        # Also ensure worker_id exists
-        if not config.get('worker_id'):
-            config['worker_id'] = str(uuid.uuid4())
+        # NOTE: worker_id is now generated per-machine in worker_service.py using machine_id.txt
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2)
         print(f"Worker name set to: {args.name}")

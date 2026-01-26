@@ -45,6 +45,9 @@ logs/
 worker/data/*.csv
 !worker/data/.gitkeep
 
+# Machine-specific worker ID (NEVER copy between machines!)
+worker/data/machine_id.txt
+
 # Vercel
 .vercel
 

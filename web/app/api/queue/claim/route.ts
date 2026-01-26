@@ -27,7 +27,43 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`[QUEUE/CLAIM] Worker ${worker_id} claiming job ${job_id}`)
+    console.log(`[QUEUE/CLAIM] Worker ${worker_id?.slice(0,8)} attempting to claim job ${job_id}`)
+
+    // SECURITY: Verify job is actually assigned to this worker before claiming
+    // This prevents workers from stealing jobs assigned to other workers
+    const { data: jobAssignment, error: checkError } = await supabase
+      .from('job_assignments')
+      .select('worker_id, status')
+      .eq('job_id', job_id)
+      .single()
+
+    if (checkError || !jobAssignment) {
+      console.error(`[QUEUE/CLAIM] Job ${job_id} not found`)
+      return NextResponse.json(
+        { error: 'Job not found' },
+        { status: 404 }
+      )
+    }
+
+    // Verify ownership - job must be assigned to this specific worker
+    if (jobAssignment.worker_id !== worker_id) {
+      console.warn(`[QUEUE/CLAIM] SECURITY: Worker ${worker_id?.slice(0,8)} tried to claim job assigned to ${jobAssignment.worker_id?.slice(0,8)}`)
+      return NextResponse.json(
+        { error: 'Job is assigned to a different worker', assigned_to: jobAssignment.worker_id },
+        { status: 403 }
+      )
+    }
+
+    // Verify status - must be 'assigned' (not already processing or completed)
+    if (jobAssignment.status !== 'assigned') {
+      console.log(`[QUEUE/CLAIM] Job ${job_id} has status '${jobAssignment.status}', cannot claim`)
+      return NextResponse.json(
+        { error: `Job cannot be claimed - current status: ${jobAssignment.status}` },
+        { status: 409 }
+      )
+    }
+
+    console.log(`[QUEUE/CLAIM] ✓ Ownership verified, proceeding with atomic claim`)
 
     // Use atomic claim function for data integrity
     // This atomically updates job status AND increments worker's active_jobs_count

@@ -186,33 +186,64 @@ export async function POST(request: NextRequest) {
       
       const existingGenerationNumbers = new Set((existingGenerations || []).map((g: any) => g.generation_number))
       
-      // CRITICAL: Check if there's already an active batch for this experiment
-      // Since generations are sequential and depend on previous ones, only ONE batch can be active at a time
-      // BUT: Allow workers to recover their own jobs
+      // CRITICAL: Enforce SINGLE BATCH per experiment for sequential processing
+      // Genetic algorithms REQUIRE sequential processing - generation N depends on generation N-1
+      // Therefore, only ONE batch can be active at a time, regardless of worker
       const activeBatches = (assignedBatches || []).filter((b: any) => 
         b.status === 'assigned' || b.status === 'processing'
       )
       
-      // Check if there are active batches from OTHER workers (not the requesting worker)
+      // Check if the requesting worker has their own active batch (recovery case)
+      const ownActiveBatches = worker_id 
+        ? activeBatches.filter((b: any) => b.worker_id === worker_id)
+        : []
+      
+      // Check if there are active batches from OTHER workers
       const otherWorkersActiveBatches = activeBatches.filter((b: any) => 
         !worker_id || b.worker_id !== worker_id
       )
       
       if (otherWorkersActiveBatches.length > 0) {
-        // There's already an active batch from another worker - don't assign another one
-        // This prevents race conditions where multiple workers try to process the same experiment
-        console.log(`[QUEUE] Experiment ${experiment.id} already has ${otherWorkersActiveBatches.length} active batch(es) from other workers, skipping assignment`)
-        console.log(`[QUEUE] Active batches: ${otherWorkersActiveBatches.map((b: any) => `${b.generation_start}-${b.generation_end}`).join(', ')}`)
+        // Another worker has an active batch - DO NOT assign a new one
+        // This strictly enforces sequential processing
+        console.log(`[QUEUE] Experiment ${experiment.id} has active batch from other worker, skipping`)
+        console.log(`[QUEUE]   Active: ${otherWorkersActiveBatches.map((b: any) => `gen ${b.generation_start}-${b.generation_end} (worker ${b.worker_id?.slice(0,8)})`).join(', ')}`)
         continue // Try next experiment
       }
       
-      // If worker has their own active batch, they're recovering - that's allowed
-      const ownActiveBatches = activeBatches.filter((b: any) => 
-        worker_id && b.worker_id === worker_id
-      )
       if (ownActiveBatches.length > 0) {
-        console.log(`[QUEUE] Worker ${worker_id} is recovering their own batch(es): ${ownActiveBatches.map((b: any) => `${b.generation_start}-${b.generation_end}`).join(', ')}`)
-        // Continue to allow the worker to get their own job back
+        // This worker already has an active batch - they should complete it first
+        // Return their existing batch info instead of creating a new one
+        const existingBatch = ownActiveBatches[0]
+        console.log(`[QUEUE] Worker ${worker_id?.slice(0,8)} already has active batch, returning existing job`)
+        console.log(`[QUEUE]   Existing job: ${existingBatch.job_id}, gen ${existingBatch.generation_start}-${existingBatch.generation_end}`)
+        
+        // Return the existing job assignment
+        const config: ExperimentConfig = {
+          experiment_id: experiment.id,
+          experiment_name: experiment.experiment_name,
+          mutation_mode: experiment.mutation_mode,
+          mutation_rate: experiment.mutation_rate,
+          mutation_base: experiment.mutation_base,
+          max_possible_elo: experiment.max_possible_elo,
+          random_seed: experiment.random_seed,
+          population_size: experiment.population_size,
+          selection_pressure: experiment.selection_pressure,
+          max_generations: experiment.max_generations,
+          ticks_per_generation: experiment.ticks_per_generation || 750,
+          network_architecture: experiment.network_architecture,
+          experiment_group: experiment.experiment_group
+        }
+        
+        return NextResponse.json({
+          job_id: existingBatch.job_id,
+          experiment_id: experiment.id,
+          worker_id: worker_id,
+          generation_start: existingBatch.generation_start,
+          generation_end: existingBatch.generation_end,
+          experiment_config: config,
+          recovery: true  // Flag to indicate this is a recovery, not a new assignment
+        })
       }
       
       // CRITICAL: Calculate which generations have EVER been claimed by ANY assignment
@@ -232,12 +263,28 @@ export async function POST(request: NextRequest) {
         r.status === 'assigned' || r.status === 'processing'
       )
       
-      // Find first unassigned batch
-      // CRITICAL: Start from generation 0 and find the first range that:
-      // 1. Has NO active/pending assignment overlapping it
-      // 2. Has missing generations (not all exist in database)
+      // EFFICIENT BATCH ASSIGNMENT: Start from last completed generation, not from 0
+      // This prevents assigning batches for already-completed ranges
       const batchSize = DEFAULT_BATCH_SIZE
-      let generationStart = 0
+      
+      // Query the highest completed generation number
+      const { data: lastGeneration } = await supabase
+        .from('generations')
+        .select('generation_number')
+        .eq('experiment_id', experiment.id)
+        .order('generation_number', { ascending: false })
+        .limit(1)
+        .single()
+      
+      const lastCompletedGen = lastGeneration?.generation_number ?? -1
+      
+      // Start from the next generation after last completed, aligned to batch boundary
+      let generationStart = lastCompletedGen + 1
+      // Align to batch boundary (e.g., if last completed is 1005, start at 1010 not 1006)
+      generationStart = Math.floor(generationStart / batchSize) * batchSize
+      
+      console.log(`[QUEUE] Experiment ${experiment.id}: last completed gen=${lastCompletedGen}, starting search at gen=${generationStart}`)
+      
       let foundBatch = false
       
       while (generationStart < experiment.max_generations) {
