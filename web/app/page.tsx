@@ -15,6 +15,7 @@ import {
   SampleSizeGuidance
 } from '@/components/dashboard'
 import { Experiment, Generation } from '@/types/protocol'
+import WorkerList from '@/components/WorkerList'
 
 type StatisticalPowerLevel = 'insufficient' | 'minimum' | 'recommended' | 'robust'
 
@@ -180,7 +181,8 @@ const NAV_SECTIONS = [
   { id: 'methodology', label: 'Methodology' },
   { id: 'results', label: 'Results' },
   { id: 'data', label: 'Data' },
-  { id: 'conclusion', label: 'Conclusion' }
+  { id: 'conclusion', label: 'Conclusion' },
+  { id: 'workers', label: 'Workers' }
 ]
 
 export default function ScienceFairDashboard() {
@@ -449,6 +451,19 @@ export default function ScienceFairDashboard() {
               sourcesOfError={PROJECT_CONTENT.conclusion.sourcesOfError}
               futureWork={PROJECT_CONTENT.conclusion.futureWork}
             />
+
+            {/* Workers Section */}
+            <section id="workers" className="scroll-mt-20">
+              <div className="mb-4">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                  GPU Workers
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Connected workers processing experiments on distributed GPUs
+                </p>
+              </div>
+              <WorkerList />
+            </section>
 
             {/* Quick Links Footer */}
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8">

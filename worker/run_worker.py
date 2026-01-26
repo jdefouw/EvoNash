@@ -6,6 +6,8 @@ Can be used for CLI testing or as the service executable.
 
 import argparse
 import sys
+import json
+import uuid
 from pathlib import Path
 
 # Add the worker directory to Python path so imports work
@@ -41,6 +43,59 @@ import src.main
 from src.worker_service import WorkerService
 
 
+def prompt_worker_name(config_path: Path, config: dict) -> dict:
+    """
+    Prompt for worker name if not set in config.
+    Also generates worker_id if not present.
+    Saves updates back to config file.
+    
+    Args:
+        config_path: Path to the config file
+        config: Current config dictionary
+        
+    Returns:
+        Updated config dictionary
+    """
+    config_changed = False
+    
+    # Generate worker_id if not present
+    if not config.get('worker_id'):
+        config['worker_id'] = str(uuid.uuid4())
+        config_changed = True
+        print(f"Generated worker ID: {config['worker_id']}")
+    
+    # Prompt for worker name if not set
+    if not config.get('worker_name'):
+        print("\n" + "=" * 60)
+        print("  EVONASH WORKER SETUP - First Time Configuration")
+        print("=" * 60)
+        print("\nThis name will identify your worker in the dashboard.")
+        print("Examples: 'Gaming-PC', 'Lab-Server-1', 'Home-Desktop'\n")
+        
+        try:
+            worker_name = input("Enter a name for this worker: ").strip()
+        except EOFError:
+            # Running non-interactively (e.g., as a service)
+            worker_name = ""
+        
+        if not worker_name:
+            # Generate a default name using worker_id prefix
+            worker_name = f"Worker-{config['worker_id'][:8]}"
+            print(f"Using default name: {worker_name}")
+        
+        config['worker_name'] = worker_name
+        config_changed = True
+        print(f"\nWorker name set to: {worker_name}")
+        print("=" * 60 + "\n")
+    
+    # Save config if changed
+    if config_changed:
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2)
+    
+    return config
+
+
 def main():
     """Main entry point for worker service."""
     parser = argparse.ArgumentParser(description='EvoNash Worker Service')
@@ -49,6 +104,12 @@ def main():
         type=str,
         default='config/worker_config.json',
         help='Path to worker config JSON file (default: config/worker_config.json)'
+    )
+    parser.add_argument(
+        '--name',
+        type=str,
+        default=None,
+        help='Set worker name (overrides config and skips prompt)'
     )
     
     args = parser.parse_args()
@@ -65,6 +126,23 @@ def main():
         print(f"Current directory: {Path.cwd()}", file=sys.stderr)
         print(f"Worker directory: {Path(__file__).parent.resolve()}", file=sys.stderr)
         sys.exit(1)
+    
+    # Load and potentially update config with worker name
+    with open(config_path, 'r', encoding='utf-8') as f:
+        config = json.load(f)
+    
+    # If --name argument provided, use it directly
+    if args.name:
+        config['worker_name'] = args.name
+        # Also ensure worker_id exists
+        if not config.get('worker_id'):
+            config['worker_id'] = str(uuid.uuid4())
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2)
+        print(f"Worker name set to: {args.name}")
+    else:
+        # Interactive prompt for name if not set
+        config = prompt_worker_name(config_path, config)
     
     # Create and run worker service
     try:

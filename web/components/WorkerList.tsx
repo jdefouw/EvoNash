@@ -1,6 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
+
+interface CurrentExperiment {
+  experiment_id: string
+  experiment_name: string
+  generation_start: number
+  generation_end: number
+  status: string
+}
 
 interface Worker {
   id: string
@@ -11,14 +20,18 @@ interface Worker {
   status: 'idle' | 'processing' | 'offline'
   active_jobs_count: number
   last_heartbeat: string
+  current_experiment: CurrentExperiment | null
 }
 
 interface WorkerListProps {
   className?: string
+  compact?: boolean
 }
 
-export default function WorkerList({ className = '' }: WorkerListProps) {
+export default function WorkerList({ className = '', compact = false }: WorkerListProps) {
   const [workers, setWorkers] = useState<Worker[]>([])
+  const [activeCount, setActiveCount] = useState(0)
+  const [processingCount, setProcessingCount] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -28,6 +41,8 @@ export default function WorkerList({ className = '' }: WorkerListProps) {
         if (response.ok) {
           const data = await response.json()
           setWorkers(data.workers || [])
+          setActiveCount(data.active_workers_count || 0)
+          setProcessingCount(data.processing_workers_count || 0)
         }
       } catch (error) {
         console.error('Error fetching workers:', error)
@@ -87,6 +102,9 @@ export default function WorkerList({ className = '' }: WorkerListProps) {
       <div className={`${className} p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700`}>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Workers</h3>
         <p className="text-sm text-gray-600 dark:text-gray-400">No workers registered</p>
+        <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+          Download and run the worker on a machine with a GPU to get started.
+        </p>
       </div>
     )
   }
@@ -94,10 +112,19 @@ export default function WorkerList({ className = '' }: WorkerListProps) {
   return (
     <div className={`${className} bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden`}>
       <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Workers</h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          {workers.filter(w => w.status !== 'offline').length} active, {workers.length} total
-        </p>
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Workers</h3>
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-1 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full">
+              {activeCount} connected
+            </span>
+            {processingCount > 0 && (
+              <span className="px-2 py-1 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full">
+                {processingCount} processing
+              </span>
+            )}
+          </div>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full">
@@ -110,14 +137,16 @@ export default function WorkerList({ className = '' }: WorkerListProps) {
                 GPU
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Jobs
+                Current Experiment
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Status
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Last Heartbeat
-              </th>
+              {!compact && (
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Last Seen
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -137,20 +166,24 @@ export default function WorkerList({ className = '' }: WorkerListProps) {
                     {worker.vram_gb}GB VRAM
                   </div>
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{worker.active_jobs_count}</span>
-                    <span className="text-gray-400">/</span>
-                    <span className="text-gray-500 dark:text-gray-400">{worker.max_parallel_jobs}</span>
-                  </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-1">
-                    <div
-                      className="bg-blue-600 h-1.5 rounded-full"
-                      style={{
-                        width: `${(worker.active_jobs_count / worker.max_parallel_jobs) * 100}%`
-                      }}
-                    />
-                  </div>
+                <td className="px-4 py-3 text-sm">
+                  {worker.current_experiment ? (
+                    <div>
+                      <Link 
+                        href={`/experiments/${worker.current_experiment.experiment_id}`}
+                        className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        {worker.current_experiment.experiment_name}
+                      </Link>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        Gens {worker.current_experiment.generation_start}-{worker.current_experiment.generation_end}
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-gray-400 dark:text-gray-500">
+                      {worker.status === 'offline' ? '—' : 'Idle'}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-sm">
                   <div className="flex items-center gap-2">
@@ -158,9 +191,11 @@ export default function WorkerList({ className = '' }: WorkerListProps) {
                     <span className="text-gray-900 dark:text-white capitalize">{worker.status}</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                  {formatLastHeartbeat(worker.last_heartbeat)}
-                </td>
+                {!compact && (
+                  <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                    {formatLastHeartbeat(worker.last_heartbeat)}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

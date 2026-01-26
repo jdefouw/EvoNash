@@ -30,6 +30,12 @@ export default function ExperimentDetailPage() {
   const [retryCount, setRetryCount] = useState(0)
   const [workerStatus, setWorkerStatus] = useState<{connected: boolean, pending_count: number} | null>(null)
   const [batches, setBatches] = useState<any[]>([])
+  const [processingWorker, setProcessingWorker] = useState<{
+    id: string
+    worker_name: string | null
+    gpu_type: string | null
+    vram_gb: number
+  } | null>(null)
   
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const lastGenerationNumberRef = useRef<number>(-1)
@@ -199,12 +205,29 @@ export default function ExperimentDetailPage() {
           return res.json()
         })
         .then(data => {
-          setBatches(data.batches || [])
+          const batchList = data.batches || []
+          setBatches(batchList)
+          
+          // Find the active batch (assigned or processing) and extract worker info
+          const activeBatch = batchList.find((b: any) => 
+            b.status === 'assigned' || b.status === 'processing'
+          )
+          if (activeBatch && activeBatch.workers) {
+            setProcessingWorker({
+              id: activeBatch.workers.id,
+              worker_name: activeBatch.workers.worker_name,
+              gpu_type: activeBatch.workers.gpu_type,
+              vram_gb: activeBatch.workers.vram_gb
+            })
+          } else {
+            setProcessingWorker(null)
+          }
         })
         .catch(err => {
           console.error('Error fetching batches:', err)
           // Don't block on this error, just set empty batches
           setBatches([])
+          setProcessingWorker(null)
         })
     }
     
@@ -365,20 +388,34 @@ export default function ExperimentDetailPage() {
                   Mode: <strong className="text-gray-900 dark:text-white">{experiment.mutation_mode}</strong>
                 </span>
                 <StatusIndicator status={experiment.status} />
-                {workerStatus && (
-                  <div className="flex items-center gap-2 text-xs">
-                    {/* If experiment is RUNNING, worker is definitely connected. Otherwise use API status */}
-                    {(() => {
-                      const isConnected = experiment.status === 'RUNNING' || workerStatus.connected
-                      return (
-                        <>
-                          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-                          <span className="text-gray-600 dark:text-gray-400">
-                            Worker: {isConnected ? 'Connected' : 'Not Connected'}
-                          </span>
-                        </>
-                      )
-                    })()}
+                {/* Show processing worker info */}
+                {experiment.status === 'RUNNING' && processingWorker && (
+                  <div className="flex items-center gap-2 text-xs bg-green-50 dark:bg-green-900/20 px-3 py-1.5 rounded-full border border-green-200 dark:border-green-800">
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                    <span className="text-green-700 dark:text-green-400">
+                      Processing by: <strong>{processingWorker.worker_name || 'Unnamed Worker'}</strong>
+                      {processingWorker.gpu_type && (
+                        <span className="text-green-600 dark:text-green-500 ml-1">
+                          ({processingWorker.gpu_type})
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
+                {experiment.status === 'PENDING' && (
+                  <div className="flex items-center gap-2 text-xs bg-yellow-50 dark:bg-yellow-900/20 px-3 py-1.5 rounded-full border border-yellow-200 dark:border-yellow-800">
+                    <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+                    <span className="text-yellow-700 dark:text-yellow-400">
+                      Waiting for available worker...
+                    </span>
+                  </div>
+                )}
+                {experiment.status === 'RUNNING' && !processingWorker && (
+                  <div className="flex items-center gap-2 text-xs bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 rounded-full border border-blue-200 dark:border-blue-800">
+                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                    <span className="text-blue-700 dark:text-blue-400">
+                      Worker connected
+                    </span>
                   </div>
                 )}
               </div>
@@ -602,12 +639,14 @@ export default function ExperimentDetailPage() {
                         <div className="flex items-center gap-2">
                           <div className={`w-2 h-2 rounded-full ${getStatusColor(batch.status)} ${batch.status === 'processing' ? 'animate-pulse' : ''}`} />
                           <span className="font-medium text-gray-900 dark:text-white">
-                            Generations {batch.generation_start}-{batch.generation_end}
+                            Gens {batch.generation_start}-{batch.generation_end}
                           </span>
                         </div>
                         {worker && (
-                          <div className="text-gray-600 dark:text-gray-400">
-                            {worker.gpu_type || 'CPU'} ({worker.vram_gb}GB)
+                          <div className="text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                            <span className="font-medium">{worker.worker_name || 'Unnamed'}</span>
+                            <span className="text-gray-400">·</span>
+                            <span>{worker.gpu_type || 'CPU'}</span>
                           </div>
                         )}
                         <span className="text-gray-500 dark:text-gray-400 capitalize">
