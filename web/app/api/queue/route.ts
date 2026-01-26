@@ -67,12 +67,18 @@ export async function POST(request: NextRequest) {
           .eq('id', experiment.id)
       }
       
-      // Get all assigned batches for this experiment with worker info
-      const { data: initialAssignedBatches } = await supabase
+      // CRITICAL FIX: Get ALL job assignments to prevent overlapping batches
+      // This includes 'assigned', 'processing', 'completed', and 'failed' statuses
+      // We need to know what ranges have EVER been claimed, not just currently active
+      const { data: allJobAssignments } = await supabase
         .from('job_assignments')
-        .select('generation_start, generation_end, status, worker_id, assigned_at, started_at')
+        .select('generation_start, generation_end, status, worker_id, assigned_at, started_at, job_id')
         .eq('experiment_id', experiment.id)
-        .in('status', ['assigned', 'processing'])
+      
+      // Separate into active vs historical assignments
+      const initialAssignedBatches = (allJobAssignments || []).filter((b: any) => 
+        b.status === 'assigned' || b.status === 'processing'
+      )
       
       let assignedBatches = initialAssignedBatches || []
       
@@ -131,25 +137,33 @@ export async function POST(request: NextRequest) {
           }
         }
         
-        // Re-fetch assigned batches after recovery
-        const { data: updatedBatches } = await supabase
+        // Re-fetch ALL job assignments after recovery to get accurate state
+        const { data: updatedAllAssignments } = await supabase
           .from('job_assignments')
-          .select('generation_start, generation_end, status, worker_id, assigned_at, started_at')
+          .select('generation_start, generation_end, status, worker_id, assigned_at, started_at, job_id')
           .eq('experiment_id', experiment.id)
-          .in('status', ['assigned', 'processing'])
+        
+        // Update allJobAssignments with fresh data
+        // (we'll use this below to prevent overlapping batch assignments)
+        allJobAssignments.length = 0
+        allJobAssignments.push(...(updatedAllAssignments || []))
+        
+        const updatedBatches = (updatedAllAssignments || []).filter((b: any) => 
+          b.status === 'assigned' || b.status === 'processing'
+        )
         
         // If worker is recovering its own jobs, exclude them from the assigned list
         if (worker_id && ownBatches.length > 0) {
           const ownBatchRanges = new Set(ownBatches.map((b: any) => 
             `${b.generation_start}-${b.generation_end}`
           ))
-          assignedBatches = (updatedBatches || []).filter((b: any) => {
+          assignedBatches = updatedBatches.filter((b: any) => {
             // Exclude batches that match the worker's own jobs (allow recovery)
             const batchKey = `${b.generation_start}-${b.generation_end}`
             return !ownBatchRanges.has(batchKey)
           })
         } else {
-          assignedBatches = updatedBatches || []
+          assignedBatches = updatedBatches
         }
       }
       
@@ -199,31 +213,44 @@ export async function POST(request: NextRequest) {
         // Continue to allow the worker to get their own job back
       }
       
-      // Calculate which generations are already assigned (excluding worker's own recoverable jobs)
-      const assignedRanges: Array<{start: number, end: number}> = (assignedBatches || []).map((b: any) => ({
-        start: b.generation_start,
-        end: b.generation_end
-      }))
+      // CRITICAL: Calculate which generations have EVER been claimed by ANY assignment
+      // This prevents overlapping batches even when jobs are released/failed
+      // Include ALL statuses: assigned, processing, completed, failed
+      const allClaimedRanges: Array<{start: number, end: number, status: string, job_id: string}> = 
+        (allJobAssignments || []).map((b: any) => ({
+          start: b.generation_start,
+          end: b.generation_end,
+          status: b.status,
+          job_id: b.job_id
+        }))
+      
+      // For overlap prevention, only exclude completed ranges where all generations exist
+      // Failed ranges need to be retried, but we should find the NEXT unclaimed range
+      const activeOrPendingRanges = allClaimedRanges.filter(r => 
+        r.status === 'assigned' || r.status === 'processing'
+      )
       
       // Find first unassigned batch
-      // Start from last completed generation + 1, or 0 if no checkpoint
+      // CRITICAL: Start from generation 0 and find the first range that:
+      // 1. Has NO active/pending assignment overlapping it
+      // 2. Has missing generations (not all exist in database)
       const batchSize = DEFAULT_BATCH_SIZE
-      let generationStart = latestCheckpoint ? (latestCheckpoint.generation_number + 1) : 0
+      let generationStart = 0
       let foundBatch = false
       
       while (generationStart < experiment.max_generations) {
         const generationEnd = Math.min(generationStart + batchSize - 1, experiment.max_generations - 1)
         
-        // Check if this range overlaps with any assigned range
-        const isAssigned = assignedRanges.some(range => 
+        // Check if this range overlaps with any ACTIVE assignment (assigned or processing)
+        const isActivelyAssigned = activeOrPendingRanges.some(range => 
           !(generationEnd < range.start || generationStart > range.end)
         )
         
-        // Check if all generations in this range already exist
+        // Check if all generations in this range already exist in the database
         const allGenerationsExist = Array.from({ length: generationEnd - generationStart + 1 }, (_, i) => generationStart + i)
           .every(genNum => existingGenerationNumbers.has(genNum))
         
-        if (!isAssigned && !allGenerationsExist) {
+        if (!isActivelyAssigned && !allGenerationsExist) {
           // Found an unassigned batch!
           foundBatch = true
           
