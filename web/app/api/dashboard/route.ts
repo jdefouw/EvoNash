@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { Experiment, Generation } from '@/types/protocol'
 
+// Force dynamic rendering since we query the database
+export const dynamic = 'force-dynamic'
+
 // Simple t-test implementation for two independent samples
 function tTest(sample1: number[], sample2: number[]): { pValue: number; tStatistic: number } {
   if (sample1.length < 2 || sample2.length < 2) {

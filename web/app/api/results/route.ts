@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 
+// Force dynamic rendering since we query the database
+export const dynamic = 'force-dynamic'
+
 // Increase max duration for large payload processing
 export const maxDuration = 60
 
