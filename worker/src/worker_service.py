@@ -94,8 +94,12 @@ class WorkerService:
         self.gpu_type: Optional[str] = None
         self.vram_gb: int = 0
         self.max_parallel_jobs: int = 0
-        self.active_jobs: list = []  # List of active job threads/tasks
+        self.active_jobs: list = []  # List of active job threads/tasks (legacy, unused in single-job mode)
         self.active_jobs_count: int = 0
+        
+        # Thread safety lock for job processing (defense in depth)
+        # Ensures only one job can be processed at a time even if threading is re-enabled
+        self._job_lock = threading.Lock()
         
         # Setup signal handlers for graceful shutdown
         # Windows only supports SIGINT, SIGTERM is Unix-only
@@ -290,9 +294,10 @@ class WorkerService:
                 self.logger.info(f"✓ GPU available: {self.gpu_type}")
                 self.logger.info(f"  VRAM: {self.vram_gb} GB")
                 self.logger.info(f"  CUDA version: {torch.version.cuda}")
-                # Calculate max parallel jobs: floor(vram_gb / 2), minimum 1
-                self.max_parallel_jobs = max(1, self.vram_gb // 2)
-                self.logger.info(f"  Max parallel jobs: {self.max_parallel_jobs} (based on 2GB per job)")
+                # ALWAYS use single-job mode for scientific rigor and CUDA stability
+                # This ensures deterministic execution and prevents GPU memory conflicts
+                self.max_parallel_jobs = 1
+                self.logger.info(f"  Max parallel jobs: {self.max_parallel_jobs} (single-job mode for scientific rigor)")
             else:
                 self.logger.warning("⚠ CUDA requested but not available, falling back to CPU")
                 self.device = 'cpu'
@@ -630,6 +635,20 @@ class WorkerService:
         """
         Process a single job (generation batch).
         
+        Uses mutex lock for defense-in-depth to ensure only one job processes at a time.
+        Counter is incremented before claiming to prevent race conditions.
+        
+        Args:
+            job: Job dictionary from controller with generation_start and generation_end
+        """
+        # Acquire lock to ensure single-job processing (defense in depth)
+        with self._job_lock:
+            self._process_job_internal(job)
+    
+    def _process_job_internal(self, job: Dict):
+        """
+        Internal job processing logic (called under lock).
+        
         Args:
             job: Job dictionary from controller with generation_start and generation_end
         """
@@ -643,16 +662,19 @@ class WorkerService:
             self.logger.error("Invalid job: missing experiment_config")
             return
         
+        # Increment active jobs count BEFORE claiming (atomic reserve)
+        # This prevents race conditions where multiple jobs could be claimed simultaneously
+        self.active_jobs_count += 1
+        
         # Claim the job before processing to prevent conflicts
         if job_id and not self._claim_job(job_id):
             self.logger.error(f"✗ Failed to claim job {job_id}, skipping")
+            # Rollback counter on claim failure
+            self.active_jobs_count = max(0, self.active_jobs_count - 1)
             return
         
         # Track current job for heartbeat and shutdown
         self.current_job = job
-        
-        # Increment active jobs count
-        self.active_jobs_count += 1
         
         try:
             self.logger.info("=" * 80)
@@ -880,17 +902,11 @@ class WorkerService:
         consecutive_errors = 0
         max_consecutive_errors = 5
         
-        def process_job_in_thread(job: Dict):
-            """Process a job in a separate thread."""
-            try:
-                self.process_job(job)
-            except Exception as e:
-                self.logger.error(f"Error in job thread: {e}", exc_info=True)
-        
         while self.running:
             try:
-                # Request jobs until we're at capacity
-                while self._can_accept_job() and self.running:
+                # Single-job synchronous processing for scientific rigor
+                # Only request a job if we can accept one (should always be true in single-job mode)
+                if self._can_accept_job() and self.running:
                     # Request job from controller with worker_id
                     payload = {}
                     if self.worker_id:
@@ -905,41 +921,35 @@ class WorkerService:
                         
                         if response.status_code == 404:
                             # No jobs available
-                            break
+                            self.status = 'idle'
+                            self.logger.info(f"ℹ No jobs available, polling again in {self.poll_interval}s")
                         elif response.status_code == 429:
-                            # Worker at capacity (shouldn't happen, but handle it)
-                            break
-                        
-                        response.raise_for_status()
-                        job = response.json()
-                        
-                        if job:
-                            consecutive_errors = 0
-                            # Process job in separate thread
-                            job_thread = threading.Thread(
-                                target=process_job_in_thread,
-                                args=(job,),
-                                daemon=False
-                            )
-                            job_thread.start()
-                            self.active_jobs.append(job_thread)
-                            self.logger.info(f"✅ Job {job.get('job_id')} started in thread (active: {self.active_jobs_count}/{self.max_parallel_jobs})")
+                            # Worker at capacity (shouldn't happen in single-job mode, but handle it)
+                            self.status = 'idle'
+                            self.logger.info(f"ℹ At capacity, polling again in {self.poll_interval}s")
+                        else:
+                            response.raise_for_status()
+                            job = response.json()
+                            
+                            if job:
+                                consecutive_errors = 0
+                                # Process job synchronously (blocks until complete)
+                                # This ensures deterministic execution and data integrity
+                                self.logger.info(f"✅ Job {job.get('job_id')} received, processing synchronously")
+                                self.status = 'processing'
+                                self.process_job(job)
+                                self.status = 'idle'
+                                # Continue immediately to check for next job
+                                continue
+                            else:
+                                self.status = 'idle'
                     except requests.exceptions.RequestException as e:
                         self.logger.warning(f"Error requesting job: {e}")
-                        break
-                
-                # Clean up finished threads
-                self.active_jobs = [t for t in self.active_jobs if t.is_alive()]
-                
-                # Update status
-                if self.active_jobs_count > 0:
-                    self.status = 'processing'
+                        self.status = 'idle'
                 else:
                     self.status = 'idle'
                 
                 # Sleep before next polling cycle
-                if self.status == 'idle':
-                    self.logger.info(f"ℹ No jobs available or at capacity, polling again in {self.poll_interval}s")
                 time.sleep(self.poll_interval)
                 
             except KeyboardInterrupt:

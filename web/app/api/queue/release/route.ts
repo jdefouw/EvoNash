@@ -31,68 +31,33 @@ export async function POST(request: NextRequest) {
 
     console.log(`[QUEUE/RELEASE] Worker ${worker_id} releasing job ${job_id}: ${reason || 'No reason provided'}`)
 
-    // First, verify the worker owns this job
-    const { data: jobAssignment } = await supabase
-      .from('job_assignments')
-      .select('*')
-      .eq('job_id', job_id)
-      .single()
+    // Use atomic release function for data integrity
+    // This atomically updates job status AND decrements worker's active_jobs_count
+    // Also verifies ownership - only the assigned worker can release the job
+    const { data: released, error: releaseError } = await supabase.rpc('release_job_atomic', {
+      p_job_id: job_id,
+      p_worker_id: worker_id,
+      p_reason: reason || 'Released by worker'
+    })
 
-    if (!jobAssignment) {
+    if (releaseError) {
+      console.error(`[QUEUE/RELEASE] Database error:`, releaseError)
       return NextResponse.json(
-        { error: 'Job assignment not found' },
-        { status: 404 }
-      )
-    }
-
-    if (jobAssignment.worker_id !== worker_id) {
-      console.error(`[QUEUE/RELEASE] Worker ${worker_id} attempted to release job ${job_id} owned by ${jobAssignment.worker_id}`)
-      return NextResponse.json(
-        { error: 'Unauthorized: Worker does not own this job' },
-        { status: 403 }
-      )
-    }
-
-    // Mark job as failed so it can be reassigned
-    // The queue route will detect this and allow a new worker to pick it up
-    const { data, error } = await supabase
-      .from('job_assignments')
-      .update({
-        status: 'failed',
-        completed_at: new Date().toISOString()
-      })
-      .eq('job_id', job_id)
-      .eq('worker_id', worker_id)
-      .in('status', ['assigned', 'processing'])
-      .select()
-
-    if (error) {
-      console.error(`[QUEUE/RELEASE] Database error:`, error)
-      return NextResponse.json(
-        { error: 'Failed to release job', details: error.message },
+        { error: 'Failed to release job', details: releaseError.message },
         { status: 500 }
       )
     }
 
-    // Update worker's active jobs count
-    const { data: worker } = await supabase
-      .from('workers')
-      .select('active_jobs_count')
-      .eq('id', worker_id)
-      .single()
-
-    if (worker) {
-      await supabase
-        .from('workers')
-        .update({
-          active_jobs_count: Math.max(0, (worker.active_jobs_count || 1) - 1),
-          status: worker.active_jobs_count <= 1 ? 'idle' : 'processing'
-        })
-        .eq('id', worker_id)
+    if (!released) {
+      // Job not found or not owned by this worker
+      console.log(`[QUEUE/RELEASE] Job ${job_id} not found or not owned by worker ${worker_id}`)
+      return NextResponse.json(
+        { error: 'Job not found or not assigned to this worker' },
+        { status: 404 }
+      )
     }
 
-    const releasedCount = data?.length || 0
-    console.log(`[QUEUE/RELEASE] ✓ Job ${job_id} released by worker ${worker_id} (${releasedCount} assignments updated)`)
+    console.log(`[QUEUE/RELEASE] ✓ Job ${job_id} released by worker ${worker_id} (atomic)`)
 
     // If last_completed_generation was provided, log it for tracking
     if (last_completed_generation !== undefined) {
@@ -101,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      released: releasedCount,
+      released: released ? 1 : 0,
       job_id,
       reason,
       last_completed_generation

@@ -195,26 +195,33 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Update job assignment status to completed
-    if (job_id) {
-      const { data: jobAssignment } = await supabase
-        .from('job_assignments')
-        .select('*')
-        .eq('job_id', job_id)
-        .single()
+    // Update job assignment status to completed using atomic function
+    // This atomically marks job complete AND decrements worker's active_jobs_count
+    if (job_id && worker_id) {
+      const { data: completed, error: completeError } = await supabase.rpc('complete_job_atomic', {
+        p_job_id: job_id,
+        p_worker_id: worker_id,
+        p_status: 'completed'
+      })
       
-      if (jobAssignment) {
-        const { error: updateError } = await supabase
-          .from('job_assignments')
-          .update({ 
-            status: 'completed',
-            completed_at: new Date().toISOString()
-          })
-          .eq('id', jobAssignment.id)
-        
-        if (updateError) {
-          console.error(`[RESULTS] Error updating job assignment status:`, updateError)
-        }
+      if (completeError) {
+        console.error(`[RESULTS] Error updating job assignment status (atomic):`, completeError)
+      } else if (completed) {
+        console.log(`[RESULTS] Job ${job_id} marked as completed (atomic)`)
+      }
+    } else if (job_id) {
+      // Fallback for legacy workers without worker_id - use direct update
+      const { error: updateError } = await supabase
+        .from('job_assignments')
+        .update({ 
+          status: 'completed',
+          completed_at: new Date().toISOString()
+        })
+        .eq('job_id', job_id)
+        .eq('status', 'processing')
+      
+      if (updateError) {
+        console.error(`[RESULTS] Error updating job assignment status:`, updateError)
       }
     }
     

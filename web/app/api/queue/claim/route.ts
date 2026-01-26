@@ -29,54 +29,46 @@ export async function POST(request: NextRequest) {
 
     console.log(`[QUEUE/CLAIM] Worker ${worker_id} claiming job ${job_id}`)
 
-    // Atomic update: only claim if still assigned to this worker
-    // This prevents race conditions where another worker might have claimed it
-    const { data, error } = await supabase
-      .from('job_assignments')
-      .update({
-        status: 'processing',
-        started_at: new Date().toISOString()
-      })
-      .eq('job_id', job_id)
-      .eq('worker_id', worker_id)
-      .eq('status', 'assigned')
-      .select()
-      .single()
+    // Use atomic claim function for data integrity
+    // This atomically updates job status AND increments worker's active_jobs_count
+    // Prevents race conditions and counter drift in distributed CUDA compute jobs
+    const { data: claimed, error: claimError } = await supabase.rpc('claim_job_atomic', {
+      p_job_id: job_id,
+      p_worker_id: worker_id
+    })
 
-    if (error) {
-      // Check if it's a "no rows returned" error (job already claimed or doesn't exist)
-      if (error.code === 'PGRST116') {
-        console.log(`[QUEUE/CLAIM] Job ${job_id} no longer available for worker ${worker_id}`)
-        return NextResponse.json(
-          { error: 'Job no longer available - may have been claimed by another worker or already processing' },
-          { status: 409 }
-        )
-      }
-      console.error(`[QUEUE/CLAIM] Database error:`, error)
+    if (claimError) {
+      console.error(`[QUEUE/CLAIM] Database error:`, claimError)
       return NextResponse.json(
-        { error: 'Failed to claim job', details: error.message },
+        { error: 'Failed to claim job', details: claimError.message },
         { status: 500 }
       )
     }
 
-    if (!data) {
-      console.log(`[QUEUE/CLAIM] Job ${job_id} not found or not assigned to worker ${worker_id}`)
+    if (!claimed) {
+      console.log(`[QUEUE/CLAIM] Job ${job_id} no longer available for worker ${worker_id}`)
       return NextResponse.json(
-        { error: 'Job not found or not assigned to this worker' },
+        { error: 'Job no longer available - may have been claimed by another worker or already processing' },
         { status: 409 }
       )
     }
 
-    // Update worker status to processing
-    await supabase
-      .from('workers')
-      .update({ 
-        status: 'processing',
-        last_heartbeat: new Date().toISOString()
-      })
-      .eq('id', worker_id)
+    // Fetch job details after successful claim
+    const { data, error: fetchError } = await supabase
+      .from('job_assignments')
+      .select('id, job_id, experiment_id, generation_start, generation_end, status, started_at')
+      .eq('job_id', job_id)
+      .single()
 
-    console.log(`[QUEUE/CLAIM] ✓ Job ${job_id} successfully claimed by worker ${worker_id}`)
+    if (fetchError || !data) {
+      console.error(`[QUEUE/CLAIM] Failed to fetch job details after claim:`, fetchError)
+      return NextResponse.json(
+        { error: 'Job claimed but failed to fetch details', details: fetchError?.message },
+        { status: 500 }
+      )
+    }
+
+    console.log(`[QUEUE/CLAIM] ✓ Job ${job_id} successfully claimed by worker ${worker_id} (atomic)`)
 
     return NextResponse.json({
       success: true,
