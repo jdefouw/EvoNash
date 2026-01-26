@@ -5,11 +5,19 @@ Handles reproducibility, batch inference, and generation statistics.
 
 import torch
 import numpy as np
+import sys
 from typing import Dict, Optional, Callable
 from pathlib import Path
 import json
 
 from .experiment_manager import ExperimentConfig
+
+# torch.compile with inductor backend requires Triton, which is not available on Windows
+_TORCH_COMPILE_AVAILABLE = (
+    sys.platform != 'win32' and 
+    hasattr(torch, 'compile') and 
+    callable(torch.compile)
+)
 from ..ga.genetic_algorithm import GeneticAlgorithm
 from ..simulation.petri_dish import PetriDish
 from ..simulation.agent import Agent
@@ -59,9 +67,10 @@ class ExperimentRunner:
         if self.device == 'cuda' and torch.cuda.is_available():
             torch.backends.cudnn.benchmark = True
             # Compile networks for faster inference (PyTorch 2.0+)
+            # Note: torch.compile requires Triton which is not available on Windows
             # Note: torch.compile is not supported on Python 3.14+
             try:
-                if hasattr(torch, 'compile') and callable(torch.compile):
+                if _TORCH_COMPILE_AVAILABLE:
                     # Test if torch.compile actually works (it may exist but not be supported)
                     test_model = torch.nn.Linear(1, 1)
                     try:

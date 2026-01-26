@@ -6,9 +6,18 @@ Implements Elo rating system and policy entropy calculation.
 import numpy as np
 import torch
 import logging
+import sys
 from typing import List, Tuple, Optional
 from ..simulation.agent import Agent, NeuralNetwork
 from ..experiments.experiment_manager import ExperimentConfig
+
+# torch.compile with inductor backend requires Triton, which is not available on Windows
+# Check platform once at module load to avoid repeated checks
+_TORCH_COMPILE_AVAILABLE = (
+    sys.platform != 'win32' and 
+    hasattr(torch, 'compile') and 
+    callable(torch.compile)
+)
 
 
 class GeneticAlgorithm:
@@ -71,9 +80,10 @@ class GeneticAlgorithm:
                 torch.nn.init.normal_(param, mean=0.0, std=0.1)
             
             # Compile network for faster inference (PyTorch 2.0+)
+            # Note: torch.compile requires Triton which is not available on Windows
             # Note: torch.compile is not supported on Python 3.14+
             try:
-                if hasattr(torch, 'compile') and callable(torch.compile) and self.device == 'cuda':
+                if _TORCH_COMPILE_AVAILABLE and self.device == 'cuda':
                     # Test if torch.compile actually works (it may exist but not be supported)
                     test_model = torch.nn.Linear(1, 1)
                     try:
@@ -267,9 +277,9 @@ class GeneticAlgorithm:
         
         network.set_weights(offspring_weights)
         
-        # Compile for faster inference
+        # Compile for faster inference (not available on Windows - requires Triton)
         try:
-            if hasattr(torch, 'compile') and self.device == 'cuda':
+            if _TORCH_COMPILE_AVAILABLE and self.device == 'cuda':
                 network = torch.compile(network, mode='reduce-overhead')
         except Exception:
             pass
@@ -489,9 +499,9 @@ class GeneticAlgorithm:
             weights_array = np.array(agent_state['network_weights'], dtype=np.float32)
             network.set_weights(weights_array)
             
-            # Compile network if possible
+            # Compile network if possible (not available on Windows - requires Triton)
             try:
-                if hasattr(torch, 'compile') and callable(torch.compile) and self.device == 'cuda':
+                if _TORCH_COMPILE_AVAILABLE and self.device == 'cuda':
                     test_model = torch.nn.Linear(1, 1)
                     try:
                         torch.compile(test_model, mode='reduce-overhead')
