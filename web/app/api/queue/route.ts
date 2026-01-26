@@ -70,13 +70,16 @@ export async function POST(request: NextRequest) {
       // CRITICAL FIX: Get ALL job assignments to prevent overlapping batches
       // This includes 'assigned', 'processing', 'completed', and 'failed' statuses
       // We need to know what ranges have EVER been claimed, not just currently active
-      const { data: allJobAssignments } = await supabase
+      const { data: fetchedJobAssignments } = await supabase
         .from('job_assignments')
         .select('generation_start, generation_end, status, worker_id, assigned_at, started_at, job_id')
         .eq('experiment_id', experiment.id)
       
+      // Ensure we have a non-null array to work with
+      let allJobAssignments: any[] = fetchedJobAssignments || []
+      
       // Separate into active vs historical assignments
-      const initialAssignedBatches = (allJobAssignments || []).filter((b: any) => 
+      const initialAssignedBatches = allJobAssignments.filter((b: any) => 
         b.status === 'assigned' || b.status === 'processing'
       )
       
@@ -145,8 +148,7 @@ export async function POST(request: NextRequest) {
         
         // Update allJobAssignments with fresh data
         // (we'll use this below to prevent overlapping batch assignments)
-        allJobAssignments.length = 0
-        allJobAssignments.push(...(updatedAllAssignments || []))
+        allJobAssignments = updatedAllAssignments || []
         
         const updatedBatches = (updatedAllAssignments || []).filter((b: any) => 
           b.status === 'assigned' || b.status === 'processing'
