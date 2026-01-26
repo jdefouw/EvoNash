@@ -8,7 +8,8 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 // Maximum number of checkpoints to keep per experiment
-const MAX_CHECKPOINTS = 5
+// Increased from 5 to 10 for better recovery options and scientific data integrity
+const MAX_CHECKPOINTS = 10
 
 export async function POST(
   request: NextRequest,

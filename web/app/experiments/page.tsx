@@ -8,6 +8,52 @@ import WorkerList from '@/components/WorkerList'
 export default function ExperimentsPage() {
   const [experiments, setExperiments] = useState<Experiment[]>([])
   const [loading, setLoading] = useState(true)
+  const [showWorkers, setShowWorkers] = useState(true)
+  const [workerStats, setWorkerStats] = useState<{
+    active: number
+    processing: number
+    total: number
+  }>({ active: 0, processing: 0, total: 0 })
+
+  // Load workers visibility preference from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('showWorkers')
+      if (saved !== null) {
+        setShowWorkers(saved !== 'false')
+      }
+    }
+  }, [])
+
+  // Save workers visibility preference to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('showWorkers', String(showWorkers))
+    }
+  }, [showWorkers])
+
+  // Fetch worker stats for the button badge
+  useEffect(() => {
+    const fetchWorkerStats = async () => {
+      try {
+        const response = await fetch('/api/workers')
+        if (response.ok) {
+          const data = await response.json()
+          setWorkerStats({
+            active: data.active_workers_count || 0,
+            processing: data.processing_workers_count || 0,
+            total: data.total_workers_count || 0
+          })
+        }
+      } catch (error) {
+        console.error('Error fetching worker stats:', error)
+      }
+    }
+
+    fetchWorkerStats()
+    const interval = setInterval(fetchWorkerStats, 10000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     fetch('/api/experiments')
@@ -79,16 +125,40 @@ export default function ExperimentsPage() {
               Manage and monitor genetic algorithm experiments
             </p>
           </div>
-          <Link
-            href="/experiments/new"
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-          >
-            New Experiment
-          </Link>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowWorkers(!showWorkers)}
+              className={`px-5 py-3 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                showWorkers 
+                  ? 'bg-green-600 text-white hover:bg-green-700 shadow-md' 
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+              </svg>
+              Workers
+              {workerStats.active > 0 && (
+                <span className={`px-2 py-0.5 text-xs rounded-full ${
+                  showWorkers 
+                    ? 'bg-green-500 text-white' 
+                    : 'bg-green-600 text-white'
+                }`}>
+                  {workerStats.active}
+                </span>
+              )}
+            </button>
+            <Link
+              href="/experiments/new"
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-md"
+            >
+              New Experiment
+            </Link>
+          </div>
         </div>
 
-        {/* Workers Section */}
-        <WorkerList className="mb-8" />
+        {/* Workers Section - Collapsible */}
+        {showWorkers && <WorkerList className="mb-8" />}
 
         <div className="grid gap-4">
           {experiments.length === 0 ? (

@@ -32,6 +32,10 @@ export default function WorkerList({ className = '', compact = false }: WorkerLi
   const [workers, setWorkers] = useState<Worker[]>([])
   const [activeCount, setActiveCount] = useState(0)
   const [processingCount, setProcessingCount] = useState(0)
+  const [totalCapacity, setTotalCapacity] = useState(0)
+  const [utilizedCapacity, setUtilizedCapacity] = useState(0)
+  const [pendingJobsCount, setPendingJobsCount] = useState(0)
+  const [processingJobsCount, setProcessingJobsCount] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -43,6 +47,10 @@ export default function WorkerList({ className = '', compact = false }: WorkerLi
           setWorkers(data.workers || [])
           setActiveCount(data.active_workers_count || 0)
           setProcessingCount(data.processing_workers_count || 0)
+          setTotalCapacity(data.total_capacity || 0)
+          setUtilizedCapacity(data.utilized_capacity || 0)
+          setPendingJobsCount(data.pending_jobs_count || 0)
+          setProcessingJobsCount(data.processing_jobs_count || 0)
         }
       } catch (error) {
         console.error('Error fetching workers:', error)
@@ -109,6 +117,9 @@ export default function WorkerList({ className = '', compact = false }: WorkerLi
     )
   }
 
+  // Calculate capacity percentage
+  const capacityPercentage = totalCapacity > 0 ? Math.round((utilizedCapacity / totalCapacity) * 100) : 0
+
   return (
     <div className={`${className} bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden`}>
       <div className="p-4 border-b border-gray-200 dark:border-gray-700">
@@ -124,6 +135,51 @@ export default function WorkerList({ className = '', compact = false }: WorkerLi
               </span>
             )}
           </div>
+        </div>
+        
+        {/* Queue Status Section */}
+        <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
+          {/* Capacity Bar */}
+          <div className="flex items-center gap-2">
+            <span className="text-gray-600 dark:text-gray-400">Capacity:</span>
+            <span className="font-medium text-gray-900 dark:text-white">{utilizedCapacity}/{totalCapacity}</span>
+            <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div 
+                className={`h-full rounded-full transition-all ${
+                  capacityPercentage >= 90 ? 'bg-red-500' : 
+                  capacityPercentage >= 70 ? 'bg-amber-500' : 'bg-blue-500'
+                }`}
+                style={{ width: `${capacityPercentage}%` }}
+              />
+            </div>
+          </div>
+          
+          {/* Processing Jobs */}
+          {processingJobsCount > 0 && (
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+              <span className="text-blue-600 dark:text-blue-400 font-medium">
+                {processingJobsCount} job{processingJobsCount !== 1 ? 's' : ''} running
+              </span>
+            </div>
+          )}
+          
+          {/* Pending Jobs */}
+          {pendingJobsCount > 0 && (
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-amber-500 rounded-full" />
+              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                {pendingJobsCount} job{pendingJobsCount !== 1 ? 's' : ''} queued
+              </span>
+            </div>
+          )}
+          
+          {/* All Clear */}
+          {processingJobsCount === 0 && pendingJobsCount === 0 && activeCount > 0 && (
+            <span className="text-gray-500 dark:text-gray-400 italic">
+              No active jobs - workers idle
+            </span>
+          )}
         </div>
       </div>
       <div className="overflow-x-auto">

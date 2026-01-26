@@ -117,6 +117,106 @@ class WorkerService:
         """Handle shutdown signals gracefully."""
         self.logger.info(f"Received signal {signum}, shutting down gracefully...")
         self.running = False
+        
+        # Notify server of graceful shutdown
+        self._notify_disconnect("User initiated shutdown (signal {})".format(signum))
+    
+    def _notify_disconnect(self, reason: str):
+        """Notify server that worker is disconnecting and release all jobs."""
+        if not self.worker_id:
+            return
+            
+        try:
+            self.logger.info(f"Notifying server of disconnect: {reason}")
+            response = requests.post(
+                f"{self.controller_url}/api/workers/disconnect",
+                json={
+                    'worker_id': self.worker_id,
+                    'reason': reason
+                },
+                timeout=5
+            )
+            if response.status_code == 200:
+                data = response.json()
+                jobs_released = data.get('jobs_released', 0)
+                self.logger.info(f"✓ Server notified of shutdown ({jobs_released} jobs released)")
+            else:
+                self.logger.warning(f"⚠ Failed to notify server: {response.status_code}")
+        except Exception as e:
+            self.logger.warning(f"⚠ Failed to notify server of disconnect: {e}")
+    
+    def _claim_job(self, job_id: str) -> bool:
+        """
+        Claim a job before processing to prevent conflicts.
+        
+        Args:
+            job_id: The job ID to claim
+            
+        Returns:
+            True if job was successfully claimed, False otherwise
+        """
+        if not self.worker_id:
+            self.logger.error("Cannot claim job: worker_id not set")
+            return False
+            
+        try:
+            self.logger.info(f"📋 Claiming job {job_id}...")
+            response = requests.post(
+                f"{self.controller_url}/api/queue/claim",
+                json={
+                    'job_id': job_id,
+                    'worker_id': self.worker_id
+                },
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                self.logger.info(f"✓ Job {job_id} claimed successfully")
+                return True
+            elif response.status_code == 409:
+                self.logger.warning(f"⚠ Job {job_id} no longer available (may have been claimed by another worker)")
+                return False
+            else:
+                self.logger.error(f"✗ Failed to claim job: {response.status_code} - {response.text}")
+                return False
+        except Exception as e:
+            self.logger.error(f"✗ Error claiming job {job_id}: {e}")
+            return False
+    
+    def _release_job(self, job_id: str, reason: str, last_completed_generation: Optional[int] = None):
+        """
+        Release a job back to the queue.
+        
+        Args:
+            job_id: The job ID to release
+            reason: Reason for releasing the job
+            last_completed_generation: Last generation that was successfully completed
+        """
+        if not self.worker_id:
+            return
+            
+        try:
+            payload = {
+                'job_id': job_id,
+                'worker_id': self.worker_id,
+                'reason': reason
+            }
+            if last_completed_generation is not None:
+                payload['last_completed_generation'] = last_completed_generation
+                
+            self.logger.info(f"📤 Releasing job {job_id}: {reason}")
+            response = requests.post(
+                f"{self.controller_url}/api/queue/release",
+                json=payload,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                self.logger.info(f"✓ Job {job_id} released successfully")
+            else:
+                self.logger.warning(f"⚠ Failed to release job: {response.status_code}")
+        except Exception as e:
+            self.logger.warning(f"⚠ Error releasing job {job_id}: {e}")
     
     def _get_gpu_info(self) -> Tuple[Optional[str], int]:
         """
@@ -324,6 +424,7 @@ class WorkerService:
                 payload = {
                     "job_id": job_id,
                     "experiment_id": experiment_id,
+                    "worker_id": self.worker_id,  # Include worker_id for ownership verification
                     "generation_stats_batch": stats_to_upload,
                     "matches": []  # Empty for now
                 }
@@ -542,12 +643,20 @@ class WorkerService:
             self.logger.error("Invalid job: missing experiment_config")
             return
         
+        # Claim the job before processing to prevent conflicts
+        if job_id and not self._claim_job(job_id):
+            self.logger.error(f"✗ Failed to claim job {job_id}, skipping")
+            return
+        
+        # Track current job for heartbeat and shutdown
+        self.current_job = job
+        
         # Increment active jobs count
         self.active_jobs_count += 1
         
         try:
             self.logger.info("=" * 80)
-            self.logger.info(f"🎯 JOB RECEIVED - Starting Processing")
+            self.logger.info(f"🎯 JOB CLAIMED - Starting Processing")
             self.logger.info("=" * 80)
             self.logger.info(f"Job ID:     {job_id}")
             self.logger.info(f"Experiment: {experiment_id}")
@@ -721,13 +830,24 @@ class WorkerService:
             
         except KeyboardInterrupt:
             self.logger.warning("Job processing interrupted by user")
+            # Release the job so another worker can pick it up
+            if job_id:
+                self._release_job(job_id, "User interrupted (KeyboardInterrupt)")
             raise  # Re-raise to stop service
         except torch.cuda.OutOfMemoryError as e:
             self.logger.error(f"GPU out of memory error: {e}")
             self.logger.error("Try reducing population_size or batch size")
+            # Release the job so another worker can try
+            if job_id:
+                self._release_job(job_id, f"GPU out of memory: {e}")
         except Exception as e:
             self.logger.error(f"Error processing job {job_id}: {e}", exc_info=True)
+            # Release the job on unexpected errors
+            if job_id:
+                self._release_job(job_id, f"Unexpected error: {e}")
         finally:
+            # Clear current job tracking
+            self.current_job = None
             # Decrement active jobs count
             self.active_jobs_count = max(0, self.active_jobs_count - 1)
     

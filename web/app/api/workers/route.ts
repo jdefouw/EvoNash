@@ -63,13 +63,14 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // Mark workers as offline if they haven't sent a heartbeat in the last 2 minutes
+    // Mark workers as offline if they haven't sent a heartbeat in the last 90 seconds
+    // (as per scientific rigor requirements for timely job recovery)
     const now = new Date()
-    const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000)
+    const ninetySecondsAgo = new Date(now.getTime() - 90 * 1000)
     
     const workersWithStatus = (workers || []).map(worker => {
       const lastHeartbeat = new Date(worker.last_heartbeat)
-      const isOffline = lastHeartbeat < twoMinutesAgo
+      const isOffline = lastHeartbeat < ninetySecondsAgo
       const currentExperiment = workerExperimentMap.get(worker.id)
       
       return {
@@ -91,6 +92,18 @@ export async function GET(request: NextRequest) {
     const totalCapacity = workersWithStatus.reduce((sum, w) => sum + (w.max_parallel_jobs || 0), 0)
     const utilizedCapacity = workersWithStatus.reduce((sum, w) => sum + (w.active_jobs_count || 0), 0)
     
+    // Count pending jobs in the queue (assigned but not yet processing)
+    const { count: pendingJobsCount } = await supabase
+      .from('job_assignments')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'assigned')
+    
+    // Count actively processing jobs
+    const { count: processingJobsCount } = await supabase
+      .from('job_assignments')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'processing')
+    
     return NextResponse.json({
       workers: workersWithStatus,
       active_workers_count: activeWorkers.length,
@@ -98,7 +111,9 @@ export async function GET(request: NextRequest) {
       total_workers_count: workersWithStatus.length,
       total_capacity: totalCapacity,
       utilized_capacity: utilizedCapacity,
-      available_capacity: totalCapacity - utilizedCapacity
+      available_capacity: totalCapacity - utilizedCapacity,
+      pending_jobs_count: pendingJobsCount || 0,
+      processing_jobs_count: processingJobsCount || 0
     })
   } catch (error: any) {
     console.error('Error in GET /api/workers:', error)

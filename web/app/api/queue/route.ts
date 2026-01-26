@@ -90,7 +90,8 @@ export async function POST(request: NextRequest) {
           .in('id', workerIds)
         
         const workerMap = new Map((workers || []).map((w: any) => [w.id, w]))
-        const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000)
+        // 90 seconds timeout for worker offline detection (as per scientific rigor requirements)
+        const ninetySecondsAgo = new Date(now.getTime() - 90 * 1000)
         
         // Separate batches into: own jobs (can recover) vs other workers' jobs (check for orphaned)
         const ownBatches: any[] = []
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest) {
         for (const batch of otherBatches) {
           const worker = workerMap.get(batch.worker_id)
           const isWorkerOffline = !worker || 
-            (worker.last_heartbeat && new Date(worker.last_heartbeat) < twoMinutesAgo) ||
+            (worker.last_heartbeat && new Date(worker.last_heartbeat) < ninetySecondsAgo) ||
             worker.status === 'offline'
           
           const assignedTime = batch.assigned_at ? new Date(batch.assigned_at) : null

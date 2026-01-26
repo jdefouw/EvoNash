@@ -35,9 +35,9 @@ export async function POST(request: NextRequest) {
     }
     const supabase = await createServerClient()
     
-    const { job_id, experiment_id, generation_stats, generation_stats_batch, matches } = body
+    const { job_id, experiment_id, worker_id, generation_stats, generation_stats_batch, matches } = body
     
-    console.log(`[RESULTS] Received upload request for experiment ${experiment_id}, job ${job_id}`)
+    console.log(`[RESULTS] Received upload request for experiment ${experiment_id}, job ${job_id}, worker ${worker_id || 'unknown'}`)
     
     if (!experiment_id) {
       return NextResponse.json(
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Validate job assignment exists
+    // Validate job assignment exists and verify ownership
     if (job_id) {
       const { data: jobAssignment } = await supabase
         .from('job_assignments')
@@ -68,6 +68,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { error: 'Job assignment not found' },
           { status: 404 }
+        )
+      }
+      
+      // CRITICAL: Verify worker owns this job to prevent job stealing
+      if (worker_id && jobAssignment.worker_id !== worker_id) {
+        console.error(`[RESULTS] SECURITY: Worker ${worker_id} attempted to update job ${job_id} owned by worker ${jobAssignment.worker_id}`)
+        return NextResponse.json(
+          { error: 'Unauthorized: Worker does not own this job' },
+          { status: 403 }
         )
       }
       
