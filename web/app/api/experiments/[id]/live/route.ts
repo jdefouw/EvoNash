@@ -61,40 +61,26 @@ export async function GET(
         Array.from(expectedGenerations).every(gen => generationNumbers.has(gen))
       
       if (hasAllGenerations) {
-        // Check if there are any active job assignments
-        // Use the same logic as results route: ignore stuck assignments older than 10 minutes
-        const { data: allAssignments } = await supabase
-          .from('job_assignments')
-          .select('status, started_at, assigned_at')
-          .eq('experiment_id', experimentId)
+        // All generations exist - mark as COMPLETED immediately
+        // No need to check job assignments since we have all the data we need
+        console.log(`[LIVE] Experiment ${experimentId} has all ${generationNumbers.size} generations, marking as COMPLETED`)
         
-        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
-        const hasActiveAssignments = allAssignments && allAssignments.some((a: any) => {
-          if (a.status === 'assigned') return true
-          if (a.status === 'processing') {
-            // Only consider it active if it started recently (within 10 minutes)
-            // Stuck assignments older than 10 minutes won't block completion
-            const checkTime = a.started_at || a.assigned_at
-            return checkTime && checkTime > tenMinutesAgo
-          }
-          return false
-        })
+        // Mark as COMPLETED
+        const { error: updateError } = await supabase
+          .from('experiments')
+          .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
+          .eq('id', experimentId)
         
-        // If we have all generations and no active assignments, mark as COMPLETED
-        if (!hasActiveAssignments) {
-          console.log(`[LIVE] Auto-marking experiment ${experimentId} as COMPLETED (${generationNumbers.size}/${experiment.max_generations} generations exist)`)
-          const { error: updateError } = await supabase
-            .from('experiments')
-            .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
-            .eq('id', experimentId)
-          
-          if (!updateError) {
-            currentStatus = 'COMPLETED'
-            console.log(`[LIVE] ✓ Successfully marked experiment ${experimentId} as COMPLETED`)
-          } else {
-            console.error(`[LIVE] Failed to update experiment status:`, updateError)
-          }
+        if (!updateError) {
+          currentStatus = 'COMPLETED'
+          console.log(`[LIVE] ✓ Successfully marked experiment ${experimentId} as COMPLETED`)
+        } else {
+          console.error(`[LIVE] Failed to update experiment status:`, updateError)
         }
+      } else {
+        // Log why we're not completing
+        const missingGens = Array.from(expectedGenerations).filter(gen => !generationNumbers.has(gen))
+        console.log(`[LIVE] Experiment ${experimentId} not complete: have ${generationNumbers.size}/${experiment.max_generations} generations. Missing: ${missingGens.slice(0, 10).join(',')}${missingGens.length > 10 ? '...' : ''}`)
       }
     }
     
