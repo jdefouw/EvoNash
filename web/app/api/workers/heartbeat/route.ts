@@ -56,6 +56,13 @@ export async function POST(request: NextRequest) {
       .single()
     
     if (error) {
+      // Check if this is a "no rows returned" error (worker doesn't exist)
+      if (error.code === 'PGRST116' || error.message?.includes('no rows')) {
+        return NextResponse.json(
+          { error: 'Worker not found' },
+          { status: 404 }
+        )
+      }
       console.error('Error updating worker heartbeat:', error)
       return NextResponse.json(
         { error: error.message || 'Failed to update heartbeat' },

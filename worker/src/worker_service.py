@@ -383,11 +383,19 @@ class WorkerService:
                 timeout=5
             )
             
-            if response.status_code != 200:
+            if response.status_code == 404:
+                # Worker was deleted from server (stale heartbeat cleanup)
+                # Re-register to restore worker entry
+                self.logger.warning("⚠ Worker not found in server, re-registering...")
+                self._register_worker()
+            elif response.status_code != 200:
                 self.logger.warning(f"Heartbeat failed: {response.status_code}")
+        except requests.exceptions.Timeout:
+            self.logger.debug("Heartbeat timeout (will retry next cycle)")
+        except requests.exceptions.ConnectionError:
+            self.logger.debug("Heartbeat connection error (will retry next cycle)")
         except Exception as e:
-            # Don't log heartbeat errors as they're frequent and not critical
-            pass
+            self.logger.warning(f"Heartbeat error: {e}")
     
     def _start_heartbeat_thread(self):
         """Start background thread for sending heartbeats."""

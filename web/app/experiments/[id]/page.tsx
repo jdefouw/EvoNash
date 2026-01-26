@@ -235,12 +235,29 @@ export default function ExperimentDetailPage() {
                     vram_gb: matchingWorker.vram_gb
                   })
                 } else {
-                  setProcessingWorker(null)
+                  // Worker not in workers table but has active job - show partial info
+                  // This can happen if the worker was cleaned up but is still processing
+                  setProcessingWorker({
+                    id: activeBatch.worker_id,
+                    worker_name: null, // Unknown - worker will re-register on next heartbeat
+                    gpu_type: null,
+                    vram_gb: 0
+                  })
                 }
               }
             } catch (workerErr) {
               console.error('Error fetching workers for fallback:', workerErr)
-              setProcessingWorker(null)
+              // Still show that there's a worker processing even if we can't get its info
+              if (activeBatch.worker_id) {
+                setProcessingWorker({
+                  id: activeBatch.worker_id,
+                  worker_name: null,
+                  gpu_type: null,
+                  vram_gb: 0
+                })
+              } else {
+                setProcessingWorker(null)
+              }
             }
           } else {
             setProcessingWorker(null)
