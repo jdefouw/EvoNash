@@ -68,7 +68,25 @@ export async function GET(request: NextRequest) {
     const now = new Date()
     const ninetySecondsAgo = new Date(now.getTime() - 90 * 1000)
     
-    const workersWithStatus = (workers || []).map(worker => {
+    // Auto-cleanup: Delete workers that have been offline for more than 5 minutes
+    // This prevents stale workers from accumulating in the dashboard
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000)
+    const staleWorkerIds = (workers || [])
+      .filter(w => new Date(w.last_heartbeat) < fiveMinutesAgo)
+      .map(w => w.id)
+    
+    if (staleWorkerIds.length > 0) {
+      console.log(`[WORKERS] Auto-cleaning ${staleWorkerIds.length} stale worker(s)`)
+      await supabase
+        .from('workers')
+        .delete()
+        .in('id', staleWorkerIds)
+    }
+    
+    // Filter out the stale workers from the response
+    const activeWorkersList = (workers || []).filter(w => !staleWorkerIds.includes(w.id))
+    
+    const workersWithStatus = activeWorkersList.map(worker => {
       const lastHeartbeat = new Date(worker.last_heartbeat)
       const isOffline = lastHeartbeat < ninetySecondsAgo
       const currentExperiment = workerExperimentMap.get(worker.id)
