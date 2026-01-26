@@ -44,6 +44,60 @@ export async function GET(
       return NextResponse.json({ error: 'Experiment not found' }, { status: 404 })
     }
     
+    // Check if experiment should be marked as COMPLETED
+    // This catches cases where all generations exist but status wasn't updated
+    let currentStatus = experiment.status
+    if (currentStatus === 'RUNNING' || currentStatus === 'PENDING') {
+      const { data: allGenerations } = await supabase
+        .from('generations')
+        .select('generation_number')
+        .eq('experiment_id', experimentId)
+      
+      const generationNumbers = new Set((allGenerations || []).map((g: any) => g.generation_number))
+      const expectedGenerations = new Set(Array.from({ length: experiment.max_generations }, (_, i) => i))
+      
+      // Check if we have all required generations (0 to max_generations-1)
+      const hasAllGenerations = generationNumbers.size >= experiment.max_generations && 
+        Array.from(expectedGenerations).every(gen => generationNumbers.has(gen))
+      
+      if (hasAllGenerations) {
+        // Check if there are any active job assignments
+        // Use the same logic as results route: ignore stuck assignments older than 10 minutes
+        const { data: allAssignments } = await supabase
+          .from('job_assignments')
+          .select('status, started_at, assigned_at')
+          .eq('experiment_id', experimentId)
+        
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+        const hasActiveAssignments = allAssignments && allAssignments.some((a: any) => {
+          if (a.status === 'assigned') return true
+          if (a.status === 'processing') {
+            // Only consider it active if it started recently (within 10 minutes)
+            // Stuck assignments older than 10 minutes won't block completion
+            const checkTime = a.started_at || a.assigned_at
+            return checkTime && checkTime > tenMinutesAgo
+          }
+          return false
+        })
+        
+        // If we have all generations and no active assignments, mark as COMPLETED
+        if (!hasActiveAssignments) {
+          console.log(`[LIVE] Auto-marking experiment ${experimentId} as COMPLETED (${generationNumbers.size}/${experiment.max_generations} generations exist)`)
+          const { error: updateError } = await supabase
+            .from('experiments')
+            .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
+            .eq('id', experimentId)
+          
+          if (!updateError) {
+            currentStatus = 'COMPLETED'
+            console.log(`[LIVE] ✓ Successfully marked experiment ${experimentId} as COMPLETED`)
+          } else {
+            console.error(`[LIVE] Failed to update experiment status:`, updateError)
+          }
+        }
+      }
+    }
+    
     // Fetch latest generation
     let genQuery = supabase
       .from('generations')
@@ -96,7 +150,7 @@ export async function GET(
       generation: latestGeneration,
       latestGeneration: latestGeneration, // Alias for consistency
       matches: matches || [],
-      experiment_status: experiment.status,
+      experiment_status: currentStatus, // Use potentially updated status
       has_updates: hasUpdates,
       max_generations: experiment.max_generations,
       current_generation: latestGeneration?.generation_number || 0,
