@@ -15,6 +15,7 @@ import MatchReplay from '@/components/MatchReplay'
 import LiveViewLegend from '@/components/LiveViewLegend'
 import SimulationReplay from '@/components/SimulationReplay'
 import Tooltip from '@/components/Tooltip'
+import WorkerList from '@/components/WorkerList'
 
 export default function ExperimentDetailPage() {
   const params = useParams()
@@ -591,6 +592,9 @@ export default function ExperimentDetailPage() {
               generations={generations}
             />
             <LiveViewLegend />
+            
+            {/* All Workers */}
+            <WorkerList compact={true} />
             
             {/* Worker Status Card */}
             {experiment.status === 'PENDING' && (

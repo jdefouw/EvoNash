@@ -3,11 +3,11 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Experiment } from '@/types/protocol'
+import WorkerList from '@/components/WorkerList'
 
 export default function ExperimentsPage() {
   const [experiments, setExperiments] = useState<Experiment[]>([])
   const [loading, setLoading] = useState(true)
-  const [workerStatus, setWorkerStatus] = useState<any>(null)
 
   useEffect(() => {
     fetch('/api/experiments')
@@ -28,30 +28,6 @@ export default function ExperimentsPage() {
         setExperiments([]) // Set empty array on error
         setLoading(false)
       })
-
-    // Check worker status
-    fetch('/api/worker/status')
-      .then(res => res.json())
-      .then(data => {
-        setWorkerStatus(data)
-      })
-      .catch(err => {
-        console.error('Error fetching worker status:', err)
-      })
-    
-    // Refresh worker status every 10 seconds
-    const statusInterval = setInterval(() => {
-      fetch('/api/worker/status')
-        .then(res => res.json())
-        .then(data => {
-          setWorkerStatus(data)
-        })
-        .catch(err => {
-          console.error('Error fetching worker status:', err)
-        })
-    }, 10000)
-    
-    return () => clearInterval(statusInterval)
   }, [])
 
   const getStatusColor = (status: string) => {
@@ -96,39 +72,12 @@ export default function ExperimentsPage() {
           </Link>
         </div>
 
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex justify-between items-start mb-8">
           <div>
             <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">Experiments</h1>
             <p className="text-gray-600 dark:text-gray-400">
               Manage and monitor genetic algorithm experiments
             </p>
-            {workerStatus && (
-              <div className="mt-2 space-y-1">
-                <div className="flex items-center gap-2 text-sm">
-                  <div className={`w-2 h-2 rounded-full ${workerStatus.connected ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-                  <span className="text-gray-600 dark:text-gray-400">
-                    {workerStatus.active_workers_count || 0} Active Worker{workerStatus.active_workers_count !== 1 ? 's' : ''}
-                    {workerStatus.total_capacity > 0 && ` • ${workerStatus.utilized_capacity || 0}/${workerStatus.total_capacity || 0} jobs`}
-                    {workerStatus.pending_count > 0 && ` • ${workerStatus.pending_count} pending`}
-                  </span>
-                </div>
-                {workerStatus.workers && workerStatus.workers.length > 0 && (
-                  <div className="text-xs text-gray-500 dark:text-gray-400 ml-4">
-                    {workerStatus.workers.slice(0, 3).map((worker: any) => (
-                      <span key={worker.id} className="mr-3">
-                        {worker.gpu_type || 'CPU'} ({worker.vram_gb}GB) - {worker.active_jobs_count}/{worker.max_parallel_jobs} jobs
-                      </span>
-                    ))}
-                    {workerStatus.workers.length > 3 && ` +${workerStatus.workers.length - 3} more`}
-                  </div>
-                )}
-                {!workerStatus.connected && workerStatus.pending_count > 0 && (
-                  <span className="text-yellow-600 dark:text-yellow-400 text-xs ml-4">
-                    Workers should pick up pending experiments automatically
-                  </span>
-                )}
-              </div>
-            )}
           </div>
           <Link
             href="/experiments/new"
@@ -137,6 +86,9 @@ export default function ExperimentsPage() {
             New Experiment
           </Link>
         </div>
+
+        {/* Workers Section */}
+        <WorkerList className="mb-8" />
 
         <div className="grid gap-4">
           {experiments.length === 0 ? (
