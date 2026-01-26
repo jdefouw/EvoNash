@@ -544,6 +544,38 @@ class WorkerService:
         
         return generation_check_callback
     
+    def _get_last_completed_generation(self, experiment_id: str) -> int:
+        """
+        Query the database for the last completed generation number (single API call).
+        
+        This is much more efficient than checking generations one-by-one for recovery.
+        
+        Args:
+            experiment_id: Experiment ID to check
+            
+        Returns:
+            The highest completed generation number, or -1 if none exist
+        """
+        import requests
+        
+        try:
+            response = requests.get(
+                f"{self.controller_url}/api/generations",
+                params={'experiment_id': experiment_id, 'latest': 'true'},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                last_gen = data.get('last_completed_generation', -1)
+                return last_gen
+            else:
+                self.logger.warning(f"⚠️ Error getting last completed generation: {response.status_code}")
+                return -1
+        except Exception as e:
+            self.logger.warning(f"⚠️ Exception getting last completed generation: {e}")
+            return -1
+    
     def _create_checkpoint_callback(self, experiment_id: str) -> callable:
         """
         Create checkpoint callback function that saves population state.
@@ -707,23 +739,25 @@ class WorkerService:
             # Create ExperimentConfig from job
             config = ExperimentManager.load_from_dict(experiment_config)
             
-            # Check which generations already exist to avoid duplicate work
-            generation_check_callback = self._create_generation_check_callback(experiment_id)
-            existing_generations = set()
-            for gen in range(generation_start, generation_end + 1):
-                try:
-                    if generation_check_callback(gen):
-                        existing_generations.add(gen)
-                        self.logger.info(f"ℹ️  Generation {gen} already exists, will skip")
-                except Exception as e:
-                    self.logger.warning(f"⚠️  Error checking generation {gen}: {e}")
+            # EFFICIENT RECOVERY: Single API call to get last completed generation
+            # Instead of checking generations one-by-one (O(n) calls), we query the max in O(1)
+            self.logger.info(f"🔍 Checking for existing progress (efficient single-query recovery)...")
+            last_completed = self._get_last_completed_generation(experiment_id)
             
-            # Find the first generation that doesn't exist, or use generation_start
-            actual_start = generation_start
-            for gen in range(generation_start, generation_end + 1):
-                if gen not in existing_generations:
-                    actual_start = gen
-                    break
+            # Calculate actual_start efficiently based on last completed generation
+            if last_completed >= generation_start:
+                # Resume from one after last completed (capped at generation_end + 1)
+                actual_start = min(last_completed + 1, generation_end + 1)
+                skipped_count = actual_start - generation_start
+                self.logger.info(f"✓ Recovery: Found {skipped_count} completed generations (last: {last_completed})")
+                self.logger.info(f"  → Resuming from generation {actual_start}")
+            else:
+                # No completed generations in this range, start from beginning
+                actual_start = generation_start
+                if last_completed == -1:
+                    self.logger.info(f"✓ No prior progress found, starting from generation {generation_start}")
+                else:
+                    self.logger.info(f"✓ Last completed ({last_completed}) is before batch range, starting from {generation_start}")
             
             # Load checkpoint if starting from a non-zero generation
             checkpoint_state = None
@@ -743,24 +777,22 @@ class WorkerService:
                         checkpoint_state = checkpoint_data.get('population_state')
                         self.logger.info(f"✓ Checkpoint loaded for generation {checkpoint_data.get('generation_number')}")
                     elif checkpoint_response.status_code == 404:
-                        # If checkpoint not found, try loading from actual_start if it exists
-                        if actual_start in existing_generations:
-                            try:
-                                self.logger.info(f"📥 Attempting to load checkpoint for generation {actual_start}...")
-                                checkpoint_response = requests.get(
-                                    f"{self.controller_url}/api/experiments/{experiment_id}/checkpoint",
-                                    params={'generation': str(actual_start)},
-                                    timeout=30
-                                )
-                                if checkpoint_response.status_code == 200:
-                                    checkpoint_data = checkpoint_response.json()
-                                    checkpoint_state = checkpoint_data.get('population_state')
-                                    self.logger.info(f"✓ Checkpoint loaded for generation {checkpoint_data.get('generation_number')}")
-                                    actual_start = actual_start + 1  # Start from next generation
-                            except Exception as e2:
-                                self.logger.warning(f"⚠ Error loading checkpoint from {actual_start}: {e2}")
-                        else:
-                            self.logger.warning(f"⚠ No checkpoint found for generation {checkpoint_gen}, starting fresh")
+                        # If specific checkpoint not found, try loading the latest available checkpoint
+                        self.logger.info(f"📥 Checkpoint for gen {checkpoint_gen} not found, trying latest checkpoint...")
+                        try:
+                            checkpoint_response = requests.get(
+                                f"{self.controller_url}/api/experiments/{experiment_id}/checkpoint",
+                                timeout=30  # No generation param = get latest
+                            )
+                            if checkpoint_response.status_code == 200:
+                                checkpoint_data = checkpoint_response.json()
+                                checkpoint_state = checkpoint_data.get('population_state')
+                                loaded_gen = checkpoint_data.get('generation_number')
+                                self.logger.info(f"✓ Latest checkpoint loaded (from generation {loaded_gen})")
+                            else:
+                                self.logger.warning(f"⚠ No checkpoint found, starting fresh")
+                        except Exception as e2:
+                            self.logger.warning(f"⚠ Error loading latest checkpoint: {e2}, starting fresh")
                     else:
                         self.logger.warning(f"⚠ Failed to load checkpoint: {checkpoint_response.status_code}")
                 except Exception as e:
