@@ -194,41 +194,64 @@ export default function ExperimentDetailPage() {
         // Don't block on this error
       })
     
-    // Fetch batch assignments (non-blocking, handles missing tables gracefully)
-    const fetchBatches = () => {
-      fetch(`/api/experiments/${experimentId}/batches`)
-        .then(res => {
-          if (!res.ok) {
-            // If table doesn't exist or other error, just return empty array
-            return { batches: [] }
-          }
-          return res.json()
-        })
-        .then(data => {
-          const batchList = data.batches || []
-          setBatches(batchList)
-          
-          // Find the active batch (assigned or processing) and extract worker info
-          const activeBatch = batchList.find((b: any) => 
-            b.status === 'assigned' || b.status === 'processing'
-          )
-          if (activeBatch && activeBatch.workers) {
+    // Fetch batch assignments and worker info (non-blocking, handles missing tables gracefully)
+    const fetchBatches = async () => {
+      try {
+        // Fetch batches for this experiment
+        const batchRes = await fetch(`/api/experiments/${experimentId}/batches`)
+        const batchData = batchRes.ok ? await batchRes.json() : { batches: [] }
+        const batchList = batchData.batches || []
+        setBatches(batchList)
+        
+        // Find the active batch (assigned or processing) and extract worker info
+        const activeBatch = batchList.find((b: any) => 
+          b.status === 'assigned' || b.status === 'processing'
+        )
+        
+        if (activeBatch) {
+          // Try to get worker info from the batch join first
+          if (activeBatch.workers) {
             setProcessingWorker({
               id: activeBatch.workers.id,
               worker_name: activeBatch.workers.worker_name,
               gpu_type: activeBatch.workers.gpu_type,
               vram_gb: activeBatch.workers.vram_gb
             })
+          } else if (activeBatch.worker_id) {
+            // Fallback: fetch workers list and find the matching worker
+            try {
+              const workersRes = await fetch('/api/workers')
+              if (workersRes.ok) {
+                const workersData = await workersRes.json()
+                const matchingWorker = (workersData.workers || []).find(
+                  (w: any) => w.id === activeBatch.worker_id
+                )
+                if (matchingWorker) {
+                  setProcessingWorker({
+                    id: matchingWorker.id,
+                    worker_name: matchingWorker.worker_name,
+                    gpu_type: matchingWorker.gpu_type,
+                    vram_gb: matchingWorker.vram_gb
+                  })
+                } else {
+                  setProcessingWorker(null)
+                }
+              }
+            } catch (workerErr) {
+              console.error('Error fetching workers for fallback:', workerErr)
+              setProcessingWorker(null)
+            }
           } else {
             setProcessingWorker(null)
           }
-        })
-        .catch(err => {
-          console.error('Error fetching batches:', err)
-          // Don't block on this error, just set empty batches
-          setBatches([])
+        } else {
           setProcessingWorker(null)
-        })
+        }
+      } catch (err) {
+        console.error('Error fetching batches:', err)
+        setBatches([])
+        setProcessingWorker(null)
+      }
     }
     
     fetchBatches()
