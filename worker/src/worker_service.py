@@ -371,9 +371,13 @@ class WorkerService:
             return
         
         try:
+            # Determine status based on active jobs count for accurate reporting
+            # This ensures the server knows we're processing even if self.status is stale
+            current_status = 'processing' if self.active_jobs_count > 0 else self.status
+            
             payload = {
                 'worker_id': self.worker_id,
-                'status': self.status,
+                'status': current_status,
                 'active_jobs_count': self.active_jobs_count
             }
             

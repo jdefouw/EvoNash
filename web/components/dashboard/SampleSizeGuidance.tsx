@@ -168,8 +168,11 @@ export default function SampleSizeGuidance({
           <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
             {controlExperimentCount}
           </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">Control Experiments</div>
+          <div className="text-sm font-medium text-gray-700 dark:text-gray-300">Control Group</div>
           <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+            Static Mutation (ε = 0.05)
+          </div>
+          <div className="text-xs text-gray-400 dark:text-gray-600 mt-1">
             {controlAvgGenerations.toLocaleString()} avg generations
           </div>
         </div>
@@ -177,8 +180,11 @@ export default function SampleSizeGuidance({
           <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
             {experimentalExperimentCount}
           </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">Experimental</div>
+          <div className="text-sm font-medium text-gray-700 dark:text-gray-300">Experimental Group</div>
           <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+            Adaptive Mutation (ε = f(Elo))
+          </div>
+          <div className="text-xs text-gray-400 dark:text-gray-600 mt-1">
             {experimentalAvgGenerations.toLocaleString()} avg generations
           </div>
         </div>
@@ -257,12 +263,16 @@ export default function SampleSizeGuidance({
       {/* Why This Matters */}
       <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
         <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Why Sample Size Matters
+          Understanding the Experiment
         </div>
+        <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+          This experiment compares <strong>Control</strong> (static mutation ε = 0.05) vs <strong>Experimental</strong> (adaptive mutation ε = f(Elo)) 
+          to test whether fitness-scaled mutation accelerates convergence to Nash Equilibrium.
+        </p>
         <p className="text-xs text-gray-600 dark:text-gray-400">
-          Running multiple experiments with different random seeds demonstrates that findings are reproducible 
-          and not due to chance. The t-test requires sufficient data points to achieve statistical significance 
-          (p &lt; 0.05) with adequate power (80%).
+          Running multiple experiments with different random seeds demonstrates reproducibility. 
+          A two-sample t-test requires sufficient data points to achieve statistical significance (p &lt; 0.05).
+          <strong> Aim for 5+ experiments per group</strong> with 2,000+ generations each for publication-quality results.
         </p>
       </div>
     </div>

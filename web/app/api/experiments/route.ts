@@ -31,8 +31,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     console.log('Request body received:', { 
       experiment_name: body.experiment_name,
-      experiment_group: body.experiment_group,
-      mutation_mode: body.mutation_mode
+      experiment_group: body.experiment_group
     })
     
     let supabase
@@ -54,7 +53,6 @@ export async function POST(request: NextRequest) {
     const {
       experiment_name,
       experiment_group,
-      mutation_mode,
       random_seed,
       population_size,
       max_generations,
@@ -67,12 +65,17 @@ export async function POST(request: NextRequest) {
     } = body
     
     // Validate required fields
-    if (!experiment_name || !experiment_group || !mutation_mode) {
+    if (!experiment_name || !experiment_group) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       )
     }
+    
+    // Derive mutation_mode from experiment_group
+    // CONTROL = STATIC mutation (fixed rate ε = 0.05)
+    // EXPERIMENTAL = ADAPTIVE mutation (fitness-scaled ε = f(Elo))
+    const mutation_mode = experiment_group === 'CONTROL' ? 'STATIC' : 'ADAPTIVE'
     
     const insertData = {
       experiment_name,

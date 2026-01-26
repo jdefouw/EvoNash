@@ -423,10 +423,9 @@ export default function ExperimentDetailPage() {
               </h1>
               <div className="flex flex-wrap gap-4 text-sm items-center">
                 <span className="text-gray-600 dark:text-gray-400">
-                  Group: <strong className="text-gray-900 dark:text-white">{experiment.experiment_group}</strong>
-                </span>
-                <span className="text-gray-600 dark:text-gray-400">
-                  Mode: <strong className="text-gray-900 dark:text-white">{experiment.mutation_mode}</strong>
+                  Group: <strong className="text-gray-900 dark:text-white">
+                    {experiment.experiment_group === 'CONTROL' ? 'Control (Static Mutation)' : 'Experimental (Adaptive Mutation)'}
+                  </strong>
                 </span>
                 <StatusIndicator status={experiment.status} />
                 {/* Show processing worker info */}

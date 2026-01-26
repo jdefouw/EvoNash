@@ -130,10 +130,23 @@ You can also manage the service through Windows Services Manager (`services.msc`
 2. **Job Assignment:** When a job is available, the controller assigns it to the worker
 3. **Processing:** The worker runs the experiment on your local GPU:
    - Executes genetic algorithm with neural network evolution
-   - Runs Petri Dish simulations
-   - Processes multiple generations
+   - Runs Petri Dish simulations (deterministic biological environment)
+   - Processes multiple generations with appropriate mutation strategy
 4. **Incremental Upload:** After each generation, results are uploaded to the controller
 5. **Completion:** When finished, the worker returns to polling for the next job
+
+## Understanding Experiment Groups
+
+When you create an experiment in the web dashboard, you select an **Experiment Group** which determines the mutation strategy:
+
+| Experiment Group | Mutation Strategy | Description |
+|------------------|-------------------|-------------|
+| **Control** | Static Mutation | Fixed rate ε = 0.05 applied uniformly to all offspring |
+| **Experimental** | Adaptive Mutation | Dynamic rate ε = Base × (1 - CurrentElo/MaxElo) where low-fitness agents mutate more |
+
+This is the core experiment: testing whether adaptive (fitness-scaled) mutation accelerates convergence to Nash Equilibrium compared to static mutation.
+
+**For statistical significance**, run at least 5 experiments of each group with different random seeds (e.g., 42, 43, 44, 45, 46) but identical other parameters.
 
 ## GPU Optimizations
 

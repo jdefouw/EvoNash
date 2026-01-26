@@ -13,7 +13,7 @@
 
 This experiment investigates the efficiency of evolutionary algorithms in high-dimensional decision spaces. Traditional Genetic Algorithms (GAs) typically utilize static mutation rates, which often results in premature convergence to local optima or inefficient random searching. This project hypothesizes that an **Adaptive Mutation Strategy**—where mutation magnitude is inversely proportional to an agent's fitness—will accelerate convergence to a Nash Equilibrium compared to a static control.
 
-To test this, a custom distributed computing platform ("EvoNash") was engineered to run on an NVIDIA RTX 3090, simulating a deterministic biological environment ("The Petri Dish"). Two populations of 1,000 Neural Networks were evolved over 1,500 generations (750 ticks each): Group A (Static $\epsilon=0.05$) and Group B (Adaptive $\epsilon \propto 1/\text{Fitness}$). Telemetry demonstrates that the Adaptive group achieved stable Policy Entropy (Nash Equilibrium) 40% faster than the Control group, with a statistically significant higher peak Elo rating ($p < 0.05$). These findings suggest that mimicking biological stress-response mechanisms significantly improves AI training efficiency on consumer hardware.
+To test this, a custom distributed computing platform ("EvoNash") was engineered to run on an NVIDIA RTX 3090, simulating a deterministic biological environment ("The Petri Dish"). Two experiment groups of 1,000 Neural Networks each were evolved over 1,500 generations (750 ticks each): the **Control Group** (Static mutation, $\epsilon=0.05$) and the **Experimental Group** (Adaptive mutation, $\epsilon \propto 1/\text{Fitness}$). Telemetry demonstrates that the Experimental group achieved stable Policy Entropy (Nash Equilibrium) 40% faster than the Control group, with a statistically significant higher peak Elo rating ($p < 0.05$). These findings suggest that mimicking biological stress-response mechanisms significantly improves AI training efficiency on consumer hardware.
 
 ---
 
@@ -45,9 +45,11 @@ Deep Reinforcement Learning (DRL) is computationally expensive and often acts as
 To ensure scientific validity, this project utilizes a **Controlled Comparative Experiment**.
 
 ### 4.1 Variables
-* **Independent Variable:** The Mutation Strategy.
-    * *Control Group (Group A):* Fixed Mutation Rate ($\epsilon = 0.05$).
-    * *Experimental Group (Group B):* Adaptive Mutation Rate ($\epsilon = \text{Base} \times (1 - \text{NormalizedElo})$).
+* **Independent Variable:** The Mutation Strategy (determined by Experiment Group selection).
+    * *Control Group:* Static Mutation — Fixed rate $\epsilon = 0.05$ applied uniformly to all offspring regardless of parent fitness.
+    * *Experimental Group:* Adaptive Mutation — Dynamic rate $\epsilon = \text{Base} \times (1 - \frac{\text{CurrentElo}}{\text{MaxElo}})$ where low-fitness parents produce highly mutated offspring and high-fitness parents produce stable offspring.
+    
+    > **Note:** In the EvoNash platform, selecting "Control" automatically enforces Static mutation, and selecting "Experimental" automatically enforces Adaptive mutation. This design prevents misconfiguration and ensures proper experimental methodology.
 * **Dependent Variables:**
     * *Convergence Velocity:* The number of generations required for the population's Policy Entropy variance to drop below $\sigma < 0.01$.
     * *Peak Performance:* The maximum Elo rating achieved after 1,500 generations.
@@ -67,15 +69,17 @@ To ensure scientific validity, this project utilizes a **Controlled Comparative 
 
 ### 4.3 Procedure
 1.  **Software Validation:** A unit test was run to confirm the simulation is **deterministic**. Given inputs $X$ and seed $S$, the output must always be $Y$.
-2.  **Phase I: Control Run (Static):**
-    * The system was configured to `Mode: STATIC`.
+2.  **Phase I: Control Run (Static Mutation):**
+    * A new experiment was created with **Experiment Group: Control** (which automatically applies Static mutation with $\epsilon = 0.05$).
+    * The Random Seed was set to `42`.
     * The simulation ran for 1,500 generations (750 ticks each).
-    * Every 10 generations, the `Mean Elo` and `Policy Entropy` were logged to the database.
-3.  **Phase II: Experimental Run (Adaptive):**
-    * The system was reset. The Random Seed was re-entered (`42`).
-    * The system was configured to `Mode: ADAPTIVE`.
+    * Every generation, the `Mean Elo`, `Policy Entropy`, and other metrics were logged to the database.
+3.  **Phase II: Experimental Run (Adaptive Mutation):**
+    * A new experiment was created with **Experiment Group: Experimental** (which automatically applies Adaptive mutation).
+    * The Random Seed was set to `42` (same as Control for identical starting conditions).
     * The simulation ran for 1,500 generations (750 ticks each).
-4.  **Data Extraction:** Raw telemetry was exported to CSV format for statistical analysis using SciPy.
+4.  **Replication:** To achieve statistical significance, 5 runs of each group were conducted with different random seeds (42, 43, 44, 45, 46).
+5.  **Data Extraction:** Raw telemetry was exported to CSV format for statistical analysis using SciPy.
 
 ---
 

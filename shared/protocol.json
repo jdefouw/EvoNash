@@ -131,7 +131,8 @@
         },
         "mutation_mode": {
           "type": "string",
-          "enum": ["STATIC", "ADAPTIVE"]
+          "enum": ["STATIC", "ADAPTIVE"],
+          "description": "Derived from experiment_group: CONTROL→STATIC, EXPERIMENTAL→ADAPTIVE. STATIC uses fixed rate ε=0.05. ADAPTIVE uses fitness-scaled ε = Base × (1 - CurrentElo/MaxElo)."
         },
         "mutation_rate": {
           "type": "number",
@@ -188,7 +189,8 @@
         },
         "experiment_group": {
           "type": "string",
-          "enum": ["CONTROL", "EXPERIMENTAL"]
+          "enum": ["CONTROL", "EXPERIMENTAL"],
+          "description": "Experiment group determines mutation strategy: CONTROL uses STATIC mutation (fixed ε=0.05), EXPERIMENTAL uses ADAPTIVE mutation (fitness-scaled ε)."
         }
       }
     }

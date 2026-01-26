@@ -13,7 +13,6 @@ export default function NewExperimentPage() {
   const [formData, setFormData] = useState({
     experiment_name: '',
     experiment_group: 'CONTROL' as 'CONTROL' | 'EXPERIMENTAL',
-    mutation_mode: 'STATIC' as 'STATIC' | 'ADAPTIVE',
     random_seed: 42,
     population_size: 1000,
     max_generations: 1500,
@@ -23,6 +22,11 @@ export default function NewExperimentPage() {
     max_possible_elo: 2000.0,
     selection_pressure: 0.2
   })
+
+  // Derive mutation_mode from experiment_group
+  // CONTROL = STATIC mutation (fixed rate ε = 0.05)
+  // EXPERIMENTAL = ADAPTIVE mutation (fitness-scaled ε = f(Elo))
+  const mutation_mode = formData.experiment_group === 'CONTROL' ? 'STATIC' : 'ADAPTIVE'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,6 +41,7 @@ export default function NewExperimentPage() {
         },
         body: JSON.stringify({
           ...formData,
+          mutation_mode, // Derived from experiment_group
           network_architecture: {
             input_size: 24,
             hidden_layers: [64],
@@ -106,9 +111,39 @@ export default function NewExperimentPage() {
             </div>
           )}
 
+          {/* Experiment Design Explanation */}
+          <div className="mb-8 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <h3 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-2">
+              Understanding Experiment Groups
+            </h3>
+            <p className="text-sm text-blue-700 dark:text-blue-400 mb-3">
+              This experiment tests whether <strong>adaptive mutation</strong> (scaling mutation rate by fitness) 
+              accelerates convergence to Nash Equilibrium compared to <strong>static mutation</strong>.
+            </p>
+            <div className="grid md:grid-cols-2 gap-4 text-xs">
+              <div className="bg-white dark:bg-gray-800 p-3 rounded border border-blue-100 dark:border-blue-900">
+                <div className="font-semibold text-gray-900 dark:text-white mb-1">Control Group</div>
+                <div className="text-gray-600 dark:text-gray-400">
+                  <strong>Static Mutation</strong> — Fixed rate ε = 0.05 applied uniformly to all offspring. 
+                  Traditional genetic algorithm approach serving as the baseline.
+                </div>
+              </div>
+              <div className="bg-white dark:bg-gray-800 p-3 rounded border border-blue-100 dark:border-blue-900">
+                <div className="font-semibold text-gray-900 dark:text-white mb-1">Experimental Group</div>
+                <div className="text-gray-600 dark:text-gray-400">
+                  <strong>Adaptive Mutation</strong> — Dynamic rate where low-fitness parents produce 
+                  highly mutated offspring (exploration) and high-fitness parents produce stable offspring (exploitation).
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-blue-600 dark:text-blue-500 mt-3">
+              For statistical significance, run at least 5 experiments of each group with different random seeds.
+            </p>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <Tooltip content="A unique identifier or title for this specific experiment.">
+              <Tooltip content="A descriptive name for this experiment run. Include the group type and seed for easy identification (e.g., 'Control Run - Seed 42').">
                 <label htmlFor="experiment_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
                   Experiment Name *
                 </label>
@@ -121,48 +156,32 @@ export default function NewExperimentPage() {
                 value={formData.experiment_name}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                placeholder="e.g., Control Group - Static Mutation"
+                placeholder="e.g., Control Run - Seed 42"
               />
             </div>
 
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <Tooltip content="Categorize this experiment into a group for easier organization and comparison with other related experiments.">
-                  <label htmlFor="experiment_group" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                    Experiment Group *
-                  </label>
-                </Tooltip>
-                <select
-                  id="experiment_group"
-                  name="experiment_group"
-                  required
-                  value={formData.experiment_group}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                >
-                  <option value="CONTROL">Control</option>
-                  <option value="EXPERIMENTAL">Experimental</option>
-                </select>
-              </div>
-
-              <div>
-                <Tooltip content="Determines how genetic mutations are applied during evolution. 'Static' uses a constant rate, while 'Adaptive' allows the rate to change dynamically based on experiment progress.">
-                  <label htmlFor="mutation_mode" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                    Mutation Mode *
-                  </label>
-                </Tooltip>
-                <select
-                  id="mutation_mode"
-                  name="mutation_mode"
-                  required
-                  value={formData.mutation_mode}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                >
-                  <option value="STATIC">Static (Fixed Rate)</option>
-                  <option value="ADAPTIVE">Adaptive (Fitness-Scaled)</option>
-                </select>
-              </div>
+            <div>
+              <Tooltip content="Control group uses static mutation (fixed rate ε = 0.05). Experimental group uses adaptive mutation (fitness-scaled ε = f(Elo)) where lower-fitness agents mutate more.">
+                <label htmlFor="experiment_group" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                  Experiment Group *
+                </label>
+              </Tooltip>
+              <select
+                id="experiment_group"
+                name="experiment_group"
+                required
+                value={formData.experiment_group}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                <option value="CONTROL">Control (Static Mutation)</option>
+                <option value="EXPERIMENTAL">Experimental (Adaptive Mutation)</option>
+              </select>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {formData.experiment_group === 'CONTROL' 
+                  ? 'Static mutation: Fixed rate ε = 0.05'
+                  : 'Adaptive mutation: ε = Base × (1 - CurrentElo/MaxElo)'}
+              </p>
             </div>
 
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -233,7 +252,7 @@ export default function NewExperimentPage() {
               </div>
             </div>
 
-            {formData.mutation_mode === 'STATIC' ? (
+            {mutation_mode === 'STATIC' ? (
               <div>
                 <Tooltip content="The fixed probability (as a decimal) that a genetic characteristic (e.g., a weight in a neural network) of an agent will randomly change during reproduction. For example, 0.05 means a 5% chance of mutation.">
                   <label htmlFor="mutation_rate" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">

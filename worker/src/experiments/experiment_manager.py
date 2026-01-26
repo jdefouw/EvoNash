@@ -8,14 +8,30 @@ from typing import Dict, Optional
 from dataclasses import dataclass
 
 
+def get_mutation_mode_from_group(experiment_group: str) -> str:
+    """
+    Derive mutation_mode from experiment_group.
+    This enforces the proper experimental design:
+    - CONTROL group uses STATIC mutation (fixed rate ε = 0.05)
+    - EXPERIMENTAL group uses ADAPTIVE mutation (fitness-scaled ε = f(Elo))
+    
+    Args:
+        experiment_group: 'CONTROL' or 'EXPERIMENTAL'
+        
+    Returns:
+        'STATIC' for CONTROL, 'ADAPTIVE' for EXPERIMENTAL
+    """
+    return 'STATIC' if experiment_group == 'CONTROL' else 'ADAPTIVE'
+
+
 @dataclass
 class ExperimentConfig:
     """Experiment configuration dataclass."""
     experiment_id: str
     experiment_name: str
-    mutation_mode: str  # 'STATIC' or 'ADAPTIVE'
-    mutation_rate: Optional[float] = None  # For STATIC mode
-    mutation_base: Optional[float] = None  # For ADAPTIVE mode
+    mutation_mode: str = None  # Derived from experiment_group: CONTROL→STATIC, EXPERIMENTAL→ADAPTIVE
+    mutation_rate: Optional[float] = None  # For STATIC mode (default 0.05)
+    mutation_base: Optional[float] = None  # For ADAPTIVE mode (default 0.1)
     max_possible_elo: float = 2000.0
     random_seed: int = 42
     population_size: int = 1000
@@ -32,6 +48,15 @@ class ExperimentConfig:
                 "hidden_layers": [64],
                 "output_size": 4
             }
+        # Derive mutation_mode from experiment_group if not explicitly set
+        # This enforces: CONTROL = STATIC, EXPERIMENTAL = ADAPTIVE
+        if self.mutation_mode is None:
+            self.mutation_mode = get_mutation_mode_from_group(self.experiment_group)
+        # Validate that mutation_mode matches experiment_group
+        expected_mode = get_mutation_mode_from_group(self.experiment_group)
+        if self.mutation_mode != expected_mode:
+            # Auto-correct to enforce proper pairing
+            self.mutation_mode = expected_mode
     
     def get_mutation_rate(self, parent_elo: float) -> float:
         """

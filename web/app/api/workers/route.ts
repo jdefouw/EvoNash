@@ -68,41 +68,11 @@ export async function GET(request: NextRequest) {
     const now = new Date()
     const ninetySecondsAgo = new Date(now.getTime() - 90 * 1000)
     
-    // Auto-cleanup: Delete workers that have been offline for more than 5 minutes
-    // BUT only if they don't have active job assignments (to prevent cascade deletion of running jobs)
-    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000)
-    const potentiallyStaleWorkerIds = (workers || [])
-      .filter(w => new Date(w.last_heartbeat) < fiveMinutesAgo)
-      .map(w => w.id)
+    // Note: Auto-deletion removed to prevent workers from disappearing unexpectedly.
+    // Workers are now only marked as 'offline' based on heartbeat timeout.
+    // Manual cleanup can be done via a dedicated endpoint if needed.
     
-    // Check which stale workers have active job assignments
-    let staleWorkerIds: string[] = []
-    if (potentiallyStaleWorkerIds.length > 0) {
-      // Get workers with active jobs (assigned or processing)
-      const { data: activeJobWorkers } = await supabase
-        .from('job_assignments')
-        .select('worker_id')
-        .in('worker_id', potentiallyStaleWorkerIds)
-        .in('status', ['assigned', 'processing'])
-      
-      const workersWithActiveJobs = new Set((activeJobWorkers || []).map(j => j.worker_id))
-      
-      // Only delete workers that are stale AND have no active jobs
-      staleWorkerIds = potentiallyStaleWorkerIds.filter(id => !workersWithActiveJobs.has(id))
-      
-      if (staleWorkerIds.length > 0) {
-        console.log(`[WORKERS] Auto-cleaning ${staleWorkerIds.length} stale worker(s) (${potentiallyStaleWorkerIds.length - staleWorkerIds.length} preserved due to active jobs)`)
-        await supabase
-          .from('workers')
-          .delete()
-          .in('id', staleWorkerIds)
-      }
-    }
-    
-    // Filter out the stale workers from the response
-    const activeWorkersList = (workers || []).filter(w => !staleWorkerIds.includes(w.id))
-    
-    const workersWithStatus = activeWorkersList.map(worker => {
+    const workersWithStatus = (workers || []).map(worker => {
       const lastHeartbeat = new Date(worker.last_heartbeat)
       const isOffline = lastHeartbeat < ninetySecondsAgo
       const currentExperiment = workerExperimentMap.get(worker.id)

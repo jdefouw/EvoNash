@@ -19,10 +19,9 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Validate status if provided
+    // Validate status if provided (don't default to 'idle' - preserve current status)
     const validStatuses = ['idle', 'processing', 'offline']
-    const workerStatus = status || 'idle'
-    if (!validStatuses.includes(workerStatus)) {
+    if (status && !validStatuses.includes(status)) {
       return NextResponse.json(
         { error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` },
         { status: 400 }
@@ -38,10 +37,15 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Update worker heartbeat and status
+    // Update worker heartbeat - only update status if explicitly provided
+    // This prevents accidentally overwriting 'processing' with 'idle'
     const updateData: any = {
-      last_heartbeat: new Date().toISOString(),
-      status: workerStatus
+      last_heartbeat: new Date().toISOString()
+    }
+    
+    // Only update status if explicitly provided by the worker
+    if (status) {
+      updateData.status = status
     }
     
     if (jobsCount !== undefined) {

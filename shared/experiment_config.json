@@ -1,7 +1,8 @@
 {
+  "_comment": "experiment_group determines mutation strategy: CONTROL→STATIC, EXPERIMENTAL→ADAPTIVE",
   "experiment_id": "00000000-0000-0000-0000-000000000000",
-  "experiment_name": "Example Experiment",
-  "mutation_mode": "STATIC",
+  "experiment_name": "Example Experiment - Control Group",
+  "experiment_group": "CONTROL",
   "mutation_rate": 0.05,
   "mutation_base": 0.1,
   "max_possible_elo": 2000.0,
@@ -14,6 +15,5 @@
     "input_size": 24,
     "hidden_layers": [64],
     "output_size": 4
-  },
-  "experiment_group": "CONTROL"
+  }
 }

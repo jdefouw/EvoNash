@@ -6,6 +6,16 @@ export type MutationMode = 'STATIC' | 'ADAPTIVE';
 export type ExperimentGroup = 'CONTROL' | 'EXPERIMENTAL';
 export type ExperimentStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STOPPED';
 
+/**
+ * Derives mutation_mode from experiment_group.
+ * This enforces the proper experimental design:
+ * - CONTROL group uses STATIC mutation (fixed rate ε = 0.05)
+ * - EXPERIMENTAL group uses ADAPTIVE mutation (fitness-scaled ε = f(Elo))
+ */
+export function getMutationModeFromGroup(group: ExperimentGroup): MutationMode {
+  return group === 'CONTROL' ? 'STATIC' : 'ADAPTIVE';
+}
+
 export interface NetworkArchitecture {
   input_size: number;
   hidden_layers: number[];

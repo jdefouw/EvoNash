@@ -37,32 +37,40 @@ export default function WorkerList({ className = '', compact = false }: WorkerLi
   const [pendingJobsCount, setPendingJobsCount] = useState(0)
   const [processingJobsCount, setProcessingJobsCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+
+  const fetchWorkers = async () => {
+    try {
+      const response = await fetch('/api/workers')
+      if (response.ok) {
+        const data = await response.json()
+        setWorkers(data.workers || [])
+        setActiveCount(data.active_workers_count || 0)
+        setProcessingCount(data.processing_workers_count || 0)
+        setTotalCapacity(data.total_capacity || 0)
+        setUtilizedCapacity(data.utilized_capacity || 0)
+        setPendingJobsCount(data.pending_jobs_count || 0)
+        setProcessingJobsCount(data.processing_jobs_count || 0)
+        setError(null)  // Clear any previous error
+        setLastUpdated(new Date())
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        setError(errorData.error || `Failed to fetch workers (${response.status})`)
+      }
+    } catch (err) {
+      console.error('Error fetching workers:', err)
+      setError('Network error - unable to reach server')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchWorkers = async () => {
-      try {
-        const response = await fetch('/api/workers')
-        if (response.ok) {
-          const data = await response.json()
-          setWorkers(data.workers || [])
-          setActiveCount(data.active_workers_count || 0)
-          setProcessingCount(data.processing_workers_count || 0)
-          setTotalCapacity(data.total_capacity || 0)
-          setUtilizedCapacity(data.utilized_capacity || 0)
-          setPendingJobsCount(data.pending_jobs_count || 0)
-          setProcessingJobsCount(data.processing_jobs_count || 0)
-        }
-      } catch (error) {
-        console.error('Error fetching workers:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
     fetchWorkers()
     
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchWorkers, 10000)
+    // Refresh every 5 seconds for responsive worker status updates
+    const interval = setInterval(fetchWorkers, 5000)
     return () => clearInterval(interval)
   }, [])
 
@@ -105,6 +113,23 @@ export default function WorkerList({ className = '', compact = false }: WorkerLi
     )
   }
 
+  if (error && workers.length === 0) {
+    return (
+      <div className={`${className} p-4 bg-white dark:bg-gray-800 rounded-lg border border-red-200 dark:border-red-700`}>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Workers</h3>
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-md p-3">
+          <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+          <button 
+            onClick={() => { setLoading(true); fetchWorkers(); }}
+            className="mt-2 text-xs text-red-600 dark:text-red-400 hover:underline"
+          >
+            Retry now
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (workers.length === 0) {
     return (
       <div className={`${className} p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700`}>
@@ -113,6 +138,11 @@ export default function WorkerList({ className = '', compact = false }: WorkerLi
         <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
           Download and run the worker on a machine with a GPU to get started.
         </p>
+        {lastUpdated && (
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+            Last checked: {lastUpdated.toLocaleTimeString()}
+          </p>
+        )}
       </div>
     )
   }
@@ -136,6 +166,22 @@ export default function WorkerList({ className = '', compact = false }: WorkerLi
             )}
           </div>
         </div>
+        
+        {/* Error Banner - shown when fetch fails but we have cached data */}
+        {error && workers.length > 0 && (
+          <div className="mt-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-md p-2 flex items-center justify-between">
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Update failed: {error}
+              {lastUpdated && ` (showing data from ${lastUpdated.toLocaleTimeString()})`}
+            </p>
+            <button 
+              onClick={() => fetchWorkers()}
+              className="text-xs text-amber-600 dark:text-amber-400 hover:underline ml-2"
+            >
+              Retry
+            </button>
+          </div>
+        )}
         
         {/* Queue Status Section */}
         <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">

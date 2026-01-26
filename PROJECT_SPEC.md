@@ -16,9 +16,11 @@
 **If** the mutation rate ($\epsilon$) of a neural network is inversely proportional to its parent's fitness (i.e., lower fitness parents produce highly mutated offspring, high fitness parents produce stable offspring), **then** the population will reach a policy entropy plateau (Nash Equilibrium) in fewer generations than a control group with a fixed mutation rate.
 
 ### 2.2. Variables
-* **Independent Variable:** Mutation Strategy.
-    * *Group A (Control):* Static $\epsilon = 0.05$.
-    * *Group B (Experimental):* Adaptive $\epsilon = f(\text{Elo})$.
+* **Independent Variable:** Mutation Strategy (determined by Experiment Group).
+    * *Control Group:* Static mutation $\epsilon = 0.05$.
+    * *Experimental Group:* Adaptive mutation $\epsilon = f(\text{Elo})$.
+    
+    > **Note:** The `experiment_group` field automatically determines the `mutation_mode`. Selecting CONTROL enforces STATIC mutation; selecting EXPERIMENTAL enforces ADAPTIVE mutation. This prevents misconfiguration.
 * **Dependent Variables:**
     * *Convergence Velocity:* $\Delta G$ (Generations) to reach $\Delta \text{Entropy} < 0.01$.
     * *Peak Fitness:* Max Elo Rating.

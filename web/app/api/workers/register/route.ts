@@ -41,6 +41,19 @@ export async function POST(request: NextRequest) {
         .single()
       
       if (existingWorker) {
+        // Check for active job assignments before resetting status
+        // This preserves job state on re-registration (e.g., after network hiccup)
+        const { count: activeJobCount } = await supabase
+          .from('job_assignments')
+          .select('*', { count: 'exact', head: true })
+          .eq('worker_id', worker_id)
+          .in('status', ['assigned', 'processing'])
+        
+        // Determine status based on active jobs - don't blindly reset to idle
+        const hasActiveJobs = (activeJobCount || 0) > 0
+        const newStatus = hasActiveJobs ? 'processing' : 'idle'
+        const newActiveJobsCount = activeJobCount || 0
+        
         // Update existing worker
         const { data: updatedWorker, error: updateError } = await supabase
           .from('workers')
@@ -49,8 +62,8 @@ export async function POST(request: NextRequest) {
             gpu_type,
             vram_gb: vram,
             max_parallel_jobs,
-            status: 'idle',  // Reset to idle on re-registration
-            active_jobs_count: 0,  // Reset job count
+            status: newStatus,  // Preserve processing status if jobs are active
+            active_jobs_count: newActiveJobsCount,  // Sync with actual job count
             last_heartbeat: new Date().toISOString()
           })
           .eq('id', worker_id)
@@ -66,7 +79,7 @@ export async function POST(request: NextRequest) {
         }
         
         worker = updatedWorker
-        console.log(`[WORKER REGISTER] Updated existing worker: ${worker.id} (${gpu_type}, ${vram}GB VRAM)`)
+        console.log(`[WORKER REGISTER] Updated existing worker: ${worker.id} (${gpu_type}, ${vram}GB VRAM, ${newActiveJobsCount} active jobs)`)
       } else {
         // Worker ID provided but doesn't exist - create new with that ID
         const { data: newWorker, error: insertError } = await supabase
