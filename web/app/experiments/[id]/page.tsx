@@ -71,28 +71,22 @@ export default function ExperimentDetailPage() {
         }
       }
 
-      // Always update latest generation if available (for progress display)
+      // Always update latest generation when the API returns one, so progress reflects server state.
+      // (Previously we only updated when isNew || has_updates; if the live API returned null when
+      // using last_gen, we never got newer gens and progress stayed stuck.)
       if (data.generation) {
         const newGen = data.generation
-        const isNew = !lastGenerationNumberRef.current || newGen.generation_number > lastGenerationNumberRef.current
-        
-        if (isNew || data.has_updates) {
-          setLatestGeneration(newGen)
-          setGenerations(prev => {
-            // Check if this generation already exists
-            const exists = prev.some(g => g.generation_number === newGen.generation_number)
-            if (exists) {
-              // Update existing
-              return prev.map(g => 
-                g.generation_number === newGen.generation_number ? newGen : g
-              )
-            } else {
-              // Add new
-              return [...prev, newGen].sort((a, b) => a.generation_number - b.generation_number)
-            }
-          })
-          lastGenerationNumberRef.current = newGen.generation_number
-        }
+        setLatestGeneration(newGen)
+        setGenerations(prev => {
+          const exists = prev.some(g => g.generation_number === newGen.generation_number)
+          if (exists) {
+            return prev.map(g =>
+              g.generation_number === newGen.generation_number ? newGen : g
+            )
+          }
+          return [...prev, newGen].sort((a, b) => a.generation_number - b.generation_number)
+        })
+        lastGenerationNumberRef.current = newGen.generation_number
       }
 
       // Update matches

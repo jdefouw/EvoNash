@@ -97,26 +97,21 @@ export async function GET(
       }
     }
     
-    // Fetch latest generation
-    let genQuery = supabase
+    // Always fetch the absolute latest generation so the UI can show current progress.
+    // (Previously we filtered by last_gen, which returned null when there was nothing newer,
+    // so the UI could show stale progress even though the worker had uploaded more gens.)
+    const { data: latestGenRows, error: genError } = await supabase
       .from('generations')
       .select('*')
       .eq('experiment_id', experimentId)
       .order('generation_number', { ascending: false })
       .limit(1)
     
-    // If we have a last generation number, only fetch if there's a newer one
-    if (lastGenerationNumber) {
-      genQuery = genQuery.gt('generation_number', parseInt(lastGenerationNumber))
-    }
-    
-    const { data: generations, error: genError } = await genQuery
-    
     if (genError) {
       return NextResponse.json({ error: genError.message }, { status: 500 })
     }
     
-    const latestGeneration = generations && generations.length > 0 ? generations[0] : null
+    const latestGeneration = latestGenRows && latestGenRows.length > 0 ? latestGenRows[0] : null
     
     // Fetch new matches since timestamp (if provided)
     let matchesQuery = supabase
