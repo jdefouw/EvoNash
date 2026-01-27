@@ -59,7 +59,9 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Validate job assignment exists and verify ownership
+    // Validate job assignment exists and verify ownership; capture job range for completion check
+    let jobGenerationStart: number | null = null
+    let jobGenerationEnd: number | null = null
     if (job_id) {
       const { data: jobAssignment } = await supabase
         .from('job_assignments')
@@ -73,7 +75,9 @@ export async function POST(request: NextRequest) {
           { status: 404 }
         )
       }
-      
+      jobGenerationStart = jobAssignment.generation_start
+      jobGenerationEnd = jobAssignment.generation_end
+
       // CRITICAL: Verify worker owns this job to prevent job stealing
       if (worker_id && jobAssignment.worker_id !== worker_id) {
         console.error(`[RESULTS] SECURITY: Worker ${worker_id} attempted to update job ${job_id} owned by worker ${jobAssignment.worker_id}`)
@@ -198,33 +202,54 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Update job assignment status to completed using atomic function
-    // This atomically marks job complete AND decrements worker's active_jobs_count
-    if (job_id && worker_id) {
-      const { data: completed, error: completeError } = await supabase.rpc('complete_job_atomic', {
-        p_job_id: job_id,
-        p_worker_id: worker_id,
-        p_status: 'completed'
-      })
-      
-      if (completeError) {
-        console.error(`[RESULTS] Error updating job assignment status (atomic):`, completeError)
-      } else if (completed) {
-        console.log(`[RESULTS] Job ${job_id} marked as completed (atomic)`)
-      }
-    } else if (job_id) {
-      // Fallback for legacy workers without worker_id - use direct update
-      const { error: updateError } = await supabase
-        .from('job_assignments')
-        .update({ 
-          status: 'completed',
-          completed_at: new Date().toISOString()
-        })
-        .eq('job_id', job_id)
-        .eq('status', 'processing')
-      
-      if (updateError) {
-        console.error(`[RESULTS] Error updating job assignment status:`, updateError)
+    // Mark job completed ONLY when all generations in the job's range exist in DB.
+    // This prevents marking a batch complete on partial uploads (e.g. worker uploads every 3 gens).
+    if (job_id && jobGenerationStart != null && jobGenerationEnd != null) {
+      const { data: rangeGens } = await supabase
+        .from('generations')
+        .select('generation_number')
+        .eq('experiment_id', experiment_id)
+        .gte('generation_number', jobGenerationStart)
+        .lte('generation_number', jobGenerationEnd)
+      const present = new Set((rangeGens || []).map((g: any) => g.generation_number))
+      const expectedCount = jobGenerationEnd - jobGenerationStart + 1
+      const allInRangePresent =
+        expectedCount === present.size &&
+        Array.from({ length: expectedCount }, (_, i) => jobGenerationStart! + i).every((n) =>
+          present.has(n)
+        )
+
+      if (allInRangePresent) {
+        if (worker_id) {
+          const { data: completed, error: completeError } = await supabase.rpc('complete_job_atomic', {
+            p_job_id: job_id,
+            p_worker_id: worker_id,
+            p_status: 'completed'
+          })
+          if (completeError) {
+            console.error(`[RESULTS] Error updating job assignment status (atomic):`, completeError)
+          } else if (completed) {
+            console.log(`[RESULTS] Job ${job_id} marked as completed (atomic) — all ${expectedCount} generations [${jobGenerationStart}-${jobGenerationEnd}] present`)
+          }
+        } else {
+          const { error: updateError } = await supabase
+            .from('job_assignments')
+            .update({
+              status: 'completed',
+              completed_at: new Date().toISOString()
+            })
+            .eq('job_id', job_id)
+            .eq('status', 'processing')
+          if (updateError) {
+            console.error(`[RESULTS] Error updating job assignment status:`, updateError)
+          } else {
+            console.log(`[RESULTS] Job ${job_id} marked as completed — all ${expectedCount} generations [${jobGenerationStart}-${jobGenerationEnd}] present (legacy path)`)
+          }
+        }
+      } else {
+        console.log(
+          `[RESULTS] Job ${job_id} not yet complete: ${present.size}/${expectedCount} generations in range [${jobGenerationStart},${jobGenerationEnd}]`
+        )
       }
     }
     

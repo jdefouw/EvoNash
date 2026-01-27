@@ -513,14 +513,7 @@ class OptimizedExperimentRunner:
         # Store history
         self.generation_stats_history.append(stats)
         
-        # Upload if callback provided
-        if self.upload_callback:
-            try:
-                self.upload_callback(stats)
-            except Exception as e:
-                print(f"[GENERATION {self.current_generation}] ✗ Upload callback failed: {e}")
-        
-        # Save checkpoint if callback provided
+        # Save checkpoint BEFORE upload so that when gen N is in DB, checkpoint N exists for resume
         if self.checkpoint_callback:
             try:
                 population_state = self.ga.save_population_state(
@@ -531,6 +524,13 @@ class OptimizedExperimentRunner:
                 print(f"[GENERATION {self.current_generation}] ✓ Checkpoint saved")
             except Exception as e:
                 print(f"[GENERATION {self.current_generation}] ✗ Checkpoint save failed: {e}")
+        
+        # Upload if callback provided (after checkpoint so resume has correct population state)
+        if self.upload_callback:
+            try:
+                self.upload_callback(stats)
+            except Exception as e:
+                print(f"[GENERATION {self.current_generation}] ✗ Upload callback failed: {e}")
         
         # Evolve to next generation
         self.ga.evolve_generation()

@@ -56,9 +56,30 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       )
     }
-    
-    // Try to find an unassigned batch for each experiment
-    for (const experiment of experiments) {
+
+    // Experiment affinity: when worker has no active batch, prefer the experiment they last completed a job for
+    // So workers finish one experiment before switching to another
+    let experimentOrder: typeof experiments = experiments
+    if (worker_id) {
+      const { data: lastCompletedJob } = await supabase
+        .from('job_assignments')
+        .select('experiment_id')
+        .eq('worker_id', worker_id)
+        .eq('status', 'completed')
+        .order('completed_at', { ascending: false })
+        .limit(1)
+        .single()
+      const lastExperimentId = lastCompletedJob?.experiment_id
+      if (lastExperimentId && experiments.some((e: any) => e.id === lastExperimentId)) {
+        const preferred = experiments.find((e: any) => e.id === lastExperimentId)
+        const rest = experiments.filter((e: any) => e.id !== lastExperimentId)
+        experimentOrder = preferred ? [preferred, ...rest] : experiments
+        console.log(`[QUEUE] Experiment affinity: preferring experiment ${lastExperimentId.slice(0, 8)}… for worker ${worker_id.slice(0, 8)}…`)
+      }
+    }
+
+    // Try to find an unassigned batch for each experiment (affinity order when worker_id set)
+    for (const experiment of experimentOrder) {
       // Update status to RUNNING if it was PENDING
       if (experiment.status === 'PENDING') {
         await supabase

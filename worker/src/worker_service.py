@@ -439,7 +439,8 @@ class WorkerService:
             Callback function that takes generation stats dict and uploads them periodically
         """
         batch_stats: list = []
-        UPLOAD_INTERVAL = 3  # Upload every 3 generations for live updates
+        # Configurable; default 1 = upload after every generation for no-missed-generations / scientific rigor
+        upload_interval = self.worker_config.get('upload_interval_generations', 1)
         
         def upload_batch(stats_to_upload: list, reason: str):
             """Helper function to upload a batch of stats."""
@@ -476,12 +477,11 @@ class WorkerService:
             batch_stats.append(generation_stats)
             self.logger.info(f"📝 Collected generation {gen_num} for batch upload")
             
-            # Upload every N generations for live UI updates
-            if len(batch_stats) >= UPLOAD_INTERVAL:
-                stats_to_upload = batch_stats[:UPLOAD_INTERVAL]
-                # Remove uploaded stats from the list
-                del batch_stats[:UPLOAD_INTERVAL]
-                upload_batch(stats_to_upload, f"periodic upload (every {UPLOAD_INTERVAL} gens)")
+            # Upload every N generations (N=1 minimizes rework on crash / no missed generations)
+            if len(batch_stats) >= upload_interval:
+                stats_to_upload = batch_stats[:upload_interval]
+                del batch_stats[:upload_interval]
+                upload_batch(stats_to_upload, f"periodic upload (every {upload_interval} gens)")
             
             # Always upload remaining stats at the end of the batch
             if gen_num >= generation_end and batch_stats:
