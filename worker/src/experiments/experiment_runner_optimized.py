@@ -467,20 +467,21 @@ class OptimizedExperimentRunner:
     def run_generation(self) -> Dict:
         """Run one generation with optimized GPU operations."""
         gen_start_time = time.time()
+        exp_name = self.config.experiment_name
         
         # Simulate generation
-        print(f"\n[GEN {self.current_generation}] Step 1/3: Running optimized Petri Dish simulation...")
+        print(f"\n[{exp_name}] [GEN {self.current_generation}] Step 1/3: Running optimized Petri Dish simulation...")
         sim_results = self._simulate_generation_optimized()
         
         # Run Elo matches
-        print(f"[GEN {self.current_generation}] Step 2/3: Running Elo matches...")
+        print(f"[{exp_name}] [GEN {self.current_generation}] Step 2/3: Running Elo matches...")
         elo_start = time.time()
         self._run_elo_matches(num_matches=100)
         elo_time = time.time() - elo_start
         print(f"  [ELO] Elo matches complete in {elo_time:.2f}s")
         
         # Get generation statistics
-        print(f"[GEN {self.current_generation}] Step 3/3: Calculating statistics...")
+        print(f"[{exp_name}] [GEN {self.current_generation}] Step 3/3: Calculating statistics...")
         stats_start = time.time()
         sample_inputs = torch.randn(100, 24, device=self.device, dtype=torch.float16 if self.device == 'cuda' else torch.float32)
         with torch.amp.autocast('cuda', enabled=(self.device == 'cuda')):
@@ -496,7 +497,7 @@ class OptimizedExperimentRunner:
         stats = self._ensure_json_serializable(stats)
         
         gen_total_time = time.time() - gen_start_time
-        print(f"[GEN {self.current_generation}] Generation complete in {gen_total_time:.2f}s total")
+        print(f"[{exp_name}] [GEN {self.current_generation}] Generation complete in {gen_total_time:.2f}s total")
         
         # Log to CSV
         self.logger.log_generation(
@@ -563,13 +564,15 @@ class OptimizedExperimentRunner:
         stopped = False
         experiment_start_time = time.time()
         
+        exp_name = self.config.experiment_name
+        
         for gen in range(self.generation_start, self.generation_end + 1):
             batch_progress = gen - self.generation_start + 1
             progress_pct = (batch_progress / num_generations) * 100
             elapsed_total = time.time() - experiment_start_time
             
             print(f"\n{'─'*80}")
-            print(f"Generation {gen} (Batch: {batch_progress}/{num_generations}, {progress_pct:.1f}%)")
+            print(f"[{exp_name}] Generation {gen} (Batch: {batch_progress}/{num_generations}, {progress_pct:.1f}%)")
             print(f"Total elapsed time: {elapsed_total:.1f}s")
             print(f"{'─'*80}")
             
@@ -604,7 +607,7 @@ class OptimizedExperimentRunner:
             stats = self.run_generation()
             gen_elapsed = time.time() - gen_start
             
-            print(f"\n✓ Generation {gen} Complete (took {gen_elapsed:.2f}s)")
+            print(f"\n✓ [{exp_name}] Generation {gen} Complete (took {gen_elapsed:.2f}s)")
             print(f"  Avg Elo: {stats.get('avg_elo', 0):7.2f} | "
                   f"Peak Elo: {stats.get('peak_elo', 0):7.2f} | "
                   f"Min Elo: {stats.get('min_elo', 0):7.2f}")
