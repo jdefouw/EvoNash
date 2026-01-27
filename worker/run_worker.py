@@ -108,6 +108,11 @@ def main():
         default=None,
         help='Set worker name (overrides config and skips prompt)'
     )
+    parser.add_argument(
+        '--reset-name',
+        action='store_true',
+        help='Clear saved worker name and prompt for a new one'
+    )
     
     args = parser.parse_args()
     
@@ -127,6 +132,13 @@ def main():
     # Load and potentially update config with worker name
     with open(config_path, 'r', encoding='utf-8') as f:
         config = json.load(f)
+    
+    # If --reset-name flag provided, clear the worker name to force re-prompt
+    if args.reset_name:
+        config['worker_name'] = None
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2)
+        print("Worker name cleared. You will be prompted for a new name.")
     
     # If --name argument provided, use it directly
     if args.name:

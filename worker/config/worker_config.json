@@ -5,6 +5,5 @@
   "retry_delay_seconds": 5,
   "device": "cuda",
   "log_level": "INFO",
-  "log_file": "logs/worker.log",
-  "worker_name": "Joel-3090"
+  "log_file": "logs/worker.log"
 }

@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
+import { supabase } from '@/lib/supabase/client'
 
 interface CurrentExperiment {
   experiment_id: string
@@ -87,13 +88,42 @@ export default function WorkerList({ className = '', compact = false }: WorkerLi
     }
   }
 
+  // Memoize fetchWorkers to avoid recreating on every render
+  const fetchWorkersCallback = useCallback(fetchWorkers, [])
+
   useEffect(() => {
-    fetchWorkers()
+    // Initial fetch
+    fetchWorkersCallback()
     
-    // Refresh every 5 seconds for responsive worker status updates
-    const interval = setInterval(fetchWorkers, 5000)
-    return () => clearInterval(interval)
-  }, [])
+    // Set up Supabase Realtime subscription for instant updates
+    const channel = supabase
+      .channel('workers-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'workers'
+        },
+        (payload) => {
+          console.log('[WorkerList] Realtime event:', payload.eventType, payload)
+          // Re-fetch to get complete data including job assignments
+          // This ensures we have current_experiment info which requires a join
+          fetchWorkersCallback()
+        }
+      )
+      .subscribe((status) => {
+        console.log('[WorkerList] Realtime subscription status:', status)
+      })
+    
+    // Also set up a slower fallback poll (every 30 seconds) in case realtime connection drops
+    const fallbackInterval = setInterval(fetchWorkersCallback, 30000)
+    
+    return () => {
+      channel.unsubscribe()
+      clearInterval(fallbackInterval)
+    }
+  }, [fetchWorkersCallback])
 
   const getStatusColor = (status: string) => {
     switch (status) {

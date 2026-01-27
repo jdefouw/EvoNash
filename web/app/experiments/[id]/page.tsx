@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Experiment, Generation, Match } from '@/types/protocol'
+import { supabase } from '@/lib/supabase/client'
 import ExperimentChart from '@/components/ExperimentChart'
 import EntropyChart from '@/components/EntropyChart'
 import StatisticalSignificance from '@/components/StatisticalSignificance'
@@ -298,8 +299,114 @@ export default function ExperimentDetailPage() {
     }
   }, [experimentId])
 
-  // Set up polling when experiment is running or pending
-  // Also ensure generations are loaded for completed experiments
+  // Set up Supabase Realtime subscriptions for instant updates
+  useEffect(() => {
+    if (!experimentId) return
+
+    // Subscribe to generations table for this experiment
+    const generationsChannel = supabase
+      .channel(`generations-${experimentId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'generations',
+          filter: `experiment_id=eq.${experimentId}`
+        },
+        (payload) => {
+          console.log('[Experiment] Realtime generation INSERT:', payload)
+          const newGen = payload.new as Generation
+          setLatestGeneration(newGen)
+          setGenerations(prev => {
+            const exists = prev.some(g => g.generation_number === newGen.generation_number)
+            if (exists) {
+              return prev.map(g =>
+                g.generation_number === newGen.generation_number ? newGen : g
+              )
+            }
+            return [...prev, newGen].sort((a, b) => a.generation_number - b.generation_number)
+          })
+          lastGenerationNumberRef.current = newGen.generation_number
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'generations',
+          filter: `experiment_id=eq.${experimentId}`
+        },
+        (payload) => {
+          console.log('[Experiment] Realtime generation UPDATE:', payload)
+          const updatedGen = payload.new as Generation
+          setGenerations(prev =>
+            prev.map(g =>
+              g.generation_number === updatedGen.generation_number ? updatedGen : g
+            )
+          )
+          // Update latest if this is the most recent generation
+          if (updatedGen.generation_number >= lastGenerationNumberRef.current) {
+            setLatestGeneration(updatedGen)
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Experiment] Generations realtime subscription status:', status)
+      })
+
+    // Subscribe to experiment status changes
+    const experimentChannel = supabase
+      .channel(`experiment-${experimentId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'experiments',
+          filter: `id=eq.${experimentId}`
+        },
+        (payload) => {
+          console.log('[Experiment] Realtime experiment UPDATE:', payload)
+          const updatedExperiment = payload.new as Experiment
+          setExperiment(prev => {
+            if (!prev) return updatedExperiment
+            return { ...prev, ...updatedExperiment }
+          })
+          // If experiment becomes COMPLETED, ensure we have all generations
+          // Note: Generations are 0-indexed internally (0 to max_generations-1)
+          // UI displays 1-indexed (1 to max_generations)
+          if (updatedExperiment.status === 'COMPLETED') {
+            console.log('[Experiment] Status changed to COMPLETED, fetching all generations')
+            fetch(`/api/generations?experiment_id=${experimentId}`)
+              .then(res => res.json())
+              .then(data => {
+                setGenerations(data)
+                if (data.length > 0) {
+                  const latest = data[data.length - 1]
+                  setLatestGeneration(latest)
+                  lastGenerationNumberRef.current = latest.generation_number
+                }
+              })
+              .catch(err => {
+                console.error('Error fetching generations after completion:', err)
+              })
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Experiment] Experiment realtime subscription status:', status)
+      })
+
+    return () => {
+      generationsChannel.unsubscribe()
+      experimentChannel.unsubscribe()
+    }
+  }, [experimentId])
+
+  // Set up polling as fallback when experiment is running or pending
+  // Polling is reduced since we now have realtime subscriptions
   useEffect(() => {
     // For completed experiments, make sure generations are loaded
     if (experiment && experiment.status === 'COMPLETED' && generations.length === 0 && !loading) {
@@ -326,8 +433,9 @@ export default function ExperimentDetailPage() {
       return
     }
 
-    // Start polling every 1.5 seconds for RUNNING, every 3 seconds for PENDING
-    const pollInterval = experiment.status === 'RUNNING' ? 1500 : 3000
+    // Reduced polling frequency since realtime handles most updates
+    // Poll every 5 seconds for RUNNING, every 10 seconds for PENDING as fallback
+    const pollInterval = experiment.status === 'RUNNING' ? 5000 : 10000
     pollingIntervalRef.current = setInterval(pollLiveData, pollInterval)
     
     // Initial poll
