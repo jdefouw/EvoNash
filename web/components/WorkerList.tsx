@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 
@@ -88,12 +88,9 @@ export default function WorkerList({ className = '', compact = false }: WorkerLi
     }
   }
 
-  // Memoize fetchWorkers to avoid recreating on every render
-  const fetchWorkersCallback = useCallback(fetchWorkers, [])
-
   useEffect(() => {
     // Initial fetch
-    fetchWorkersCallback()
+    fetchWorkers()
     
     // Set up Supabase Realtime subscription for instant updates
     const channel = supabase
@@ -109,21 +106,28 @@ export default function WorkerList({ className = '', compact = false }: WorkerLi
           console.log('[WorkerList] Realtime event:', payload.eventType, payload)
           // Re-fetch to get complete data including job assignments
           // This ensures we have current_experiment info which requires a join
-          fetchWorkersCallback()
+          fetchWorkers()
         }
       )
       .subscribe((status) => {
         console.log('[WorkerList] Realtime subscription status:', status)
+        if (status === 'SUBSCRIBED') {
+          console.log('[WorkerList] Successfully subscribed to workers table')
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[WorkerList] Realtime subscription error - falling back to polling')
+        }
       })
     
-    // Also set up a slower fallback poll (every 30 seconds) in case realtime connection drops
-    const fallbackInterval = setInterval(fetchWorkersCallback, 30000)
+    // Fallback polling every 5 seconds to ensure updates even if realtime fails
+    const fallbackInterval = setInterval(() => {
+      fetchWorkers()
+    }, 5000)
     
     return () => {
       channel.unsubscribe()
       clearInterval(fallbackInterval)
     }
-  }, [fetchWorkersCallback])
+  }, [])
 
   const getStatusColor = (status: string) => {
     switch (status) {

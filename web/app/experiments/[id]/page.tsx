@@ -303,6 +303,8 @@ export default function ExperimentDetailPage() {
   useEffect(() => {
     if (!experimentId) return
 
+    console.log('[Experiment] Setting up Realtime subscriptions for experiment:', experimentId)
+
     // Subscribe to generations table for this experiment
     const generationsChannel = supabase
       .channel(`generations-${experimentId}`)
@@ -354,6 +356,11 @@ export default function ExperimentDetailPage() {
       )
       .subscribe((status) => {
         console.log('[Experiment] Generations realtime subscription status:', status)
+        if (status === 'SUBSCRIBED') {
+          console.log('[Experiment] Successfully subscribed to generations for', experimentId)
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[Experiment] Generations subscription error - relying on polling fallback')
+        }
       })
 
     // Subscribe to experiment status changes
@@ -397,16 +404,22 @@ export default function ExperimentDetailPage() {
       )
       .subscribe((status) => {
         console.log('[Experiment] Experiment realtime subscription status:', status)
+        if (status === 'SUBSCRIBED') {
+          console.log('[Experiment] Successfully subscribed to experiment status for', experimentId)
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[Experiment] Experiment subscription error - relying on polling fallback')
+        }
       })
 
     return () => {
+      console.log('[Experiment] Cleaning up Realtime subscriptions')
       generationsChannel.unsubscribe()
       experimentChannel.unsubscribe()
     }
   }, [experimentId])
 
   // Set up polling as fallback when experiment is running or pending
-  // Polling is reduced since we now have realtime subscriptions
+  // Keep polling active as backup in case realtime isn't working
   useEffect(() => {
     // For completed experiments, make sure generations are loaded
     if (experiment && experiment.status === 'COMPLETED' && generations.length === 0 && !loading) {
@@ -433,9 +446,10 @@ export default function ExperimentDetailPage() {
       return
     }
 
-    // Reduced polling frequency since realtime handles most updates
-    // Poll every 5 seconds for RUNNING, every 10 seconds for PENDING as fallback
-    const pollInterval = experiment.status === 'RUNNING' ? 5000 : 10000
+    // Poll every 3 seconds for RUNNING, every 5 seconds for PENDING
+    // This ensures updates even if realtime subscription fails
+    const pollInterval = experiment.status === 'RUNNING' ? 3000 : 5000
+    console.log(`[Experiment] Starting polling with interval: ${pollInterval}ms for status: ${experiment.status}`)
     pollingIntervalRef.current = setInterval(pollLiveData, pollInterval)
     
     // Initial poll
