@@ -493,32 +493,64 @@ export default function ExperimentDetailPage() {
                 {experiment.status === 'RUNNING' ? 'Running...' : experiment.status === 'PENDING' ? 'Queued for Worker' : experiment.status === 'COMPLETED' ? 'Completed' : 'Start Experiment'}
               </button>
               {experiment.status === 'RUNNING' && (
-                <button
-                  onClick={async () => {
-                    if (!confirm('Are you sure you want to stop this experiment? The worker will finish the current generation before stopping.')) {
-                      return
-                    }
-                    try {
-                      const response = await fetch(`/api/experiments/${experimentId}/stop`, { method: 'POST' })
-                      if (response.ok) {
-                        const data = await response.json()
-                        setExperiment({ ...experiment, status: 'STOPPED' })
-                        // Refresh the page after a short delay to show updated status
-                        setTimeout(() => {
-                          window.location.reload()
-                        }, 500)
-                      } else {
-                        const error = await response.json()
-                        alert(`Failed to stop experiment: ${error.error || 'Unknown error'}`)
+                <>
+                  <button
+                    onClick={async () => {
+                      if (!confirm('Are you sure you want to stop this experiment? The worker will finish the current generation before stopping.')) {
+                        return
                       }
-                    } catch (error) {
-                      alert(`Failed to stop experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
-                    }
-                  }}
-                  className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                >
-                  Stop Experiment
-                </button>
+                      try {
+                        const response = await fetch(`/api/experiments/${experimentId}/stop`, { method: 'POST' })
+                        if (response.ok) {
+                          const data = await response.json()
+                          setExperiment({ ...experiment, status: 'STOPPED' })
+                          // Refresh the page after a short delay to show updated status
+                          setTimeout(() => {
+                            window.location.reload()
+                          }, 500)
+                        } else {
+                          const error = await response.json()
+                          alert(`Failed to stop experiment: ${error.error || 'Unknown error'}`)
+                        }
+                      } catch (error) {
+                        alert(`Failed to stop experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
+                      }
+                    }}
+                    className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                  >
+                    Stop Experiment
+                  </button>
+                  {/* Show force complete button when experiment appears stuck at high progress */}
+                  {latestGeneration && latestGeneration.generation_number >= experiment.max_generations - 1 && (
+                    <button
+                      onClick={async () => {
+                        if (!confirm('Force-complete this experiment? Use this if all generations are done but the experiment is stuck as "Running".')) {
+                          return
+                        }
+                        try {
+                          const response = await fetch(`/api/experiments/${experimentId}/complete`, { method: 'POST' })
+                          if (response.ok) {
+                            const data = await response.json()
+                            setExperiment({ ...experiment, status: 'COMPLETED' })
+                            alert('Experiment marked as completed!')
+                            setTimeout(() => {
+                              window.location.reload()
+                            }, 500)
+                          } else {
+                            const error = await response.json()
+                            alert(`Failed to complete experiment: ${error.error || 'Unknown error'}`)
+                          }
+                        } catch (error) {
+                          alert(`Failed to complete experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
+                        }
+                      }}
+                      className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                      title="Force-complete this experiment if it's stuck at 100% progress"
+                    >
+                      Force Complete
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>

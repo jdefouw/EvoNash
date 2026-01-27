@@ -250,6 +250,12 @@ export async function POST(request: NextRequest) {
       const hasAllGenerations = generationNumbers.size >= experiment.max_generations && 
         Array.from(expectedGenerations).every(gen => generationNumbers.has(gen))
       
+      // FALLBACK: Also check if the final generation exists and count is sufficient
+      // This handles edge cases where some intermediate generations may have been lost
+      const finalGenerationExists = generationNumbers.has(experiment.max_generations - 1)
+      const hasEnoughGenerations = generationNumbers.size >= experiment.max_generations
+      const shouldComplete = hasAllGenerations || (finalGenerationExists && hasEnoughGenerations)
+      
       // Re-fetch job assignments AFTER the update to ensure we see the latest status
       // This avoids race conditions where the update hasn't been committed yet
       const { data: allAssignments } = await supabase
@@ -258,7 +264,7 @@ export async function POST(request: NextRequest) {
         .eq('experiment_id', experiment_id)
       
       // Only check for completion if experiment is still RUNNING or PENDING
-      if (hasAllGenerations && (experiment.status === 'RUNNING' || experiment.status === 'PENDING')) {
+      if (shouldComplete && (experiment.status === 'RUNNING' || experiment.status === 'PENDING')) {
         // Check if there are any truly active assignments (assigned or recently started processing)
         // Allow some grace period for assignments that might be stuck
         const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
@@ -276,7 +282,10 @@ export async function POST(request: NextRequest) {
         // Mark as COMPLETED if we have all generations and no active assignments
         // This ensures completion even if some assignments are stuck or failed
         if (!hasActiveAssignments) {
-          console.log(`[RESULTS] All generations complete for experiment ${experiment_id} (${generationNumbers.size}/${experiment.max_generations} generations), marking as COMPLETED`)
+          const reason = hasAllGenerations 
+            ? `all ${generationNumbers.size} generations present`
+            : `final generation ${experiment.max_generations - 1} exists with ${generationNumbers.size} total`
+          console.log(`[RESULTS] Experiment ${experiment_id} completing: ${reason}`)
           const { error: updateError } = await supabase
             .from('experiments')
             .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
@@ -303,7 +312,8 @@ export async function POST(request: NextRequest) {
         const totalBatches = allAssignments?.length || 0
         const activeBatches = allAssignments?.filter((a: any) => a.status === 'assigned' || a.status === 'processing').length || 0
         const missingGenerations = Array.from(expectedGenerations).filter(gen => !generationNumbers.has(gen))
-        console.log(`[RESULTS] Batch saved. Status: ${experiment.status}, Progress: ${completedBatches}/${totalBatches} batches (${activeBatches} active), ${generationNumbers.size}/${experiment.max_generations} generations. Missing: ${missingGenerations.length > 0 ? missingGenerations.slice(0, 10).join(',') + (missingGenerations.length > 10 ? '...' : '') : 'none'}`)
+        const maxGenInDb = generationNumbers.size > 0 ? Math.max(...Array.from(generationNumbers)) : -1
+        console.log(`[RESULTS] Batch saved. Status: ${experiment.status}, Progress: ${completedBatches}/${totalBatches} batches (${activeBatches} active), ${generationNumbers.size}/${experiment.max_generations} generations (max: ${maxGenInDb}). Missing: ${missingGenerations.length > 0 ? missingGenerations.slice(0, 10).join(',') + (missingGenerations.length > 10 ? '...' : '') : 'none'}`)
       }
     }
     

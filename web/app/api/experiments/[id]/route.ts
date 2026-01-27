@@ -49,10 +49,19 @@ export async function GET(
       const hasAllGenerations = generationNumbers.size >= data.max_generations && 
         Array.from(expectedGenerations).every(gen => generationNumbers.has(gen))
       
-      if (hasAllGenerations) {
-        // All generations exist - mark as COMPLETED immediately
-        // No need to check job assignments since we have all the data we need
-        console.log(`[EXPERIMENTS] Experiment ${experimentId} has all ${generationNumbers.size} generations, marking as COMPLETED`)
+      // FALLBACK: Also check if the final generation exists and count is sufficient
+      // This handles edge cases where some intermediate generations may have been lost
+      // but the experiment effectively completed (final generation reached)
+      const finalGenerationExists = generationNumbers.has(data.max_generations - 1)
+      const hasEnoughGenerations = generationNumbers.size >= data.max_generations
+      const shouldComplete = hasAllGenerations || (finalGenerationExists && hasEnoughGenerations)
+      
+      if (shouldComplete) {
+        // All generations exist (or final generation + sufficient count) - mark as COMPLETED
+        const reason = hasAllGenerations 
+          ? `all ${generationNumbers.size} generations present`
+          : `final generation ${data.max_generations - 1} exists with ${generationNumbers.size} total`
+        console.log(`[EXPERIMENTS] Experiment ${experimentId} completing: ${reason}`)
         const { data: updatedExperiment } = await supabase
           .from('experiments')
           .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
@@ -66,7 +75,8 @@ export async function GET(
         }
       } else {
         const missingGenerations = Array.from(expectedGenerations).filter(gen => !generationNumbers.has(gen))
-        console.log(`[EXPERIMENTS] Experiment ${experimentId} missing ${missingGenerations.length} generations: ${missingGenerations.slice(0, 10).join(',')}${missingGenerations.length > 10 ? '...' : ''}`)
+        const maxGenInDb = generationNumbers.size > 0 ? Math.max(...Array.from(generationNumbers)) : -1
+        console.log(`[EXPERIMENTS] Experiment ${experimentId} not complete: have ${generationNumbers.size}/${data.max_generations} generations (max in DB: ${maxGenInDb}). Missing: ${missingGenerations.slice(0, 10).join(',')}${missingGenerations.length > 10 ? '...' : ''}`)
       }
     }
     
