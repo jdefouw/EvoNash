@@ -300,112 +300,97 @@ export default function ExperimentDetailPage() {
   }, [experimentId])
 
   // Set up Supabase Realtime subscriptions for instant updates
+  // Note: We subscribe to ALL changes and filter client-side because UUID filters can be unreliable
   useEffect(() => {
     if (!experimentId) return
 
     console.log('[Experiment] Setting up Realtime subscriptions for experiment:', experimentId)
 
-    // Subscribe to generations table for this experiment
+    // Subscribe to generations table - filter client-side for reliability
     const generationsChannel = supabase
-      .channel(`generations-${experimentId}`)
+      .channel('generations-all')
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
-          table: 'generations',
-          filter: `experiment_id=eq.${experimentId}`
+          table: 'generations'
         },
         (payload) => {
-          console.log('[Experiment] Realtime generation INSERT:', payload)
-          const newGen = payload.new as Generation
-          setLatestGeneration(newGen)
-          setGenerations(prev => {
-            const exists = prev.some(g => g.generation_number === newGen.generation_number)
-            if (exists) {
-              return prev.map(g =>
-                g.generation_number === newGen.generation_number ? newGen : g
-              )
+          const record = payload.new as any
+          // Filter client-side for this experiment
+          if (record && record.experiment_id === experimentId) {
+            console.log('[Experiment] Realtime generation event:', payload.eventType, record.generation_number)
+            const gen = record as Generation
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              setLatestGeneration(gen)
+              setGenerations(prev => {
+                const exists = prev.some(g => g.generation_number === gen.generation_number)
+                if (exists) {
+                  return prev.map(g =>
+                    g.generation_number === gen.generation_number ? gen : g
+                  )
+                }
+                return [...prev, gen].sort((a, b) => a.generation_number - b.generation_number)
+              })
+              lastGenerationNumberRef.current = gen.generation_number
             }
-            return [...prev, newGen].sort((a, b) => a.generation_number - b.generation_number)
-          })
-          lastGenerationNumberRef.current = newGen.generation_number
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'generations',
-          filter: `experiment_id=eq.${experimentId}`
-        },
-        (payload) => {
-          console.log('[Experiment] Realtime generation UPDATE:', payload)
-          const updatedGen = payload.new as Generation
-          setGenerations(prev =>
-            prev.map(g =>
-              g.generation_number === updatedGen.generation_number ? updatedGen : g
-            )
-          )
-          // Update latest if this is the most recent generation
-          if (updatedGen.generation_number >= lastGenerationNumberRef.current) {
-            setLatestGeneration(updatedGen)
           }
         }
       )
       .subscribe((status) => {
         console.log('[Experiment] Generations realtime subscription status:', status)
         if (status === 'SUBSCRIBED') {
-          console.log('[Experiment] Successfully subscribed to generations for', experimentId)
+          console.log('[Experiment] Successfully subscribed to generations table')
         } else if (status === 'CHANNEL_ERROR') {
           console.error('[Experiment] Generations subscription error - relying on polling fallback')
         }
       })
 
-    // Subscribe to experiment status changes
+    // Subscribe to experiments table - filter client-side for reliability
     const experimentChannel = supabase
-      .channel(`experiment-${experimentId}`)
+      .channel('experiments-all')
       .on(
         'postgres_changes',
         {
           event: 'UPDATE',
           schema: 'public',
-          table: 'experiments',
-          filter: `id=eq.${experimentId}`
+          table: 'experiments'
         },
         (payload) => {
-          console.log('[Experiment] Realtime experiment UPDATE:', payload)
-          const updatedExperiment = payload.new as Experiment
-          setExperiment(prev => {
-            if (!prev) return updatedExperiment
-            return { ...prev, ...updatedExperiment }
-          })
-          // If experiment becomes COMPLETED, ensure we have all generations
-          // Note: Generations are 0-indexed internally (0 to max_generations-1)
-          // UI displays 1-indexed (1 to max_generations)
-          if (updatedExperiment.status === 'COMPLETED') {
-            console.log('[Experiment] Status changed to COMPLETED, fetching all generations')
-            fetch(`/api/generations?experiment_id=${experimentId}`)
-              .then(res => res.json())
-              .then(data => {
-                setGenerations(data)
-                if (data.length > 0) {
-                  const latest = data[data.length - 1]
-                  setLatestGeneration(latest)
-                  lastGenerationNumberRef.current = latest.generation_number
-                }
-              })
-              .catch(err => {
-                console.error('Error fetching generations after completion:', err)
-              })
+          const record = payload.new as any
+          // Filter client-side for this experiment
+          if (record && record.id === experimentId) {
+            console.log('[Experiment] Realtime experiment UPDATE:', record.status)
+            const updatedExperiment = record as Experiment
+            setExperiment(prev => {
+              if (!prev) return updatedExperiment
+              return { ...prev, ...updatedExperiment }
+            })
+            // If experiment becomes COMPLETED, ensure we have all generations
+            if (updatedExperiment.status === 'COMPLETED') {
+              console.log('[Experiment] Status changed to COMPLETED, fetching all generations')
+              fetch(`/api/generations?experiment_id=${experimentId}`)
+                .then(res => res.json())
+                .then(data => {
+                  setGenerations(data)
+                  if (data.length > 0) {
+                    const latest = data[data.length - 1]
+                    setLatestGeneration(latest)
+                    lastGenerationNumberRef.current = latest.generation_number
+                  }
+                })
+                .catch(err => {
+                  console.error('Error fetching generations after completion:', err)
+                })
+            }
           }
         }
       )
       .subscribe((status) => {
         console.log('[Experiment] Experiment realtime subscription status:', status)
         if (status === 'SUBSCRIBED') {
-          console.log('[Experiment] Successfully subscribed to experiment status for', experimentId)
+          console.log('[Experiment] Successfully subscribed to experiments table')
         } else if (status === 'CHANNEL_ERROR') {
           console.error('[Experiment] Experiment subscription error - relying on polling fallback')
         }
