@@ -34,6 +34,8 @@ export async function POST(request: NextRequest) {
     // If worker_id provided, try to find existing worker
     let worker
     if (worker_id) {
+      console.log(`[WORKER REGISTER] Looking for existing worker with ID: ${worker_id}`)
+      
       const { data: existingWorker } = await supabase
         .from('workers')
         .select('*')
@@ -41,6 +43,7 @@ export async function POST(request: NextRequest) {
         .single()
       
       if (existingWorker) {
+        console.log(`[WORKER REGISTER] Found existing worker: name=${existingWorker.worker_name}, last_heartbeat=${existingWorker.last_heartbeat}`)
         // Check for active job assignments before resetting status
         // This preserves job state on re-registration (e.g., after network hiccup)
         const { count: activeJobCount } = await supabase

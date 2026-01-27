@@ -47,6 +47,21 @@ export default function WorkerList({ className = '', compact = false }: WorkerLi
       const response = await fetch('/api/workers')
       if (response.ok) {
         const data = await response.json()
+        // Debug: Log full response data
+        console.log('[WorkerList] API Response:', {
+          _server_timestamp: data._server_timestamp,
+          _client_time: new Date().toISOString(),
+          total_workers: data.workers?.length || 0,
+          active_workers_count: data.active_workers_count,
+          processing_workers_count: data.processing_workers_count,
+          workers: data.workers?.map((w: Worker) => ({
+            id: w.id?.slice(0, 8),
+            name: w.worker_name,
+            status: w.status,
+            last_heartbeat: w.last_heartbeat,
+            current_experiment: w.current_experiment?.experiment_name
+          }))
+        })
         setWorkers(data.workers || [])
         setActiveCount(data.active_workers_count || 0)
         setProcessingCount(data.processing_workers_count || 0)

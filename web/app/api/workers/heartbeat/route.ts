@@ -11,7 +11,8 @@ export async function POST(request: NextRequest) {
     
     const { worker_id, status, active_jobs_count } = body
     
-    console.log(`[HEARTBEAT] Received from worker ${worker_id?.slice(0, 8)}... status=${status}, jobs=${active_jobs_count}`)
+    const timestamp = new Date().toISOString()
+    console.log(`[HEARTBEAT] ${timestamp} - Received from worker ${worker_id?.slice(0, 8)}... status=${status}, jobs=${active_jobs_count}`)
     
     // Validate required fields
     if (!worker_id) {
@@ -86,7 +87,20 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    console.log(`[HEARTBEAT] ✓ Updated worker ${worker_id?.slice(0, 8)}... -> status=${worker.status}, last_heartbeat=${worker.last_heartbeat}`)
+    // Log both what we sent and what was returned to verify the update
+    const now = new Date().toISOString()
+    console.log(`[HEARTBEAT] ✓ Updated worker ${worker_id?.slice(0, 8)}...`)
+    console.log(`[HEARTBEAT]   Current time: ${now}`)
+    console.log(`[HEARTBEAT]   DB returned last_heartbeat: ${worker.last_heartbeat}`)
+    console.log(`[HEARTBEAT]   DB returned status: ${worker.status}`)
+    
+    // Check if the timestamp is recent (within 5 seconds)
+    const dbTime = new Date(worker.last_heartbeat).getTime()
+    const nowTime = new Date().getTime()
+    const diffSec = Math.floor((nowTime - dbTime) / 1000)
+    if (diffSec > 5) {
+      console.warn(`[HEARTBEAT] ⚠ WARNING: last_heartbeat is ${diffSec}s old! Database update may have failed.`)
+    }
     
     return NextResponse.json({
       success: true,

@@ -14,6 +14,14 @@ export async function GET(request: NextRequest) {
       .select('*')
       .order('last_heartbeat', { ascending: false })
     
+    // Debug logging - log raw worker data
+    console.log(`[GET /api/workers] Found ${workers?.length || 0} workers in database`)
+    if (workers && workers.length > 0) {
+      workers.forEach((w, i) => {
+        console.log(`[GET /api/workers] Worker ${i+1}: id=${w.id?.slice(0,8)}..., name=${w.worker_name}, status=${w.status}, last_heartbeat=${w.last_heartbeat}`)
+      })
+    }
+    
     if (error) {
       console.error('Error fetching workers:', error)
       return NextResponse.json(
@@ -77,6 +85,12 @@ export async function GET(request: NextRequest) {
       const isOffline = lastHeartbeat < ninetySecondsAgo
       const currentExperiment = workerExperimentMap.get(worker.id)
       
+      // Debug: Log heartbeat comparison
+      const heartbeatAgeMs = now.getTime() - lastHeartbeat.getTime()
+      const heartbeatAgeSec = Math.floor(heartbeatAgeMs / 1000)
+      console.log(`[GET /api/workers] Worker ${worker.id?.slice(0,8)}... heartbeat age: ${heartbeatAgeSec}s, offline threshold: 90s, isOffline: ${isOffline}`)
+      console.log(`[GET /api/workers]   now=${now.toISOString()}, lastHeartbeat=${worker.last_heartbeat}, ninetySecondsAgo=${ninetySecondsAgo.toISOString()}`)
+      
       return {
         ...worker,
         // Override status if worker is actually offline
@@ -108,6 +122,8 @@ export async function GET(request: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .eq('status', 'processing')
     
+    console.log(`[GET /api/workers] Returning ${workersWithStatus.length} workers (${activeWorkers.length} active, ${processingWorkers.length} processing)`)
+    
     return NextResponse.json({
       workers: workersWithStatus,
       active_workers_count: activeWorkers.length,
@@ -117,7 +133,14 @@ export async function GET(request: NextRequest) {
       utilized_capacity: utilizedCapacity,
       available_capacity: totalCapacity - utilizedCapacity,
       pending_jobs_count: pendingJobsCount || 0,
-      processing_jobs_count: processingJobsCount || 0
+      processing_jobs_count: processingJobsCount || 0,
+      _server_timestamp: now.toISOString()  // Debug: helps identify stale responses
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
     })
   } catch (error: any) {
     console.error('Error in GET /api/workers:', error)

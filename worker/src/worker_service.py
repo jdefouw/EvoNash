@@ -76,24 +76,62 @@ class WorkerService:
         self.device = self.worker_config.get('device', 'cuda')
         
         # Get or generate machine-specific worker ID
-        # IMPORTANT: This is stored in a SEPARATE file (machine_id.txt) that should NEVER be copied
-        # between machines. This ensures each machine has a unique identity even if worker_config.json
-        # is shared/copied during deployment.
+        # IMPORTANT: The ID now includes the hostname to prevent issues when the worker
+        # folder is copied between machines. This ensures each machine has a unique identity.
         import uuid
+        import socket
+        
         machine_id_path = Path(__file__).parent.parent / 'data' / 'machine_id.txt'
+        hostname = socket.gethostname()
+        
+        need_new_id = False
+        old_id = None
         
         if machine_id_path.exists():
             # Load existing machine ID
-            self.persistent_worker_id = machine_id_path.read_text().strip()
-            self.logger.info(f"Loaded machine ID from {machine_id_path}: {self.persistent_worker_id}")
+            try:
+                content = machine_id_path.read_text().strip()
+                # Check if ID includes hostname marker (new format: "hostname:uuid")
+                if ':' in content:
+                    stored_hostname, stored_uuid = content.split(':', 1)
+                    if stored_hostname == hostname:
+                        # Hostname matches - use existing ID
+                        self.persistent_worker_id = stored_uuid
+                        self.logger.info(f"Loaded machine ID from {machine_id_path}")
+                        self.logger.info(f"  Hostname: {hostname}, ID: {self.persistent_worker_id[:8]}...")
+                    else:
+                        # Hostname doesn't match - this file was copied from another machine!
+                        old_id = stored_uuid
+                        self.logger.warning("=" * 60)
+                        self.logger.warning("⚠ DUPLICATE MACHINE ID DETECTED!")
+                        self.logger.warning(f"  machine_id.txt was created on '{stored_hostname}'")
+                        self.logger.warning(f"  but this machine is '{hostname}'")
+                        self.logger.warning("  Generating new unique ID for this machine...")
+                        self.logger.warning("=" * 60)
+                        need_new_id = True
+                else:
+                    # Old format (just UUID) - migrate to new format with hostname
+                    old_id = content
+                    self.logger.info(f"Migrating old machine ID format to include hostname...")
+                    need_new_id = True
+            except Exception as e:
+                self.logger.warning(f"Error reading machine_id.txt: {e}, generating new ID")
+                need_new_id = True
         else:
+            need_new_id = True
+        
+        if need_new_id:
             # Generate new machine-specific UUID
-            self.persistent_worker_id = str(uuid.uuid4())
+            new_uuid = str(uuid.uuid4())
+            self.persistent_worker_id = new_uuid
             machine_id_path.parent.mkdir(parents=True, exist_ok=True)
-            machine_id_path.write_text(self.persistent_worker_id)
-            self.logger.info(f"Generated new machine ID: {self.persistent_worker_id}")
+            # Store with hostname prefix to detect if file is copied to another machine
+            machine_id_path.write_text(f"{hostname}:{new_uuid}")
+            self.logger.info(f"Generated new machine ID for '{hostname}': {new_uuid}")
             self.logger.info(f"  Saved to: {machine_id_path}")
-            self.logger.info(f"  NOTE: This file should NOT be copied between machines!")
+            if old_id:
+                self.logger.warning(f"  Old ID ({old_id[:8]}...) will no longer be used")
+                self.logger.warning(f"  This worker will appear as a NEW worker in the dashboard")
         
         # State
         self.running = True
