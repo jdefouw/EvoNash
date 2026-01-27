@@ -194,7 +194,8 @@ export default function ScienceFairDashboard() {
   const [activeSection, setActiveSection] = useState('abstract')
 
   useEffect(() => {
-    fetch('/api/dashboard')
+    // Cache-bust so CDN/browser never serve stale data (unique URL per request)
+    fetch(`/api/dashboard?_=${Date.now()}`, { cache: 'no-store' })
       .then(res => res.json())
       .then(dashboardData => {
         setData(dashboardData)

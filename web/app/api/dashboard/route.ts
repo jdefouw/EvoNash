@@ -258,7 +258,12 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json(response)
+    return NextResponse.json(response, {
+      headers: {
+        'Cache-Control': 'private, no-store, no-cache, max-age=0, must-revalidate',
+        Pragma: 'no-cache'
+      }
+    })
   } catch (error) {
     console.error('Dashboard API error:', error)
     return NextResponse.json(

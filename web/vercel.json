@@ -2,5 +2,13 @@
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "installCommand": "npm install",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "headers": [
+    {
+      "source": "/api/dashboard",
+      "headers": [
+        { "key": "Cache-Control", "value": "private, no-store, no-cache, max-age=0, must-revalidate" }
+      ]
+    }
+  ]
 }
