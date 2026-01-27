@@ -82,10 +82,16 @@ export async function POST(request: NextRequest) {
     for (const experiment of experimentOrder) {
       // Update status to RUNNING if it was PENDING
       if (experiment.status === 'PENDING') {
-        await supabase
+        const { error: statusError } = await supabase
           .from('experiments')
           .update({ status: 'RUNNING' })
           .eq('id', experiment.id)
+        
+        if (statusError) {
+          console.error(`[QUEUE] Failed to update experiment ${experiment.id} status to RUNNING:`, statusError)
+        } else {
+          console.log(`[QUEUE] ✓ Updated experiment ${experiment.id} (${experiment.experiment_name}) status: PENDING -> RUNNING`)
+        }
       }
       
       // CRITICAL FIX: Get ALL job assignments to prevent overlapping batches

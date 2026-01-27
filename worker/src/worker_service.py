@@ -377,6 +377,7 @@ class WorkerService:
     def _send_heartbeat(self):
         """Send heartbeat to controller."""
         if not self.worker_id:
+            self.logger.warning("Heartbeat skipped: no worker_id")
             return
         
         try:
@@ -399,14 +400,16 @@ class WorkerService:
             if response.status_code == 404:
                 # Worker was deleted from server (stale heartbeat cleanup)
                 # Re-register to restore worker entry
-                self.logger.warning("⚠ Worker not found in server, re-registering...")
+                self.logger.warning("⚠ Worker not found in server (404), re-registering...")
                 self._register_worker()
-            elif response.status_code != 200:
-                self.logger.warning(f"Heartbeat failed: {response.status_code}")
+            elif response.status_code == 200:
+                self.logger.debug(f"♥ Heartbeat sent (status={current_status}, jobs={self.active_jobs_count})")
+            else:
+                self.logger.warning(f"Heartbeat failed: {response.status_code} - {response.text[:100] if response.text else 'no body'}")
         except requests.exceptions.Timeout:
-            self.logger.debug("Heartbeat timeout (will retry next cycle)")
+            self.logger.warning("Heartbeat timeout (will retry next cycle)")
         except requests.exceptions.ConnectionError:
-            self.logger.debug("Heartbeat connection error (will retry next cycle)")
+            self.logger.warning("Heartbeat connection error (will retry next cycle)")
         except Exception as e:
             self.logger.warning(f"Heartbeat error: {e}")
     

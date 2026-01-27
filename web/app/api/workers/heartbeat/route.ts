@@ -11,8 +11,11 @@ export async function POST(request: NextRequest) {
     
     const { worker_id, status, active_jobs_count } = body
     
+    console.log(`[HEARTBEAT] Received from worker ${worker_id?.slice(0, 8)}... status=${status}, jobs=${active_jobs_count}`)
+    
     // Validate required fields
     if (!worker_id) {
+      console.error('[HEARTBEAT] Missing worker_id')
       return NextResponse.json(
         { error: 'Missing required field: worker_id' },
         { status: 400 }
@@ -62,12 +65,13 @@ export async function POST(request: NextRequest) {
     if (error) {
       // Check if this is a "no rows returned" error (worker doesn't exist)
       if (error.code === 'PGRST116' || error.message?.includes('no rows')) {
+        console.warn(`[HEARTBEAT] Worker ${worker_id?.slice(0, 8)}... not found in database (404)`)
         return NextResponse.json(
           { error: 'Worker not found' },
           { status: 404 }
         )
       }
-      console.error('Error updating worker heartbeat:', error)
+      console.error('[HEARTBEAT] Error updating worker heartbeat:', error)
       return NextResponse.json(
         { error: error.message || 'Failed to update heartbeat' },
         { status: 500 }
@@ -75,11 +79,14 @@ export async function POST(request: NextRequest) {
     }
     
     if (!worker) {
+      console.warn(`[HEARTBEAT] Worker ${worker_id?.slice(0, 8)}... not found after update`)
       return NextResponse.json(
         { error: 'Worker not found' },
         { status: 404 }
       )
     }
+    
+    console.log(`[HEARTBEAT] ✓ Updated worker ${worker_id?.slice(0, 8)}... -> status=${worker.status}, last_heartbeat=${worker.last_heartbeat}`)
     
     return NextResponse.json({
       success: true,
