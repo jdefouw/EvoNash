@@ -39,6 +39,7 @@ export default function WorkerList({ className = '', compact = false }: WorkerLi
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [clearing, setClearing] = useState(false)
 
   const fetchWorkers = async () => {
     try {
@@ -63,6 +64,26 @@ export default function WorkerList({ className = '', compact = false }: WorkerLi
       setError('Network error - unable to reach server')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const clearAllWorkers = async () => {
+    if (!confirm('Remove all workers from the dashboard? Offline workers will be removed. Job assignments for those workers are also removed.')) {
+      return
+    }
+    setClearing(true)
+    try {
+      const res = await fetch('/api/workers/clear', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        await fetchWorkers()
+      } else {
+        setError(data.error || 'Failed to clear workers')
+      }
+    } catch (err) {
+      setError('Failed to clear workers')
+    } finally {
+      setClearing(false)
     }
   }
 
@@ -164,6 +185,15 @@ export default function WorkerList({ className = '', compact = false }: WorkerLi
                 {processingCount} processing
               </span>
             )}
+            <button
+              type="button"
+              onClick={clearAllWorkers}
+              disabled={clearing || workers.length === 0}
+              className="px-2 py-1 text-xs font-medium text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-full border border-amber-300 dark:border-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Remove all workers from the database (cleans up offline/stale entries)"
+            >
+              {clearing ? 'Clearing…' : 'Clear all'}
+            </button>
           </div>
         </div>
         
