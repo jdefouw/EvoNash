@@ -44,6 +44,7 @@ export default function ExperimentDetailPage() {
   const lastPollTimeRef = useRef<string | null>(null)
 
   // Polling function with retry logic
+  // NOTE: Uses functional state updates to avoid stale closure issues
   const pollLiveData = useCallback(async () => {
     if (!experimentId) return
 
@@ -63,18 +64,23 @@ export default function ExperimentDetailPage() {
 
       const data = await response.json()
       
-      // Update experiment status if changed
-      if (data.experiment_status && experiment && data.experiment_status !== experiment.status) {
-        setExperiment({ ...experiment, status: data.experiment_status })
-        // If experiment becomes RUNNING, update worker status to connected
-        if (data.experiment_status === 'RUNNING') {
-          setWorkerStatus(prev => prev ? { ...prev, connected: true } : { connected: true, pending_count: 0 })
-        }
+      // Update experiment status if changed - use functional update to avoid stale closure
+      if (data.experiment_status) {
+        setExperiment(prev => {
+          if (!prev) return prev
+          if (prev.status !== data.experiment_status) {
+            console.log(`[Experiment] Poll updating status: ${prev.status} -> ${data.experiment_status}`)
+            // If experiment becomes RUNNING, update worker status to connected
+            if (data.experiment_status === 'RUNNING') {
+              setWorkerStatus(ws => ws ? { ...ws, connected: true } : { connected: true, pending_count: 0 })
+            }
+            return { ...prev, status: data.experiment_status }
+          }
+          return prev
+        })
       }
 
       // Always update latest generation when the API returns one, so progress reflects server state.
-      // (Previously we only updated when isNew || has_updates; if the live API returned null when
-      // using last_gen, we never got newer gens and progress stayed stuck.)
       if (data.generation) {
         const newGen = data.generation
         setLatestGeneration(newGen)
@@ -118,7 +124,7 @@ export default function ExperimentDetailPage() {
         }
       }
     }
-  }, [experimentId, experiment, retryCount])
+  }, [experimentId, retryCount])
 
   // Initial data fetch
   useEffect(() => {
@@ -403,11 +409,10 @@ export default function ExperimentDetailPage() {
     }
   }, [experimentId])
 
-  // Set up polling as fallback when experiment is running or pending
-  // Keep polling active as backup in case realtime isn't working
+  // Separate effect to load generations for completed experiments
   useEffect(() => {
-    // For completed experiments, make sure generations are loaded
     if (experiment && experiment.status === 'COMPLETED' && generations.length === 0 && !loading) {
+      console.log('[Experiment] Loading generations for completed experiment')
       fetch(`/api/generations?experiment_id=${experimentId}`)
         .then(res => res.json())
         .then(data => {
@@ -422,8 +427,15 @@ export default function ExperimentDetailPage() {
           console.error('Error fetching generations for completed experiment:', err)
         })
     }
+  }, [experiment?.status, experimentId, generations.length, loading])
 
-    if (!experiment || (experiment.status !== 'RUNNING' && experiment.status !== 'PENDING')) {
+  // Set up polling as fallback when experiment is running or pending
+  // Keep polling active as backup in case realtime isn't working
+  // NOTE: Only depends on experiment?.status to avoid re-running on every state change
+  useEffect(() => {
+    const status = experiment?.status
+    
+    if (!status || (status !== 'RUNNING' && status !== 'PENDING')) {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current)
         pollingIntervalRef.current = null
@@ -433,8 +445,8 @@ export default function ExperimentDetailPage() {
 
     // Poll every 3 seconds for RUNNING, every 5 seconds for PENDING
     // This ensures updates even if realtime subscription fails
-    const pollInterval = experiment.status === 'RUNNING' ? 3000 : 5000
-    console.log(`[Experiment] Starting polling with interval: ${pollInterval}ms for status: ${experiment.status}`)
+    const pollInterval = status === 'RUNNING' ? 3000 : 5000
+    console.log(`[Experiment] Starting polling with interval: ${pollInterval}ms for status: ${status}`)
     pollingIntervalRef.current = setInterval(pollLiveData, pollInterval)
     
     // Initial poll
@@ -446,7 +458,7 @@ export default function ExperimentDetailPage() {
         pollingIntervalRef.current = null
       }
     }
-  }, [experiment, pollLiveData, experimentId, generations.length, loading])
+  }, [experiment?.status, pollLiveData, experimentId])
 
   if (loading) {
     return (
