@@ -60,6 +60,8 @@ export async function POST(request: NextRequest) {
     }
     
     // Validate job assignment exists and verify ownership; capture job range for completion check
+    // When job_id is provided but job not found (e.g. worker was deleted and re-registered, cascade removed assignments),
+    // we still accept the upload if worker_id + experiment_id are present and worker exists (recovery path).
     let jobGenerationStart: number | null = null
     let jobGenerationEnd: number | null = null
     if (job_id) {
@@ -68,34 +70,56 @@ export async function POST(request: NextRequest) {
         .select('*')
         .eq('job_id', job_id)
         .single()
-      
-      if (!jobAssignment) {
-        return NextResponse.json(
-          { error: 'Job assignment not found' },
-          { status: 404 }
-        )
-      }
-      jobGenerationStart = jobAssignment.generation_start
-      jobGenerationEnd = jobAssignment.generation_end
 
-      // CRITICAL: Verify worker owns this job to prevent job stealing
-      if (worker_id && jobAssignment.worker_id !== worker_id) {
-        console.error(`[RESULTS] SECURITY: Worker ${worker_id} attempted to update job ${job_id} owned by worker ${jobAssignment.worker_id}`)
-        return NextResponse.json(
-          { error: 'Unauthorized: Worker does not own this job' },
-          { status: 403 }
-        )
-      }
-      
-      // Update job assignment status to processing (if not already)
-      if (jobAssignment.status === 'assigned') {
-        await supabase
-          .from('job_assignments')
-          .update({ 
-            status: 'processing',
-            started_at: new Date().toISOString()
-          })
-          .eq('id', jobAssignment.id)
+      if (!jobAssignment) {
+        // Recovery: job may have been cascade-deleted when worker was removed (e.g. Clear all).
+        // If worker_id is present and worker exists (re-registered), still accept generations to avoid data loss.
+        if (worker_id) {
+          const { data: workerRow } = await supabase
+            .from('workers')
+            .select('id')
+            .eq('id', worker_id)
+            .single()
+          if (workerRow) {
+            console.warn(
+              `[RESULTS] Job ${job_id} not found (worker may have re-registered after removal); accepting upload for experiment ${experiment_id} to preserve data`
+            )
+            // Proceed without job range – skip completion logic below
+          } else {
+            return NextResponse.json(
+              { error: 'Job assignment not found and worker not registered' },
+              { status: 404 }
+            )
+          }
+        } else {
+          return NextResponse.json(
+            { error: 'Job assignment not found' },
+            { status: 404 }
+          )
+        }
+      } else {
+        jobGenerationStart = jobAssignment.generation_start
+        jobGenerationEnd = jobAssignment.generation_end
+
+        // CRITICAL: Verify worker owns this job to prevent job stealing
+        if (worker_id && jobAssignment.worker_id !== worker_id) {
+          console.error(`[RESULTS] SECURITY: Worker ${worker_id} attempted to update job ${job_id} owned by worker ${jobAssignment.worker_id}`)
+          return NextResponse.json(
+            { error: 'Unauthorized: Worker does not own this job' },
+            { status: 403 }
+          )
+        }
+
+        // Update job assignment status to processing (if not already)
+        if (jobAssignment.status === 'assigned') {
+          await supabase
+            .from('job_assignments')
+            .update({
+              status: 'processing',
+              started_at: new Date().toISOString()
+            })
+            .eq('id', jobAssignment.id)
+        }
       }
     }
     
