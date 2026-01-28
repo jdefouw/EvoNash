@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
     
     // Check which generations already exist to avoid duplicate key errors
     const generationNumbers = generationInserts.map((g: any) => g.generation_number)
-    const placeholders = generationNumbers.map((_, i) => `$${i + 2}`).join(', ')
+    const placeholders = generationNumbers.map((_: number, i: number) => `$${i + 2}`).join(', ')
     const existingGenerations = await queryAll<{ generation_number: number }>(
       `SELECT generation_number FROM generations 
        WHERE experiment_id = $1 AND generation_number IN (${placeholders})`,
