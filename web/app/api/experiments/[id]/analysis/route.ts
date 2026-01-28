@@ -40,27 +40,45 @@ export async function GET(
     const entropies = generations.map((g: any) => g.policy_entropy).filter(Boolean) as number[]
     const entropy_variances = generations.map((g: any) => g.entropy_variance).filter(Boolean) as number[]
     
-    // Find convergence point using entropy variance threshold
-    // IMPORTANT: We need to find convergence AFTER the population has diverged first.
-    // At generation 0, all agents are identical (same seed), so variance is artificially low.
-    // True convergence = population evolved, diverged, then stabilized to Nash Equilibrium.
+    // Find convergence point using improved relative threshold detection
+    // This handles cases where variance never exceeds the absolute threshold but clearly converges
     //
-    // Use different thresholds based on mutation mode:
+    // Use different base thresholds based on mutation mode:
     // - CONTROL (STATIC mutation): 0.01 - uniform mutation leads to homogeneous population
     // - EXPERIMENTAL (ADAPTIVE mutation): 0.025 - fitness-scaled mutation maintains more diversity
-    const threshold = experiment.experiment_group === 'EXPERIMENTAL' ? 0.025 : 0.01
+    const absoluteThreshold = experiment.experiment_group === 'EXPERIMENTAL' ? 0.025 : 0.01
     
-    // First, find where entropy variance exceeds threshold (population diverged)
-    const divergenceIndex = generations.findIndex((g: any) => 
-      g.entropy_variance !== null && g.entropy_variance >= threshold
-    )
-    
-    // Find convergence only if population diverged first, then converged again
-    const convergence_gen = divergenceIndex === -1 
-      ? null 
-      : generations.slice(divergenceIndex).find((g: any) => 
-          g.entropy_variance !== null && g.entropy_variance < threshold
-        )
+    // Calculate convergence using relative threshold approach
+    let convergence_gen = null
+    if (generations.length >= 10) {
+      // Get variance data (skip first few gens)
+      const varianceData = generations.slice(5)
+        .filter((g: any) => g.entropy_variance !== null)
+        .map((g: any) => ({
+          gen: g.generation_number,
+          variance: g.entropy_variance as number
+        }))
+      
+      if (varianceData.length > 0) {
+        // Find peak variance
+        const peakVariance = Math.max(...varianceData.map(d => d.variance))
+        const peakIndex = varianceData.findIndex(d => d.variance === peakVariance)
+        
+        // Must have diverged (peak > minimum)
+        if (peakVariance > 0.0001) {
+          // Use stricter of absolute or relative (5% of peak) threshold
+          const relativeThreshold = peakVariance * 0.05
+          const effectiveThreshold = Math.min(absoluteThreshold, relativeThreshold)
+          
+          // Find convergence after peak
+          const convergencePoint = varianceData.slice(peakIndex).find(
+            d => d.variance < effectiveThreshold
+          )
+          
+          convergence_gen = convergencePoint ? { generation_number: convergencePoint.gen } : null
+        }
+      }
+    }
     
     const analysis = {
       experiment_id: params.id,
