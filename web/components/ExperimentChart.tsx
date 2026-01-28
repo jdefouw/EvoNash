@@ -34,21 +34,35 @@ export default function ExperimentChart({ generations, experiment, isLive = fals
     peakElo: gen.peak_elo || 0
   }))
 
-  // Calculate convergence generation using divergence-first logic
+  // Calculate convergence generation using improved detection logic
   const convergenceGen = useMemo(() => {
-    // Find first divergence point
-    const divergenceIndex = generations.findIndex(
-      g => (g.entropy_variance ?? 0) >= convergenceThreshold
+    if (generations.length < 10) return null
+
+    // Get variance data (skip first few gens)
+    const varianceData = generations.slice(5).map(g => ({
+      gen: g.generation_number,
+      variance: g.entropy_variance ?? 0
+    }))
+    
+    if (varianceData.length === 0) return null
+
+    // Find peak variance
+    const peakVariance = Math.max(...varianceData.map(d => d.variance))
+    const peakIndex = varianceData.findIndex(d => d.variance === peakVariance)
+    
+    // Must have diverged (peak > minimum)
+    if (peakVariance <= 0.0001) return null
+
+    // Use stricter of absolute or relative (5% of peak) threshold
+    const relativeThreshold = peakVariance * 0.05
+    const effectiveThreshold = Math.min(convergenceThreshold, relativeThreshold)
+    
+    // Find convergence after peak
+    const convergencePoint = varianceData.slice(peakIndex).find(
+      d => d.variance < effectiveThreshold
     )
     
-    if (divergenceIndex === -1) return null
-    
-    // Find convergence after divergence
-    const convergencePoint = generations.slice(divergenceIndex).find(
-      g => (g.entropy_variance ?? 0) < convergenceThreshold
-    )
-    
-    return convergencePoint?.generation_number ?? null
+    return convergencePoint?.gen ?? null
   }, [generations, convergenceThreshold])
 
   const latestGen = generations.length > 0 ? generations[generations.length - 1] : null

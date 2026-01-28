@@ -36,29 +36,54 @@ export default function EntropyChart({ generations, experiment, isLive = false }
     entropyVariance: gen.entropy_variance || 0
   }))
 
-  // Check for convergence using divergence-first logic:
-  // 1. Population must first diverge (entropy variance >= threshold)
-  // 2. Then converge (entropy variance < threshold)
-  // This prevents false positives from generation 0 when all agents are identical
+  // Check for convergence using improved detection logic:
+  // 1. Find peak entropy variance (must be above minimum to show divergence)
+  // 2. Find when variance drops significantly from peak AND below threshold
+  // This handles cases where variance never exceeds the threshold but clearly converges
   const convergenceInfo = useMemo(() => {
-    // Find first divergence point
-    const divergenceIndex = generations.findIndex(
-      g => (g.entropy_variance ?? 0) >= convergenceThreshold
-    )
-    
-    if (divergenceIndex === -1) {
-      return { isConverged: false, convergenceGen: null, hasDiverged: false }
+    if (generations.length < 10) {
+      return { isConverged: false, convergenceGen: null, hasDiverged: false, peakVariance: 0 }
     }
+
+    // Get all variance values (skip first few gens where data might be unstable)
+    const varianceData = generations.slice(5).map(g => ({
+      gen: g.generation_number,
+      variance: g.entropy_variance ?? 0
+    }))
     
-    // Find convergence after divergence
-    const convergenceGen = generations.slice(divergenceIndex).find(
-      g => (g.entropy_variance ?? 0) < convergenceThreshold
+    if (varianceData.length === 0) {
+      return { isConverged: false, convergenceGen: null, hasDiverged: false, peakVariance: 0 }
+    }
+
+    // Find peak variance
+    const peakVariance = Math.max(...varianceData.map(d => d.variance))
+    const peakIndex = varianceData.findIndex(d => d.variance === peakVariance)
+    
+    // Consider "diverged" if peak variance is above a minimum threshold (0.0001)
+    // This means the population actually evolved and differentiated
+    const hasDiverged = peakVariance > 0.0001
+    
+    if (!hasDiverged) {
+      return { isConverged: false, convergenceGen: null, hasDiverged: false, peakVariance }
+    }
+
+    // For convergence detection, use the stricter of:
+    // - The absolute threshold (0.01 or 0.025)
+    // - 5% of peak variance (relative threshold for cases where peak is small)
+    const relativeThreshold = peakVariance * 0.05
+    const effectiveThreshold = Math.min(convergenceThreshold, relativeThreshold)
+    
+    // Find first generation AFTER peak where variance drops below effective threshold
+    const convergencePoint = varianceData.slice(peakIndex).find(
+      d => d.variance < effectiveThreshold
     )
     
     return {
-      isConverged: convergenceGen !== undefined,
-      convergenceGen: convergenceGen?.generation_number ?? null,
-      hasDiverged: true
+      isConverged: convergencePoint !== undefined,
+      convergenceGen: convergencePoint?.gen ?? null,
+      hasDiverged: true,
+      peakVariance,
+      effectiveThreshold
     }
   }, [generations, convergenceThreshold])
 
