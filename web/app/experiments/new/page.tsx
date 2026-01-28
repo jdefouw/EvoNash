@@ -263,7 +263,7 @@ export default function NewExperimentPage() {
                   type="number"
                   id="mutation_rate"
                   name="mutation_rate"
-                  step="0.01"
+                  step="0.0001"
                   min="0"
                   max="1"
                   value={formData.mutation_rate}
@@ -283,7 +283,7 @@ export default function NewExperimentPage() {
                   type="number"
                   id="mutation_base"
                   name="mutation_base"
-                  step="0.01"
+                  step="0.0001"
                   min="0"
                   max="1"
                   value={formData.mutation_base}
