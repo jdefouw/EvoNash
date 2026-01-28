@@ -30,6 +30,10 @@ class StatisticalAnalyzer:
         """
         Calculate generation at which entropy variance drops below threshold.
         
+        IMPORTANT: We need to find convergence AFTER the population has diverged first.
+        At generation 0, all agents are identical (same seed), so variance is artificially low.
+        True convergence = population evolved, diverged, then stabilized to Nash Equilibrium.
+        
         Args:
             df: DataFrame with generation data
             threshold: Entropy variance threshold (default 0.01)
@@ -40,9 +44,23 @@ class StatisticalAnalyzer:
         if 'entropy_variance' not in df.columns:
             return None
         
-        converged = df[df['entropy_variance'] < threshold]
-        if len(converged) > 0:
-            return int(converged.iloc[0]['generation'])
+        # First, find where entropy variance exceeds threshold (population diverged)
+        diverged = df[df['entropy_variance'] >= threshold]
+        if len(diverged) == 0:
+            # Population never diverged, so no meaningful convergence
+            return None
+        
+        # Get the generation where divergence first occurred
+        first_divergence_gen = int(diverged.iloc[0]['generation'])
+        
+        # Now find the first generation AFTER divergence where variance drops below threshold
+        converged_after_divergence = df[
+            (df['generation'] > first_divergence_gen) & 
+            (df['entropy_variance'] < threshold)
+        ]
+        
+        if len(converged_after_divergence) > 0:
+            return int(converged_after_divergence.iloc[0]['generation'])
         return None
     
     def perform_t_test(self) -> Dict:

@@ -41,9 +41,22 @@ export async function GET(
     const entropy_variances = generations.map((g: any) => g.entropy_variance).filter(Boolean) as number[]
     
     // Find convergence point (entropy variance < 0.01)
-    const convergence_gen = generations.find((g: any) => 
-      g.entropy_variance !== null && g.entropy_variance < 0.01
+    // IMPORTANT: We need to find convergence AFTER the population has diverged first.
+    // At generation 0, all agents are identical (same seed), so variance is artificially low.
+    // True convergence = population evolved, diverged, then stabilized to Nash Equilibrium.
+    const threshold = 0.01
+    
+    // First, find where entropy variance exceeds threshold (population diverged)
+    const divergenceIndex = generations.findIndex((g: any) => 
+      g.entropy_variance !== null && g.entropy_variance >= threshold
     )
+    
+    // Find convergence only if population diverged first, then converged again
+    const convergence_gen = divergenceIndex === -1 
+      ? null 
+      : generations.slice(divergenceIndex).find((g: any) => 
+          g.entropy_variance !== null && g.entropy_variance < threshold
+        )
     
     const analysis = {
       experiment_id: params.id,

@@ -165,13 +165,32 @@ export async function GET() {
       .filter((e): e is number => e !== null && e !== undefined)
 
     // Find convergence points (entropy variance < 0.01)
-    const controlConvergenceGen = controlGenerations.find(
-      (g: Generation) => g.entropy_variance != null && g.entropy_variance < 0.01
-    )?.generation_number ?? null
-
-    const experimentalConvergenceGen = experimentalGenerations.find(
-      (g: Generation) => g.entropy_variance != null && g.entropy_variance < 0.01
-    )?.generation_number ?? null
+    // IMPORTANT: We need to find convergence AFTER the population has diverged first.
+    // At generation 0, all agents are identical (same seed), so variance is artificially low.
+    // True convergence = population evolved, diverged, then stabilized to Nash Equilibrium.
+    const findConvergenceGeneration = (generations: Generation[]): number | null => {
+      const threshold = 0.01
+      
+      // First, find the index where entropy variance exceeds threshold (population diverged)
+      const divergenceIndex = generations.findIndex(
+        (g: Generation) => g.entropy_variance != null && g.entropy_variance >= threshold
+      )
+      
+      // If population never diverged, there's no meaningful convergence
+      if (divergenceIndex === -1) {
+        return null
+      }
+      
+      // Now find the first generation AFTER divergence where variance drops below threshold
+      const convergenceGen = generations.slice(divergenceIndex).find(
+        (g: Generation) => g.entropy_variance != null && g.entropy_variance < threshold
+      )
+      
+      return convergenceGen?.generation_number ?? null
+    }
+    
+    const controlConvergenceGen = findConvergenceGeneration(controlGenerations)
+    const experimentalConvergenceGen = findConvergenceGeneration(experimentalGenerations)
 
     // Calculate convergence improvement
     let convergenceImprovement: number | null = null
