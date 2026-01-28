@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Dot } from 'recharts'
+import { useEffect, useRef, useMemo } from 'react'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Dot, ReferenceLine } from 'recharts'
 import { Experiment, Generation } from '@/types/protocol'
 
 interface ExperimentChartProps {
@@ -10,8 +10,17 @@ interface ExperimentChartProps {
   isLive?: boolean
 }
 
+// Convergence thresholds differ by mutation mode
+const CONTROL_CONVERGENCE_THRESHOLD = 0.01
+const EXPERIMENTAL_CONVERGENCE_THRESHOLD = 0.025
+
 export default function ExperimentChart({ generations, experiment, isLive = false }: ExperimentChartProps) {
   const prevLengthRef = useRef(0)
+
+  // Determine threshold based on experiment type
+  const convergenceThreshold = experiment.mutation_mode === 'ADAPTIVE' 
+    ? EXPERIMENTAL_CONVERGENCE_THRESHOLD 
+    : CONTROL_CONVERGENCE_THRESHOLD
 
   useEffect(() => {
     if (generations.length > prevLengthRef.current) {
@@ -24,6 +33,23 @@ export default function ExperimentChart({ generations, experiment, isLive = fals
     avgElo: gen.avg_elo || 0,
     peakElo: gen.peak_elo || 0
   }))
+
+  // Calculate convergence generation using divergence-first logic
+  const convergenceGen = useMemo(() => {
+    // Find first divergence point
+    const divergenceIndex = generations.findIndex(
+      g => (g.entropy_variance ?? 0) >= convergenceThreshold
+    )
+    
+    if (divergenceIndex === -1) return null
+    
+    // Find convergence after divergence
+    const convergencePoint = generations.slice(divergenceIndex).find(
+      g => (g.entropy_variance ?? 0) < convergenceThreshold
+    )
+    
+    return convergencePoint?.generation_number ?? null
+  }, [generations, convergenceThreshold])
 
   const latestGen = generations.length > 0 ? generations[generations.length - 1] : null
 
@@ -73,6 +99,22 @@ export default function ExperimentChart({ generations, experiment, isLive = fals
             }}
           />
           <Legend />
+          {/* Vertical line marking Nash Equilibrium achievement */}
+          {convergenceGen !== null && (
+            <ReferenceLine 
+              x={convergenceGen} 
+              stroke="#22c55e" 
+              strokeWidth={2}
+              strokeDasharray="3 3"
+              label={{ 
+                value: `Nash Equilibrium (Gen ${convergenceGen})`, 
+                position: "top",
+                fontSize: 11,
+                fill: "#16a34a",
+                fontWeight: "bold"
+              }}
+            />
+          )}
           <Line 
             type="monotone" 
             dataKey="avgElo" 
@@ -104,6 +146,24 @@ export default function ExperimentChart({ generations, experiment, isLive = fals
           )}
         </LineChart>
       </ResponsiveContainer>
+      {/* Nash Equilibrium indicator */}
+      <div className="mt-3 flex items-center justify-between text-sm">
+        <span className="text-gray-500 dark:text-gray-400">
+          {experiment.mutation_mode === 'ADAPTIVE' ? 'Adaptive Mutation' : 'Static Mutation'} (threshold: σ &lt; {convergenceThreshold})
+        </span>
+        {convergenceGen !== null ? (
+          <div className="flex items-center gap-2 px-3 py-1 bg-green-100 dark:bg-green-900/30 rounded-full">
+            <div className="w-2 h-2 bg-green-500 rounded-full" />
+            <span className="text-green-700 dark:text-green-400 font-medium text-xs">
+              Nash Equilibrium at Generation {convergenceGen}
+            </span>
+          </div>
+        ) : (
+          <span className="text-gray-400 dark:text-gray-500 text-xs">
+            Nash Equilibrium not yet reached
+          </span>
+        )}
+      </div>
     </div>
   )
 }

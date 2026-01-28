@@ -97,15 +97,32 @@ export default function EntropyChart({ generations, experiment, isLive = false }
             }}
           />
           <Legend />
-          {/* Always show threshold line when population has diverged */}
+          {/* Horizontal threshold line when population has diverged */}
           {convergenceInfo.hasDiverged && (
             <ReferenceLine 
               y={convergenceThreshold} 
               stroke="#10b981" 
               strokeDasharray="5 5" 
               label={{ 
-                value: `Convergence Threshold (σ < ${convergenceThreshold})`, 
-                position: "right" 
+                value: `Threshold (σ < ${convergenceThreshold})`, 
+                position: "right",
+                fontSize: 10
+              }}
+            />
+          )}
+          {/* Vertical line marking Nash Equilibrium achievement */}
+          {convergenceInfo.isConverged && convergenceInfo.convergenceGen !== null && (
+            <ReferenceLine 
+              x={convergenceInfo.convergenceGen} 
+              stroke="#22c55e" 
+              strokeWidth={2}
+              strokeDasharray="3 3"
+              label={{ 
+                value: `Nash Equilibrium (Gen ${convergenceInfo.convergenceGen})`, 
+                position: "top",
+                fontSize: 11,
+                fill: "#16a34a",
+                fontWeight: "bold"
               }}
             />
           )}
