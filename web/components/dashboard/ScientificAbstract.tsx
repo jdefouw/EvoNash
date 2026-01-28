@@ -48,7 +48,7 @@ export default function ScientificAbstract({
   
   // Only highlight percentages and p-values if they represent actual calculated values
   // Match percentage patterns (e.g., "40%", "35%") and highlight in green if significant
-  if (statistics?.convergenceImprovement !== null && statistics?.convergenceImprovement > 0) {
+  if (statistics?.convergenceImprovement != null && statistics.convergenceImprovement > 0) {
     highlightedAbstract = highlightedAbstract.replace(
       /(\d+)% faster/g, 
       '<strong class="text-green-600 dark:text-green-400">$1% faster</strong>'
