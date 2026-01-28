@@ -10,8 +10,7 @@
 module.exports = {
   apps: [{
     name: 'evonash',
-    script: 'node_modules/next/dist/bin/next',
-    args: 'start',
+    script: '.next/standalone/server.js',
     cwd: '/opt/evonash/web',
     instances: 1,
     autorestart: true,
