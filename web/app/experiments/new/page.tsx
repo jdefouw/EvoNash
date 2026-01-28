@@ -18,8 +18,8 @@ export default function NewExperimentPage() {
     max_generations: 1500,
     ticks_per_generation: 750,
     mutation_rate: 0.05,
-    mutation_base: 0.1,
-    max_possible_elo: 2000.0,
+    mutation_base: 0.06,
+    max_possible_elo: 8000.0,
     selection_pressure: 0.2
   })
 
