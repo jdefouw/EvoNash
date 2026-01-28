@@ -26,6 +26,12 @@ class StatisticalAnalyzer:
         self.control_df = pd.read_csv(control_csv_path, encoding='utf-8')
         self.experimental_df = pd.read_csv(experimental_csv_path, encoding='utf-8')
     
+    # Convergence thresholds differ by mutation mode:
+    # STATIC mutation (CONTROL): 0.01 - uniform mutation leads to homogeneous population
+    # ADAPTIVE mutation (EXPERIMENTAL): 0.025 - fitness-scaled mutation maintains more diversity
+    CONTROL_CONVERGENCE_THRESHOLD = 0.01
+    EXPERIMENTAL_CONVERGENCE_THRESHOLD = 0.025
+    
     def calculate_convergence_generation(self, df: pd.DataFrame, threshold: float = 0.01) -> Optional[int]:
         """
         Calculate generation at which entropy variance drops below threshold.
@@ -34,9 +40,13 @@ class StatisticalAnalyzer:
         At generation 0, all agents are identical (same seed), so variance is artificially low.
         True convergence = population evolved, diverged, then stabilized to Nash Equilibrium.
         
+        NOTE: Use different thresholds for different mutation modes:
+        - CONTROL (STATIC mutation): threshold = 0.01 (default)
+        - EXPERIMENTAL (ADAPTIVE mutation): threshold = 0.025 (higher due to maintained diversity)
+        
         Args:
             df: DataFrame with generation data
-            threshold: Entropy variance threshold (default 0.01)
+            threshold: Entropy variance threshold (default 0.01 for CONTROL/STATIC)
             
         Returns:
             Generation number where convergence occurred, or None if never converged
@@ -93,11 +103,21 @@ class StatisticalAnalyzer:
         """
         Analyze convergence speed for both groups.
         
+        Uses different thresholds for each mutation mode:
+        - CONTROL (STATIC mutation): 0.01 threshold
+        - EXPERIMENTAL (ADAPTIVE mutation): 0.025 threshold
+        
         Returns:
             Dictionary with convergence analysis
         """
-        control_convergence = self.calculate_convergence_generation(self.control_df)
-        experimental_convergence = self.calculate_convergence_generation(self.experimental_df)
+        control_convergence = self.calculate_convergence_generation(
+            self.control_df, 
+            threshold=self.CONTROL_CONVERGENCE_THRESHOLD
+        )
+        experimental_convergence = self.calculate_convergence_generation(
+            self.experimental_df,
+            threshold=self.EXPERIMENTAL_CONVERGENCE_THRESHOLD
+        )
         
         acceleration = None
         if control_convergence and experimental_convergence:

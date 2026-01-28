@@ -164,13 +164,14 @@ export async function GET() {
       .map((g: Generation) => g.avg_elo)
       .filter((e): e is number => e !== null && e !== undefined)
 
-    // Find convergence points (entropy variance < 0.01)
+    // Find convergence points using entropy variance threshold
     // IMPORTANT: We need to find convergence AFTER the population has diverged first.
     // At generation 0, all agents are identical (same seed), so variance is artificially low.
     // True convergence = population evolved, diverged, then stabilized to Nash Equilibrium.
-    const findConvergenceGeneration = (generations: Generation[]): number | null => {
-      const threshold = 0.01
-      
+    // 
+    // NOTE: ADAPTIVE mutation (experimental) maintains more population diversity by design,
+    // so it requires a higher convergence threshold than STATIC mutation (control).
+    const findConvergenceGeneration = (generations: Generation[], threshold: number): number | null => {
       // First, find the index where entropy variance exceeds threshold (population diverged)
       const divergenceIndex = generations.findIndex(
         (g: Generation) => g.entropy_variance != null && g.entropy_variance >= threshold
@@ -189,8 +190,14 @@ export async function GET() {
       return convergenceGen?.generation_number ?? null
     }
     
-    const controlConvergenceGen = findConvergenceGeneration(controlGenerations)
-    const experimentalConvergenceGen = findConvergenceGeneration(experimentalGenerations)
+    // Use different thresholds: STATIC mutation converges to lower variance than ADAPTIVE
+    // CONTROL (STATIC): 0.01 threshold - uniform mutation leads to homogeneous population
+    // EXPERIMENTAL (ADAPTIVE): 0.025 threshold - fitness-scaled mutation maintains more diversity
+    const CONTROL_CONVERGENCE_THRESHOLD = 0.01
+    const EXPERIMENTAL_CONVERGENCE_THRESHOLD = 0.025
+    
+    const controlConvergenceGen = findConvergenceGeneration(controlGenerations, CONTROL_CONVERGENCE_THRESHOLD)
+    const experimentalConvergenceGen = findConvergenceGeneration(experimentalGenerations, EXPERIMENTAL_CONVERGENCE_THRESHOLD)
 
     // Calculate convergence improvement
     let convergenceImprovement: number | null = null

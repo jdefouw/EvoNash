@@ -40,11 +40,15 @@ export async function GET(
     const entropies = generations.map((g: any) => g.policy_entropy).filter(Boolean) as number[]
     const entropy_variances = generations.map((g: any) => g.entropy_variance).filter(Boolean) as number[]
     
-    // Find convergence point (entropy variance < 0.01)
+    // Find convergence point using entropy variance threshold
     // IMPORTANT: We need to find convergence AFTER the population has diverged first.
     // At generation 0, all agents are identical (same seed), so variance is artificially low.
     // True convergence = population evolved, diverged, then stabilized to Nash Equilibrium.
-    const threshold = 0.01
+    //
+    // Use different thresholds based on mutation mode:
+    // - CONTROL (STATIC mutation): 0.01 - uniform mutation leads to homogeneous population
+    // - EXPERIMENTAL (ADAPTIVE mutation): 0.025 - fitness-scaled mutation maintains more diversity
+    const threshold = experiment.experiment_group === 'EXPERIMENTAL' ? 0.025 : 0.01
     
     // First, find where entropy variance exceeds threshold (population diverged)
     const divergenceIndex = generations.findIndex((g: any) => 
