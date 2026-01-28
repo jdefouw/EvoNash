@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase/client'
 
 interface CurrentExperiment {
   experiment_id: string
@@ -107,40 +106,13 @@ export default function WorkerList({ className = '', compact = false }: WorkerLi
     // Initial fetch
     fetchWorkers()
     
-    // Set up Supabase Realtime subscription for instant updates
-    const channel = supabase
-      .channel('workers-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // Listen to INSERT, UPDATE, DELETE
-          schema: 'public',
-          table: 'workers'
-        },
-        (payload) => {
-          console.log('[WorkerList] Realtime event:', payload.eventType, payload)
-          // Re-fetch to get complete data including job assignments
-          // This ensures we have current_experiment info which requires a join
-          fetchWorkers()
-        }
-      )
-      .subscribe((status) => {
-        console.log('[WorkerList] Realtime subscription status:', status)
-        if (status === 'SUBSCRIBED') {
-          console.log('[WorkerList] Successfully subscribed to workers table')
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('[WorkerList] Realtime subscription error - falling back to polling')
-        }
-      })
-    
-    // Fallback polling every 5 seconds to ensure updates even if realtime fails
-    const fallbackInterval = setInterval(() => {
+    // Poll every 5 seconds for updates (standalone PostgreSQL - no realtime subscriptions)
+    const pollInterval = setInterval(() => {
       fetchWorkers()
     }, 5000)
     
     return () => {
-      channel.unsubscribe()
-      clearInterval(fallbackInterval)
+      clearInterval(pollInterval)
     }
   }, [])
 

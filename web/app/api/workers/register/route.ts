@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { queryOne, query, count } from '@/lib/postgres'
 
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerClient()
     const body = await request.json()
     
     const { worker_id, worker_name, gpu_type, vram_gb } = body
@@ -36,21 +35,20 @@ export async function POST(request: NextRequest) {
     if (worker_id) {
       console.log(`[WORKER REGISTER] Looking for existing worker with ID: ${worker_id}`)
       
-      const { data: existingWorker } = await supabase
-        .from('workers')
-        .select('*')
-        .eq('id', worker_id)
-        .single()
+      const existingWorker = await queryOne(
+        'SELECT * FROM workers WHERE id = $1',
+        [worker_id]
+      )
       
       if (existingWorker) {
         console.log(`[WORKER REGISTER] Found existing worker: name=${existingWorker.worker_name}, last_heartbeat=${existingWorker.last_heartbeat}`)
         // Check for active job assignments before resetting status
         // This preserves job state on re-registration (e.g., after network hiccup)
-        const { count: activeJobCount } = await supabase
-          .from('job_assignments')
-          .select('*', { count: 'exact', head: true })
-          .eq('worker_id', worker_id)
-          .in('status', ['assigned', 'processing'])
+        const activeJobCount = await count(
+          'job_assignments',
+          "worker_id = $1 AND status IN ('assigned', 'processing')",
+          [worker_id]
+        )
         
         // Determine status based on active jobs - don't blindly reset to idle
         const hasActiveJobs = (activeJobCount || 0) > 0
@@ -58,84 +56,91 @@ export async function POST(request: NextRequest) {
         const newActiveJobsCount = activeJobCount || 0
         
         // Update existing worker
-        const { data: updatedWorker, error: updateError } = await supabase
-          .from('workers')
-          .update({
-            worker_name: worker_name || existingWorker.worker_name,
+        const result = await query(
+          `UPDATE workers SET 
+            worker_name = $1,
+            gpu_type = $2,
+            vram_gb = $3,
+            max_parallel_jobs = $4,
+            status = $5,
+            active_jobs_count = $6,
+            last_heartbeat = $7
+           WHERE id = $8
+           RETURNING *`,
+          [
+            worker_name || existingWorker.worker_name,
             gpu_type,
-            vram_gb: vram,
+            vram,
             max_parallel_jobs,
-            status: newStatus,  // Preserve processing status if jobs are active
-            active_jobs_count: newActiveJobsCount,  // Sync with actual job count
-            last_heartbeat: new Date().toISOString()
-          })
-          .eq('id', worker_id)
-          .select()
-          .single()
+            newStatus,
+            newActiveJobsCount,
+            new Date().toISOString(),
+            worker_id
+          ]
+        )
         
-        if (updateError) {
-          console.error('Error updating worker:', updateError)
+        if (result.rows.length === 0) {
           return NextResponse.json(
-            { error: updateError.message || 'Failed to update worker' },
+            { error: 'Failed to update worker' },
             { status: 500 }
           )
         }
         
-        worker = updatedWorker
+        worker = result.rows[0]
         console.log(`[WORKER REGISTER] Updated existing worker: ${worker.id} (${gpu_type}, ${vram}GB VRAM, ${newActiveJobsCount} active jobs)`)
       } else {
         // Worker ID provided but doesn't exist - create new with that ID
-        const { data: newWorker, error: insertError } = await supabase
-          .from('workers')
-          .insert({
-            id: worker_id,
-            worker_name: worker_name || null,
+        const result = await query(
+          `INSERT INTO workers (id, worker_name, gpu_type, vram_gb, max_parallel_jobs, status, active_jobs_count, last_heartbeat)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           RETURNING *`,
+          [
+            worker_id,
+            worker_name || null,
             gpu_type,
-            vram_gb: vram,
+            vram,
             max_parallel_jobs,
-            status: 'idle',
-            active_jobs_count: 0,
-            last_heartbeat: new Date().toISOString()
-          })
-          .select()
-          .single()
+            'idle',
+            0,
+            new Date().toISOString()
+          ]
+        )
         
-        if (insertError) {
-          console.error('Error creating worker with ID:', insertError)
+        if (result.rows.length === 0) {
           return NextResponse.json(
-            { error: insertError.message || 'Failed to create worker' },
+            { error: 'Failed to create worker' },
             { status: 500 }
           )
         }
         
-        worker = newWorker
+        worker = result.rows[0]
         console.log(`[WORKER REGISTER] Created new worker with provided ID: ${worker.id}`)
       }
     } else {
       // No worker_id provided - create new worker
-      const { data: newWorker, error: insertError } = await supabase
-        .from('workers')
-        .insert({
-          worker_name: worker_name || null,
+      const result = await query(
+        `INSERT INTO workers (worker_name, gpu_type, vram_gb, max_parallel_jobs, status, active_jobs_count, last_heartbeat)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [
+          worker_name || null,
           gpu_type,
-          vram_gb: vram,
+          vram,
           max_parallel_jobs,
-          status: 'idle',
-          active_jobs_count: 0,
-          last_heartbeat: new Date().toISOString()
-        })
-        .select()
-        .single()
+          'idle',
+          0,
+          new Date().toISOString()
+        ]
+      )
       
-      if (insertError) {
-        console.error('Error creating worker:', insertError)
+      if (result.rows.length === 0) {
         return NextResponse.json(
-          { error: insertError.message || 'Failed to create worker' },
+          { error: 'Failed to create worker' },
           { status: 500 }
         )
       }
       
-      worker = newWorker
+      worker = result.rows[0]
       console.log(`[WORKER REGISTER] Created new worker: ${worker.id}`)
     }
     

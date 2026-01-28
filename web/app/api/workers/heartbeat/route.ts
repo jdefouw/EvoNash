@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { query } from '@/lib/postgres'
 
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerClient()
     const body = await request.json()
     
     const { worker_id, status, active_jobs_count } = body
@@ -41,51 +40,39 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Update worker heartbeat - only update status if explicitly provided
-    // This prevents accidentally overwriting 'processing' with 'idle'
-    const updateData: any = {
-      last_heartbeat: new Date().toISOString()
-    }
+    // Build dynamic update query
+    const updateFields: string[] = ['last_heartbeat = $1']
+    const params: any[] = [new Date().toISOString()]
+    let paramIndex = 2
     
-    // Only update status if explicitly provided by the worker
     if (status) {
-      updateData.status = status
+      updateFields.push(`status = $${paramIndex}`)
+      params.push(status)
+      paramIndex++
     }
     
     if (jobsCount !== undefined) {
-      updateData.active_jobs_count = jobsCount
+      updateFields.push(`active_jobs_count = $${paramIndex}`)
+      params.push(jobsCount)
+      paramIndex++
     }
     
-    const { data: worker, error } = await supabase
-      .from('workers')
-      .update(updateData)
-      .eq('id', worker_id)
-      .select()
-      .single()
+    params.push(worker_id)
     
-    if (error) {
-      // Check if this is a "no rows returned" error (worker doesn't exist)
-      if (error.code === 'PGRST116' || error.message?.includes('no rows')) {
-        console.warn(`[HEARTBEAT] Worker ${worker_id?.slice(0, 8)}... not found in database (404)`)
-        return NextResponse.json(
-          { error: 'Worker not found' },
-          { status: 404 }
-        )
-      }
-      console.error('[HEARTBEAT] Error updating worker heartbeat:', error)
-      return NextResponse.json(
-        { error: error.message || 'Failed to update heartbeat' },
-        { status: 500 }
-      )
-    }
+    const result = await query(
+      `UPDATE workers SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+      params
+    )
     
-    if (!worker) {
-      console.warn(`[HEARTBEAT] Worker ${worker_id?.slice(0, 8)}... not found after update`)
+    if (result.rows.length === 0) {
+      console.warn(`[HEARTBEAT] Worker ${worker_id?.slice(0, 8)}... not found in database (404)`)
       return NextResponse.json(
         { error: 'Worker not found' },
         { status: 404 }
       )
     }
+    
+    const worker = result.rows[0]
     
     // Log both what we sent and what was returned to verify the update
     const now = new Date().toISOString()

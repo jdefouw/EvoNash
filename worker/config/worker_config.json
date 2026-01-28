@@ -1,9 +1,10 @@
 {
-  "controller_url": "https://sf26.defouw.ca",
+  "controller_url": "https://sf.defouw.ca",
   "poll_interval_seconds": 30,
   "max_retries": 3,
   "retry_delay_seconds": 5,
   "device": "cuda",
   "log_level": "INFO",
-  "log_file": "logs/worker.log"
+  "log_file": "logs/worker.log",
+  "worker_name": "Worker-1"
 }

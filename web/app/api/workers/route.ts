@@ -1,50 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { queryAll, count } from '@/lib/postgres'
 
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createServerClient()
-    
     // Get all workers, ordered by last heartbeat (most recent first)
-    const { data: workers, error } = await supabase
-      .from('workers')
-      .select('*')
-      .order('last_heartbeat', { ascending: false })
+    const workers = await queryAll(
+      'SELECT * FROM workers ORDER BY last_heartbeat DESC'
+    )
     
     // Debug logging - log raw worker data
     console.log(`[GET /api/workers] Found ${workers?.length || 0} workers in database`)
     if (workers && workers.length > 0) {
-      workers.forEach((w, i) => {
+      workers.forEach((w: any, i: number) => {
         console.log(`[GET /api/workers] Worker ${i+1}: id=${w.id?.slice(0,8)}..., name=${w.worker_name}, status=${w.status}, last_heartbeat=${w.last_heartbeat}`)
       })
     }
     
-    if (error) {
-      console.error('Error fetching workers:', error)
-      return NextResponse.json(
-        { error: error.message || 'Failed to fetch workers' },
-        { status: 500 }
-      )
-    }
-    
     // Fetch active job assignments with experiment names
-    const { data: activeJobs } = await supabase
-      .from('job_assignments')
-      .select(`
-        worker_id,
-        experiment_id,
-        generation_start,
-        generation_end,
-        status,
-        experiments!inner (
-          id,
-          experiment_name
-        )
-      `)
-      .in('status', ['assigned', 'processing'])
+    const activeJobs = await queryAll(
+      `SELECT 
+        ja.worker_id,
+        ja.experiment_id,
+        ja.generation_start,
+        ja.generation_end,
+        ja.status,
+        e.id as exp_id,
+        e.experiment_name
+       FROM job_assignments ja
+       INNER JOIN experiments e ON ja.experiment_id = e.id
+       WHERE ja.status IN ('assigned', 'processing')`
+    )
     
     // Create a map of worker_id to their current experiment
     const workerExperimentMap = new Map<string, {
@@ -59,10 +47,9 @@ export async function GET(request: NextRequest) {
       for (const job of activeJobs) {
         // Only store the first (most recent) job per worker
         if (!workerExperimentMap.has(job.worker_id)) {
-          const experiment = job.experiments as any
           workerExperimentMap.set(job.worker_id, {
             experiment_id: job.experiment_id,
-            experiment_name: experiment?.experiment_name || 'Unknown',
+            experiment_name: job.experiment_name || 'Unknown',
             generation_start: job.generation_start,
             generation_end: job.generation_end,
             status: job.status
@@ -76,11 +63,7 @@ export async function GET(request: NextRequest) {
     const now = new Date()
     const ninetySecondsAgo = new Date(now.getTime() - 90 * 1000)
     
-    // Note: Auto-deletion removed to prevent workers from disappearing unexpectedly.
-    // Workers are now only marked as 'offline' based on heartbeat timeout.
-    // Manual cleanup can be done via a dedicated endpoint if needed.
-    
-    const workersWithStatus = (workers || []).map(worker => {
+    const workersWithStatus = (workers || []).map((worker: any) => {
       const lastHeartbeat = new Date(worker.last_heartbeat)
       const isOffline = lastHeartbeat < ninetySecondsAgo
       const currentExperiment = workerExperimentMap.get(worker.id)
@@ -101,26 +84,20 @@ export async function GET(request: NextRequest) {
     })
     
     // Count active workers (not offline)
-    const activeWorkers = workersWithStatus.filter(w => w.status !== 'offline')
+    const activeWorkers = workersWithStatus.filter((w: any) => w.status !== 'offline')
     
     // Count processing workers (have an active job)
-    const processingWorkers = workersWithStatus.filter(w => w.current_experiment !== null && w.status !== 'offline')
+    const processingWorkers = workersWithStatus.filter((w: any) => w.current_experiment !== null && w.status !== 'offline')
     
     // Calculate total capacity
-    const totalCapacity = workersWithStatus.reduce((sum, w) => sum + (w.max_parallel_jobs || 0), 0)
-    const utilizedCapacity = workersWithStatus.reduce((sum, w) => sum + (w.active_jobs_count || 0), 0)
+    const totalCapacity = workersWithStatus.reduce((sum: number, w: any) => sum + (w.max_parallel_jobs || 0), 0)
+    const utilizedCapacity = workersWithStatus.reduce((sum: number, w: any) => sum + (w.active_jobs_count || 0), 0)
     
     // Count pending jobs in the queue (assigned but not yet processing)
-    const { count: pendingJobsCount } = await supabase
-      .from('job_assignments')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'assigned')
+    const pendingJobsCount = await count('job_assignments', "status = $1", ['assigned'])
     
     // Count actively processing jobs
-    const { count: processingJobsCount } = await supabase
-      .from('job_assignments')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'processing')
+    const processingJobsCount = await count('job_assignments', "status = $1", ['processing'])
     
     console.log(`[GET /api/workers] Returning ${workersWithStatus.length} workers (${activeWorkers.length} active, ${processingWorkers.length} processing)`)
     

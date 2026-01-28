@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       success: true, 
       message: 'Worker connection test successful',
       timestamp: new Date().toISOString(),
-      server: 'Vercel',
+      server: 'EvoNash Standalone',
       endpoint: '/api/worker/test'
     })
   } catch (error) {

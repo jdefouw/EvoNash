@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { queryOne, rpc } from '@/lib/postgres'
 
 // Force dynamic rendering since we modify the database
 export const dynamic = 'force-dynamic'
@@ -16,7 +16,6 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerClient()
     const body = await request.json()
     const { job_id, worker_id } = body
 
@@ -31,13 +30,12 @@ export async function POST(request: NextRequest) {
 
     // SECURITY: Verify job is actually assigned to this worker before claiming
     // This prevents workers from stealing jobs assigned to other workers
-    const { data: jobAssignment, error: checkError } = await supabase
-      .from('job_assignments')
-      .select('worker_id, status')
-      .eq('job_id', job_id)
-      .single()
+    const jobAssignment = await queryOne<{ worker_id: string; status: string }>(
+      'SELECT worker_id, status FROM job_assignments WHERE job_id = $1',
+      [job_id]
+    )
 
-    if (checkError || !jobAssignment) {
+    if (!jobAssignment) {
       console.error(`[QUEUE/CLAIM] Job ${job_id} not found`)
       return NextResponse.json(
         { error: 'Job not found' },
@@ -68,18 +66,10 @@ export async function POST(request: NextRequest) {
     // Use atomic claim function for data integrity
     // This atomically updates job status AND increments worker's active_jobs_count
     // Prevents race conditions and counter drift in distributed CUDA compute jobs
-    const { data: claimed, error: claimError } = await supabase.rpc('claim_job_atomic', {
+    const claimed = await rpc<boolean>('claim_job_atomic', {
       p_job_id: job_id,
       p_worker_id: worker_id
     })
-
-    if (claimError) {
-      console.error(`[QUEUE/CLAIM] Database error:`, claimError)
-      return NextResponse.json(
-        { error: 'Failed to claim job', details: claimError.message },
-        { status: 500 }
-      )
-    }
 
     if (!claimed) {
       console.log(`[QUEUE/CLAIM] Job ${job_id} no longer available for worker ${worker_id}`)
@@ -90,16 +80,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch job details after successful claim
-    const { data, error: fetchError } = await supabase
-      .from('job_assignments')
-      .select('id, job_id, experiment_id, generation_start, generation_end, status, started_at')
-      .eq('job_id', job_id)
-      .single()
+    const data = await queryOne(
+      `SELECT id, job_id, experiment_id, generation_start, generation_end, status, started_at
+       FROM job_assignments WHERE job_id = $1`,
+      [job_id]
+    )
 
-    if (fetchError || !data) {
-      console.error(`[QUEUE/CLAIM] Failed to fetch job details after claim:`, fetchError)
+    if (!data) {
+      console.error(`[QUEUE/CLAIM] Failed to fetch job details after claim`)
       return NextResponse.json(
-        { error: 'Job claimed but failed to fetch details', details: fetchError?.message },
+        { error: 'Job claimed but failed to fetch details' },
         { status: 500 }
       )
     }

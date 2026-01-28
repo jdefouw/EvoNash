@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { rpc } from '@/lib/postgres'
 
 // Force dynamic rendering since we modify the database
 export const dynamic = 'force-dynamic'
@@ -18,7 +18,6 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerClient()
     const body = await request.json()
     const { job_id, worker_id, reason, last_completed_generation } = body
 
@@ -34,19 +33,11 @@ export async function POST(request: NextRequest) {
     // Use atomic release function for data integrity
     // This atomically updates job status AND decrements worker's active_jobs_count
     // Also verifies ownership - only the assigned worker can release the job
-    const { data: released, error: releaseError } = await supabase.rpc('release_job_atomic', {
+    const released = await rpc<boolean>('release_job_atomic', {
       p_job_id: job_id,
       p_worker_id: worker_id,
       p_reason: reason || 'Released by worker'
     })
-
-    if (releaseError) {
-      console.error(`[QUEUE/RELEASE] Database error:`, releaseError)
-      return NextResponse.json(
-        { error: 'Failed to release job', details: releaseError.message },
-        { status: 500 }
-      )
-    }
 
     if (!released) {
       // Job not found or not owned by this worker

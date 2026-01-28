@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { queryOne } from '@/lib/postgres'
 
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
@@ -9,24 +9,18 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createServerClient()
-    
-    const { data, error } = await supabase
-      .from('experiments')
-      .select('status')
-      .eq('id', params.id)
-      .single()
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
+    const data = await queryOne<{ status: string }>(
+      'SELECT status FROM experiments WHERE id = $1',
+      [params.id]
+    )
     
     if (!data) {
       return NextResponse.json({ error: 'Experiment not found' }, { status: 404 })
     }
     
     return NextResponse.json({ status: data.status })
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Error fetching experiment status:', error)
     return NextResponse.json(
       { error: 'Failed to fetch experiment status' },
       { status: 500 }

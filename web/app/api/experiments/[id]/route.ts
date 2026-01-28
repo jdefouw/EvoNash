@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { queryOne, queryAll, query, deleteRows } from '@/lib/postgres'
 
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
@@ -17,18 +17,10 @@ export async function GET(
       return NextResponse.json({ error: 'Experiment ID is required' }, { status: 400 })
     }
     
-    const supabase = await createServerClient()
-    
-    const { data, error } = await supabase
-      .from('experiments')
-      .select('*')
-      .eq('id', experimentId)
-      .single()
-    
-    if (error) {
-      console.error('Error fetching experiment:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
+    const data = await queryOne(
+      'SELECT * FROM experiments WHERE id = $1',
+      [experimentId]
+    )
     
     if (!data) {
       return NextResponse.json({ error: 'Experiment not found' }, { status: 404 })
@@ -37,10 +29,10 @@ export async function GET(
     // Check if experiment should be marked as COMPLETED
     // This catches cases where all generations exist but status wasn't updated
     if (data.status === 'RUNNING' || data.status === 'PENDING') {
-      const { data: allGenerations } = await supabase
-        .from('generations')
-        .select('generation_number')
-        .eq('experiment_id', experimentId)
+      const allGenerations = await queryAll<{ generation_number: number }>(
+        'SELECT generation_number FROM generations WHERE experiment_id = $1',
+        [experimentId]
+      )
       
       const generationNumbers = new Set((allGenerations || []).map((g: any) => g.generation_number))
       const expectedGenerations = new Set(Array.from({ length: data.max_generations }, (_, i) => i))
@@ -62,16 +54,15 @@ export async function GET(
           ? `all ${generationNumbers.size} generations present`
           : `final generation ${data.max_generations - 1} exists with ${generationNumbers.size} total`
         console.log(`[EXPERIMENTS] Experiment ${experimentId} completing: ${reason}`)
-        const { data: updatedExperiment } = await supabase
-          .from('experiments')
-          .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
-          .eq('id', experimentId)
-          .select()
-          .single()
         
-        if (updatedExperiment) {
+        const result = await query(
+          'UPDATE experiments SET status = $1, completed_at = $2 WHERE id = $3 RETURNING *',
+          ['COMPLETED', new Date().toISOString(), experimentId]
+        )
+        
+        if (result.rows[0]) {
           console.log(`[EXPERIMENTS] ✓ Successfully marked experiment ${experimentId} as COMPLETED`)
-          return NextResponse.json(updatedExperiment)
+          return NextResponse.json(result.rows[0])
         }
       } else {
         const missingGenerations = Array.from(expectedGenerations).filter(gen => !generationNumbers.has(gen))
@@ -95,19 +86,11 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createServerClient()
-    
-    const { error } = await supabase
-      .from('experiments')
-      .delete()
-      .eq('id', params.id)
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
+    await deleteRows('experiments', 'id = $1', [params.id])
     
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Error deleting experiment:', error)
     return NextResponse.json(
       { error: 'Failed to delete experiment' },
       { status: 500 }

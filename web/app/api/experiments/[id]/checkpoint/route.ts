@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { query, queryAll, queryOne } from '@/lib/postgres'
 import { gunzipSync } from 'zlib'
 
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
-// Increase max duration for large payload processing
-export const maxDuration = 60
 
 // Maximum number of checkpoints to keep per experiment
 // Increased from 5 to 10 for better recovery options and scientific data integrity
@@ -16,8 +14,6 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const supabase = await createServerClient()
-    
     // Handle both sync and async params (Next.js 13+ vs 15+)
     const resolvedParams = await Promise.resolve(params)
     const experimentId = resolvedParams.id
@@ -39,7 +35,7 @@ export async function POST(
         return NextResponse.json(
           { 
             error: 'Payload too large', 
-            details: 'The checkpoint data exceeds the maximum allowed size (typically 4.5MB for serverless functions). Please ensure compression is enabled on the worker.',
+            details: 'The checkpoint data exceeds the maximum allowed size (50MB configured in nginx). Please ensure compression is enabled on the worker.',
             hint: 'Check worker configuration to ensure compression is enabled for checkpoints. If compression is already enabled, consider reducing population size or saving fewer agents in checkpoints.'
           },
           { status: 413 }
@@ -120,38 +116,38 @@ export async function POST(
     }
     
     // Upsert checkpoint (replace if exists for same generation)
-    const { data: checkpoint, error } = await supabase
-      .from('experiment_checkpoints')
-      .upsert({
-        experiment_id: experimentId,
-        generation_number: genNum,
-        population_state: finalPopulationState,
-      }, {
-        onConflict: 'experiment_id,generation_number'
-      })
-      .select()
-      .single()
+    const result = await query(
+      `INSERT INTO experiment_checkpoints (experiment_id, generation_number, population_state)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (experiment_id, generation_number) 
+       DO UPDATE SET population_state = $3, created_at = NOW()
+       RETURNING *`,
+      [experimentId, genNum, JSON.stringify(finalPopulationState)]
+    )
     
-    if (error) {
-      console.error(`[CHECKPOINT] Error saving checkpoint:`, error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (result.rows.length === 0) {
+      return NextResponse.json({ error: 'Failed to save checkpoint' }, { status: 500 })
     }
     
+    const checkpoint = result.rows[0]
+    
     // Cleanup old checkpoints (keep only last MAX_CHECKPOINTS)
-    const { data: allCheckpoints } = await supabase
-      .from('experiment_checkpoints')
-      .select('id, generation_number')
-      .eq('experiment_id', experimentId)
-      .order('generation_number', { ascending: false })
+    const allCheckpoints = await queryAll<{ id: string; generation_number: number }>(
+      `SELECT id, generation_number FROM experiment_checkpoints 
+       WHERE experiment_id = $1 
+       ORDER BY generation_number DESC`,
+      [experimentId]
+    )
     
     if (allCheckpoints && allCheckpoints.length > MAX_CHECKPOINTS) {
       const checkpointsToDelete = allCheckpoints.slice(MAX_CHECKPOINTS)
       const idsToDelete = checkpointsToDelete.map(c => c.id)
       
-      await supabase
-        .from('experiment_checkpoints')
-        .delete()
-        .in('id', idsToDelete)
+      const placeholders = idsToDelete.map((_, i) => `$${i + 1}`).join(', ')
+      await query(
+        `DELETE FROM experiment_checkpoints WHERE id IN (${placeholders})`,
+        idsToDelete
+      )
       
       console.log(`[CHECKPOINT] Cleaned up ${idsToDelete.length} old checkpoints`)
     }
@@ -177,8 +173,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const supabase = await createServerClient()
-    
     // Handle both sync and async params
     const resolvedParams = await Promise.resolve(params)
     const experimentId = resolvedParams.id
@@ -186,24 +180,24 @@ export async function GET(
     const url = new URL(request.url)
     const generation_number = url.searchParams.get('generation')
     
-    let query = supabase
-      .from('experiment_checkpoints')
-      .select('*')
-      .eq('experiment_id', experimentId)
+    let checkpoints
     
     if (generation_number) {
       // Get specific generation checkpoint
-      query = query.eq('generation_number', parseInt(generation_number))
+      checkpoints = await queryAll(
+        `SELECT * FROM experiment_checkpoints 
+         WHERE experiment_id = $1 AND generation_number = $2`,
+        [experimentId, parseInt(generation_number)]
+      )
     } else {
       // Get latest checkpoint
-      query = query.order('generation_number', { ascending: false }).limit(1)
-    }
-    
-    const { data: checkpoints, error } = await query
-    
-    if (error) {
-      console.error(`[CHECKPOINT] Error fetching checkpoint:`, error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      checkpoints = await queryAll(
+        `SELECT * FROM experiment_checkpoints 
+         WHERE experiment_id = $1 
+         ORDER BY generation_number DESC 
+         LIMIT 1`,
+        [experimentId]
+      )
     }
     
     if (!checkpoints || checkpoints.length === 0) {

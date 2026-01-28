@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { queryOne, queryAll, query, rpc, insertMany } from '@/lib/postgres'
 
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
-
-// Increase max duration for large payload processing
-export const maxDuration = 60
 
 // Handle result uploads from workers (supports both single and batch uploads)
 export async function POST(request: NextRequest) {
@@ -27,7 +24,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { 
             error: 'Payload too large', 
-            details: 'The results data exceeds the maximum allowed size (typically 4.5MB for serverless functions). Consider reducing batch size or splitting the upload.',
+            details: 'The results data exceeds the maximum allowed size (50MB configured in nginx). Consider reducing batch size or splitting the upload.',
             hint: 'Try reducing the number of generations per batch, matches per upload, or limit the amount of telemetry data included'
           },
           { status: 413 }
@@ -36,7 +33,6 @@ export async function POST(request: NextRequest) {
       // Re-throw if it's a different error
       throw parseError
     }
-    const supabase = await createServerClient()
     
     const { job_id, experiment_id, worker_id, generation_stats, generation_stats_batch, matches } = body
     
@@ -59,32 +55,26 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Validate job assignment exists and verify ownership; capture job range for completion check
-    // When job_id is provided but job not found (e.g. worker was deleted and re-registered, cascade removed assignments),
-    // we still accept the upload if worker_id + experiment_id are present and worker exists (recovery path).
+    // Validate job assignment exists and verify ownership
     let jobGenerationStart: number | null = null
     let jobGenerationEnd: number | null = null
     if (job_id) {
-      const { data: jobAssignment } = await supabase
-        .from('job_assignments')
-        .select('*')
-        .eq('job_id', job_id)
-        .single()
+      const jobAssignment = await queryOne(
+        'SELECT * FROM job_assignments WHERE job_id = $1',
+        [job_id]
+      )
 
       if (!jobAssignment) {
-        // Recovery: job may have been cascade-deleted when worker was removed (e.g. Clear all).
-        // If worker_id is present and worker exists (re-registered), still accept generations to avoid data loss.
+        // Recovery: job may have been cascade-deleted when worker was removed
         if (worker_id) {
-          const { data: workerRow } = await supabase
-            .from('workers')
-            .select('id')
-            .eq('id', worker_id)
-            .single()
+          const workerRow = await queryOne(
+            'SELECT id FROM workers WHERE id = $1',
+            [worker_id]
+          )
           if (workerRow) {
             console.warn(
               `[RESULTS] Job ${job_id} not found (worker may have re-registered after removal); accepting upload for experiment ${experiment_id} to preserve data`
             )
-            // Proceed without job range – skip completion logic below
           } else {
             return NextResponse.json(
               { error: 'Job assignment not found and worker not registered' },
@@ -101,7 +91,7 @@ export async function POST(request: NextRequest) {
         jobGenerationStart = jobAssignment.generation_start
         jobGenerationEnd = jobAssignment.generation_end
 
-        // CRITICAL: Verify worker owns this job to prevent job stealing
+        // CRITICAL: Verify worker owns this job
         if (worker_id && jobAssignment.worker_id !== worker_id) {
           console.error(`[RESULTS] SECURITY: Worker ${worker_id} attempted to update job ${job_id} owned by worker ${jobAssignment.worker_id}`)
           return NextResponse.json(
@@ -112,13 +102,10 @@ export async function POST(request: NextRequest) {
 
         // Update job assignment status to processing (if not already)
         if (jobAssignment.status === 'assigned') {
-          await supabase
-            .from('job_assignments')
-            .update({
-              status: 'processing',
-              started_at: new Date().toISOString()
-            })
-            .eq('id', jobAssignment.id)
+          await query(
+            `UPDATE job_assignments SET status = $1, started_at = $2 WHERE id = $3`,
+            ['processing', new Date().toISOString(), jobAssignment.id]
+          )
         }
       }
     }
@@ -135,33 +122,29 @@ export async function POST(request: NextRequest) {
         experiment_id,
         generation_number,
         population_size: stats.population_size || 1000,
-        avg_fitness: stats.avg_fitness,
-        avg_elo: stats.avg_elo,
-        peak_elo: stats.peak_elo,
-        min_elo: stats.min_elo,
-        std_elo: stats.std_elo,
-        policy_entropy: stats.policy_entropy,
-        entropy_variance: stats.entropy_variance,
-        population_diversity: stats.population_diversity,
-        mutation_rate: stats.mutation_rate,
-        min_fitness: stats.min_fitness,
-        max_fitness: stats.max_fitness,
-        std_fitness: stats.std_fitness
+        avg_fitness: stats.avg_fitness || null,
+        avg_elo: stats.avg_elo || null,
+        peak_elo: stats.peak_elo || null,
+        min_elo: stats.min_elo || null,
+        std_elo: stats.std_elo || null,
+        policy_entropy: stats.policy_entropy || null,
+        entropy_variance: stats.entropy_variance || null,
+        population_diversity: stats.population_diversity || null,
+        mutation_rate: stats.mutation_rate || null,
+        min_fitness: stats.min_fitness || null,
+        max_fitness: stats.max_fitness || null,
+        std_fitness: stats.std_fitness || null
       }
     })
     
     // Check which generations already exist to avoid duplicate key errors
     const generationNumbers = generationInserts.map((g: any) => g.generation_number)
-    const { data: existingGenerations, error: checkError } = await supabase
-      .from('generations')
-      .select('generation_number')
-      .eq('experiment_id', experiment_id)
-      .in('generation_number', generationNumbers)
-    
-    if (checkError) {
-      console.error(`[RESULTS] Error checking existing generations:`, checkError)
-      return NextResponse.json({ error: checkError.message }, { status: 500 })
-    }
+    const placeholders = generationNumbers.map((_, i) => `$${i + 2}`).join(', ')
+    const existingGenerations = await queryAll<{ generation_number: number }>(
+      `SELECT generation_number FROM generations 
+       WHERE experiment_id = $1 AND generation_number IN (${placeholders})`,
+      [experiment_id, ...generationNumbers]
+    )
     
     // Filter out generations that already exist
     const existingNumbers = new Set((existingGenerations || []).map((g: any) => g.generation_number))
@@ -171,41 +154,27 @@ export async function POST(request: NextRequest) {
     
     // Only insert if there are new generations
     if (newGenerationInserts.length > 0) {
-      const { data: inserted, error: genError } = await supabase
-        .from('generations')
-        .insert(newGenerationInserts)
-        .select()
-      
-      if (genError) {
-        console.error(`[RESULTS] Error inserting generations for experiment ${experiment_id}:`, genError)
-        return NextResponse.json({ error: genError.message }, { status: 500 })
-      }
-      
-      insertedGenerations = inserted || []
+      insertedGenerations = await insertMany('generations', newGenerationInserts)
       console.log(`[RESULTS] Successfully saved ${insertedGenerations.length} new generations for experiment ${experiment_id} (${existingNumbers.size} already existed)`)
     } else {
       console.log(`[RESULTS] All ${generationNumbers.length} generations already exist for experiment ${experiment_id}, skipping insert`)
       
       // Fetch existing generations for return value
-      const { data: existing } = await supabase
-        .from('generations')
-        .select('*')
-        .eq('experiment_id', experiment_id)
-        .in('generation_number', generationNumbers)
-      
-      insertedGenerations = existing || []
+      const placeholders2 = generationNumbers.map((_, i) => `$${i + 2}`).join(', ')
+      insertedGenerations = await queryAll(
+        `SELECT * FROM generations WHERE experiment_id = $1 AND generation_number IN (${placeholders2})`,
+        [experiment_id, ...generationNumbers]
+      ) || []
     }
     
-    // Insert matches if provided (flatten matches array if it's an array of arrays)
+    // Insert matches if provided
     if (matches && matches.length > 0) {
       const allMatches = Array.isArray(matches[0]) ? matches.flat() : matches
-      const matchInserts = allMatches.map((match: any, idx: number) => {
-        // Find corresponding generation_id
+      const matchInserts = allMatches.map((match: any) => {
         const generation = insertedGenerations?.find((g: any) => 
           g.generation_number === match.generation_number
         )
         if (!generation) {
-          // Fallback: use first generation if match doesn't specify generation_number
           return null
         }
         
@@ -214,61 +183,54 @@ export async function POST(request: NextRequest) {
           generation_id: generation.id,
           agent_a_id: match.agent_a_id,
           agent_b_id: match.agent_b_id,
-          winner_id: match.winner_id,
+          winner_id: match.winner_id || null,
           match_type: match.match_type || 'self_play',
-          move_history: match.move_history || [],
-          telemetry: match.telemetry || {}
+          move_history: JSON.stringify(match.move_history || []),
+          telemetry: JSON.stringify(match.telemetry || {})
         }
       }).filter((m: any) => m !== null)
       
       if (matchInserts.length > 0) {
-        await supabase.from('matches').insert(matchInserts)
+        await insertMany('matches', matchInserts)
       }
     }
     
-    // Mark job completed ONLY when all generations in the job's range exist in DB.
-    // This prevents marking a batch complete on partial uploads (e.g. worker uploads every 3 gens).
+    // Mark job completed ONLY when all generations in the job's range exist in DB
     if (job_id && jobGenerationStart != null && jobGenerationEnd != null) {
-      const { data: rangeGens } = await supabase
-        .from('generations')
-        .select('generation_number')
-        .eq('experiment_id', experiment_id)
-        .gte('generation_number', jobGenerationStart)
-        .lte('generation_number', jobGenerationEnd)
+      const rangePlaceholders = []
+      for (let i = 0; i <= jobGenerationEnd - jobGenerationStart; i++) {
+        rangePlaceholders.push(`$${i + 2}`)
+      }
+      const rangeNumbers = Array.from({ length: jobGenerationEnd - jobGenerationStart + 1 }, (_, i) => jobGenerationStart! + i)
+      
+      const rangeGens = await queryAll<{ generation_number: number }>(
+        `SELECT generation_number FROM generations 
+         WHERE experiment_id = $1 AND generation_number >= $2 AND generation_number <= $3`,
+        [experiment_id, jobGenerationStart, jobGenerationEnd]
+      )
       const present = new Set((rangeGens || []).map((g: any) => g.generation_number))
       const expectedCount = jobGenerationEnd - jobGenerationStart + 1
       const allInRangePresent =
         expectedCount === present.size &&
-        Array.from({ length: expectedCount }, (_, i) => jobGenerationStart! + i).every((n) =>
-          present.has(n)
-        )
+        rangeNumbers.every((n) => present.has(n))
 
       if (allInRangePresent) {
         if (worker_id) {
-          const { data: completed, error: completeError } = await supabase.rpc('complete_job_atomic', {
+          const completed = await rpc<boolean>('complete_job_atomic', {
             p_job_id: job_id,
             p_worker_id: worker_id,
             p_status: 'completed'
           })
-          if (completeError) {
-            console.error(`[RESULTS] Error updating job assignment status (atomic):`, completeError)
-          } else if (completed) {
+          if (completed) {
             console.log(`[RESULTS] Job ${job_id} marked as completed (atomic) — all ${expectedCount} generations [${jobGenerationStart}-${jobGenerationEnd}] present`)
           }
         } else {
-          const { error: updateError } = await supabase
-            .from('job_assignments')
-            .update({
-              status: 'completed',
-              completed_at: new Date().toISOString()
-            })
-            .eq('job_id', job_id)
-            .eq('status', 'processing')
-          if (updateError) {
-            console.error(`[RESULTS] Error updating job assignment status:`, updateError)
-          } else {
-            console.log(`[RESULTS] Job ${job_id} marked as completed — all ${expectedCount} generations [${jobGenerationStart}-${jobGenerationEnd}] present (legacy path)`)
-          }
+          await query(
+            `UPDATE job_assignments SET status = $1, completed_at = $2 
+             WHERE job_id = $3 AND status = 'processing'`,
+            ['completed', new Date().toISOString(), job_id]
+          )
+          console.log(`[RESULTS] Job ${job_id} marked as completed — all ${expectedCount} generations [${jobGenerationStart}-${jobGenerationEnd}] present (legacy path)`)
         }
       } else {
         console.log(
@@ -278,91 +240,72 @@ export async function POST(request: NextRequest) {
     }
     
     // Check if all batches for experiment are complete
-    const { data: experiment } = await supabase
-      .from('experiments')
-      .select('max_generations, status')
-      .eq('id', experiment_id)
-      .single()
+    const experiment = await queryOne<{ max_generations: number; status: string }>(
+      'SELECT max_generations, status FROM experiments WHERE id = $1',
+      [experiment_id]
+    )
     
     if (experiment) {
-      // Check if we have all generations (this is the primary indicator of completion)
-      // Generation numbers are 0-indexed, so for max_generations=500, we need generations 0-499
-      const { data: allGenerations } = await supabase
-        .from('generations')
-        .select('generation_number')
-        .eq('experiment_id', experiment_id)
+      // Check if we have all generations
+      const allGenerations = await queryAll<{ generation_number: number }>(
+        'SELECT generation_number FROM generations WHERE experiment_id = $1',
+        [experiment_id]
+      )
       
-      const generationNumbers = new Set((allGenerations || []).map((g: any) => g.generation_number))
+      const generationNums = new Set((allGenerations || []).map((g: any) => g.generation_number))
       const expectedGenerations = new Set(Array.from({ length: experiment.max_generations }, (_, i) => i))
       
-      // Check if we have all required generations (0 to max_generations-1)
-      const hasAllGenerations = generationNumbers.size >= experiment.max_generations && 
-        Array.from(expectedGenerations).every(gen => generationNumbers.has(gen))
+      const hasAllGenerations = generationNums.size >= experiment.max_generations && 
+        Array.from(expectedGenerations).every(gen => generationNums.has(gen))
       
-      // FALLBACK: Also check if the final generation exists and count is sufficient
-      // This handles edge cases where some intermediate generations may have been lost
-      const finalGenerationExists = generationNumbers.has(experiment.max_generations - 1)
-      const hasEnoughGenerations = generationNumbers.size >= experiment.max_generations
+      const finalGenerationExists = generationNums.has(experiment.max_generations - 1)
+      const hasEnoughGenerations = generationNums.size >= experiment.max_generations
       const shouldComplete = hasAllGenerations || (finalGenerationExists && hasEnoughGenerations)
       
-      // Re-fetch job assignments AFTER the update to ensure we see the latest status
-      // This avoids race conditions where the update hasn't been committed yet
-      const { data: allAssignments } = await supabase
-        .from('job_assignments')
-        .select('status, started_at, assigned_at')
-        .eq('experiment_id', experiment_id)
+      // Get all job assignments
+      const allAssignments = await queryAll(
+        'SELECT status, started_at, assigned_at FROM job_assignments WHERE experiment_id = $1',
+        [experiment_id]
+      )
       
       // Only check for completion if experiment is still RUNNING or PENDING
       if (shouldComplete && (experiment.status === 'RUNNING' || experiment.status === 'PENDING')) {
-        // Check if there are any truly active assignments (assigned or recently started processing)
-        // Allow some grace period for assignments that might be stuck
         const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
         const hasActiveAssignments = allAssignments && allAssignments.some((a: any) => {
           if (a.status === 'assigned') return true
           if (a.status === 'processing') {
-            // Only consider it active if it started recently (within 10 minutes)
-            // Stuck assignments older than 10 minutes won't block completion
             const checkTime = a.started_at || a.assigned_at
             return checkTime && checkTime > tenMinutesAgo
           }
           return false
         })
         
-        // Mark as COMPLETED if we have all generations and no active assignments
-        // This ensures completion even if some assignments are stuck or failed
         if (!hasActiveAssignments) {
           const reason = hasAllGenerations 
-            ? `all ${generationNumbers.size} generations present`
-            : `final generation ${experiment.max_generations - 1} exists with ${generationNumbers.size} total`
+            ? `all ${generationNums.size} generations present`
+            : `final generation ${experiment.max_generations - 1} exists with ${generationNums.size} total`
           console.log(`[RESULTS] Experiment ${experiment_id} completing: ${reason}`)
-          const { error: updateError } = await supabase
-            .from('experiments')
-            .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
-            .eq('id', experiment_id)
-          
-          if (updateError) {
-            console.error(`[RESULTS] Error updating experiment status:`, updateError)
-          } else {
-            console.log(`[RESULTS] ✓ Successfully marked experiment ${experiment_id} as COMPLETED`)
-          }
+          await query(
+            'UPDATE experiments SET status = $1, completed_at = $2 WHERE id = $3',
+            ['COMPLETED', new Date().toISOString(), experiment_id]
+          )
+          console.log(`[RESULTS] ✓ Successfully marked experiment ${experiment_id} as COMPLETED`)
         } else {
           const completedBatches = allAssignments?.filter((a: any) => a.status === 'completed').length || 0
           const totalBatches = allAssignments?.length || 0
-          const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
           const activeBatches = allAssignments?.filter((a: any) => 
             a.status === 'assigned' || (a.status === 'processing' && (a.started_at || a.assigned_at) > tenMinutesAgo)
           ).length || 0
-          const missingGenerations = Array.from(expectedGenerations).filter(gen => !generationNumbers.has(gen))
-          console.log(`[RESULTS] Batch saved. Progress: ${completedBatches}/${totalBatches} batches (${activeBatches} active), ${generationNumbers.size}/${experiment.max_generations} generations. Missing: ${missingGenerations.length > 0 ? missingGenerations.slice(0, 10).join(',') + (missingGenerations.length > 10 ? '...' : '') : 'none'}`)
+          const missingGenerations = Array.from(expectedGenerations).filter(gen => !generationNums.has(gen))
+          console.log(`[RESULTS] Batch saved. Progress: ${completedBatches}/${totalBatches} batches (${activeBatches} active), ${generationNums.size}/${experiment.max_generations} generations. Missing: ${missingGenerations.length > 0 ? missingGenerations.slice(0, 10).join(',') + (missingGenerations.length > 10 ? '...' : '') : 'none'}`)
         }
       } else {
-        // Log progress even if not checking for completion
         const completedBatches = allAssignments?.filter((a: any) => a.status === 'completed').length || 0
         const totalBatches = allAssignments?.length || 0
         const activeBatches = allAssignments?.filter((a: any) => a.status === 'assigned' || a.status === 'processing').length || 0
-        const missingGenerations = Array.from(expectedGenerations).filter(gen => !generationNumbers.has(gen))
-        const maxGenInDb = generationNumbers.size > 0 ? Math.max(...Array.from(generationNumbers)) : -1
-        console.log(`[RESULTS] Batch saved. Status: ${experiment.status}, Progress: ${completedBatches}/${totalBatches} batches (${activeBatches} active), ${generationNumbers.size}/${experiment.max_generations} generations (max: ${maxGenInDb}). Missing: ${missingGenerations.length > 0 ? missingGenerations.slice(0, 10).join(',') + (missingGenerations.length > 10 ? '...' : '') : 'none'}`)
+        const missingGenerations = Array.from(expectedGenerations).filter(gen => !generationNums.has(gen))
+        const maxGenInDb = generationNums.size > 0 ? Math.max(...Array.from(generationNums)) : -1
+        console.log(`[RESULTS] Batch saved. Status: ${experiment.status}, Progress: ${completedBatches}/${totalBatches} batches (${activeBatches} active), ${generationNums.size}/${experiment.max_generations} generations (max: ${maxGenInDb}). Missing: ${missingGenerations.length > 0 ? missingGenerations.slice(0, 10).join(',') + (missingGenerations.length > 10 ? '...' : '') : 'none'}`)
       }
     }
     

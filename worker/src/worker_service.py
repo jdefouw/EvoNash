@@ -665,9 +665,9 @@ class WorkerService:
                     compression_ratio = (1 - compressed_size / uncompressed_size) * 100 if uncompressed_size > 0 else 0
                     self.logger.debug(f"Checkpoint size: {uncompressed_size:,} bytes uncompressed, {compressed_size:,} bytes compressed ({compression_ratio:.1f}% reduction)")
                     
-                    # Warn if payload is approaching the limit (4.5MB = 4,500,000 bytes)
-                    if payload_size_bytes > 4_000_000:  # 4MB threshold
-                        self.logger.warning(f"⚠ Checkpoint payload is large ({payload_size_bytes:,} bytes), may exceed Vercel 4.5MB limit")
+                    # Warn if payload is approaching the limit (50MB configured in nginx)
+                    if payload_size_bytes > 40_000_000:  # 40MB threshold
+                        self.logger.warning(f"⚠ Checkpoint payload is large ({payload_size_bytes:,} bytes), approaching 50MB limit")
                     
                 except Exception as compress_error:
                     self.logger.warning(f"⚠ Compression failed, sending uncompressed: {compress_error}")
@@ -680,7 +680,7 @@ class WorkerService:
                         pass
                 
                 # Check if payload is too large before sending
-                MAX_PAYLOAD_SIZE = 4_500_000  # Vercel limit is 4.5MB
+                MAX_PAYLOAD_SIZE = 50_000_000  # nginx client_max_body_size is 50MB
                 if payload_size_bytes > MAX_PAYLOAD_SIZE:
                     self.logger.error(f"⚠ Checkpoint payload too large ({payload_size_bytes:,} bytes > {MAX_PAYLOAD_SIZE:,} bytes). Skipping checkpoint save.")
                     self.logger.error(f"   Consider reducing max_agents in save_population_state() or using a different storage mechanism.")

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { queryAll } from '@/lib/postgres'
 import { Experiment, Generation } from '@/types/protocol'
 
 // Force dynamic rendering since we query the database
@@ -112,19 +112,12 @@ function calculatePowerLevel(
 
 export async function GET() {
   try {
-    const supabase = await createServerClient()
-
     // Fetch all experiments
-    const { data: experiments, error: expError } = await supabase
-      .from('experiments')
-      .select('*')
-      .in('status', ['COMPLETED', 'RUNNING'])
-      .order('created_at', { ascending: false })
-
-    if (expError) {
-      console.error('Error fetching experiments:', expError)
-      return NextResponse.json({ error: expError.message }, { status: 500 })
-    }
+    const experiments = await queryAll<Experiment>(
+      `SELECT * FROM experiments 
+       WHERE status IN ('COMPLETED', 'RUNNING') 
+       ORDER BY created_at DESC`
+    )
 
     // Separate by group
     const controlExperiments = (experiments || []).filter(
@@ -139,17 +132,13 @@ export async function GET() {
     let controlGenerations: Generation[] = []
     
     if (controlIds.length > 0) {
-      const { data: controlGens, error: controlGenError } = await supabase
-        .from('generations')
-        .select('*')
-        .in('experiment_id', controlIds)
-        .order('generation_number', { ascending: true })
-
-      if (controlGenError) {
-        console.error('Error fetching control generations:', controlGenError)
-      } else {
-        controlGenerations = controlGens || []
-      }
+      const placeholders = controlIds.map((_, i) => `$${i + 1}`).join(', ')
+      controlGenerations = await queryAll<Generation>(
+        `SELECT * FROM generations 
+         WHERE experiment_id IN (${placeholders}) 
+         ORDER BY generation_number ASC`,
+        controlIds
+      ) || []
     }
 
     // Fetch generations for experimental experiments
@@ -157,17 +146,13 @@ export async function GET() {
     let experimentalGenerations: Generation[] = []
     
     if (experimentalIds.length > 0) {
-      const { data: expGens, error: expGenError } = await supabase
-        .from('generations')
-        .select('*')
-        .in('experiment_id', experimentalIds)
-        .order('generation_number', { ascending: true })
-
-      if (expGenError) {
-        console.error('Error fetching experimental generations:', expGenError)
-      } else {
-        experimentalGenerations = expGens || []
-      }
+      const placeholders = experimentalIds.map((_, i) => `$${i + 1}`).join(', ')
+      experimentalGenerations = await queryAll<Generation>(
+        `SELECT * FROM generations 
+         WHERE experiment_id IN (${placeholders}) 
+         ORDER BY generation_number ASC`,
+        experimentalIds
+      ) || []
     }
 
     // Calculate statistics

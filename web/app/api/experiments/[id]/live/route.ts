@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { queryOne, queryAll, query } from '@/lib/postgres'
 import { Generation, Match } from '@/types/protocol'
 
 // Force dynamic rendering since we query the database
@@ -19,7 +19,6 @@ export async function GET(
     
     console.log(`[LIVE] Fetching live data for experiment: ${experimentId}`)
     
-    const supabase = await createServerClient()
     const { searchParams } = new URL(request.url)
     
     // Get optional timestamp for incremental updates
@@ -27,20 +26,10 @@ export async function GET(
     const lastGenerationNumber = searchParams.get('last_gen')
     
     // Fetch experiment status
-    const { data: experiment, error: expError } = await supabase
-      .from('experiments')
-      .select('status, max_generations')
-      .eq('id', experimentId)
-      .single()
-    
-    if (expError) {
-      console.error(`[LIVE] Database error for experiment ${experimentId}:`, expError)
-      // Return 500 for database errors, not 404
-      return NextResponse.json({ 
-        error: 'Database error', 
-        details: expError.message 
-      }, { status: 500 })
-    }
+    const experiment = await queryOne<{ status: string; max_generations: number }>(
+      'SELECT status, max_generations FROM experiments WHERE id = $1',
+      [experimentId]
+    )
     
     if (!experiment) {
       console.error(`[LIVE] Experiment not found: ${experimentId}`)
@@ -51,10 +40,10 @@ export async function GET(
     // This catches cases where all generations exist but status wasn't updated
     let currentStatus = experiment.status
     if (currentStatus === 'RUNNING' || currentStatus === 'PENDING') {
-      const { data: allGenerations } = await supabase
-        .from('generations')
-        .select('generation_number')
-        .eq('experiment_id', experimentId)
+      const allGenerations = await queryAll<{ generation_number: number }>(
+        'SELECT generation_number FROM generations WHERE experiment_id = $1',
+        [experimentId]
+      )
       
       const generationNumbers = new Set((allGenerations || []).map((g: any) => g.generation_number))
       const expectedGenerations = new Set(Array.from({ length: experiment.max_generations }, (_, i) => i))
@@ -64,31 +53,24 @@ export async function GET(
         Array.from(expectedGenerations).every(gen => generationNumbers.has(gen))
       
       // FALLBACK: Also check if the final generation exists and count is sufficient
-      // This handles edge cases where some intermediate generations may have been lost
-      // but the experiment effectively completed (final generation reached)
       const finalGenerationExists = generationNumbers.has(experiment.max_generations - 1)
       const hasEnoughGenerations = generationNumbers.size >= experiment.max_generations
       const shouldComplete = hasAllGenerations || (finalGenerationExists && hasEnoughGenerations)
       
       if (shouldComplete) {
-        // All generations exist (or final generation + sufficient count) - mark as COMPLETED
         const reason = hasAllGenerations 
           ? `all ${generationNumbers.size} generations present`
           : `final generation ${experiment.max_generations - 1} exists with ${generationNumbers.size} total`
         console.log(`[LIVE] Experiment ${experimentId} completing: ${reason}`)
         
         // Mark as COMPLETED
-        const { error: updateError } = await supabase
-          .from('experiments')
-          .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
-          .eq('id', experimentId)
+        await query(
+          'UPDATE experiments SET status = $1, completed_at = $2 WHERE id = $3',
+          ['COMPLETED', new Date().toISOString(), experimentId]
+        )
         
-        if (!updateError) {
-          currentStatus = 'COMPLETED'
-          console.log(`[LIVE] ✓ Successfully marked experiment ${experimentId} as COMPLETED`)
-        } else {
-          console.error(`[LIVE] Failed to update experiment status:`, updateError)
-        }
+        currentStatus = 'COMPLETED'
+        console.log(`[LIVE] ✓ Successfully marked experiment ${experimentId} as COMPLETED`)
       } else {
         // Log why we're not completing
         const missingGens = Array.from(expectedGenerations).filter(gen => !generationNumbers.has(gen))
@@ -98,40 +80,36 @@ export async function GET(
     }
     
     // Always fetch the absolute latest generation so the UI can show current progress.
-    // (Previously we filtered by last_gen, which returned null when there was nothing newer,
-    // so the UI could show stale progress even though the worker had uploaded more gens.)
-    const { data: latestGenRows, error: genError } = await supabase
-      .from('generations')
-      .select('*')
-      .eq('experiment_id', experimentId)
-      .order('generation_number', { ascending: false })
-      .limit(1)
-    
-    if (genError) {
-      return NextResponse.json({ error: genError.message }, { status: 500 })
-    }
+    const latestGenRows = await queryAll<Generation>(
+      `SELECT * FROM generations 
+       WHERE experiment_id = $1 
+       ORDER BY generation_number DESC 
+       LIMIT 1`,
+      [experimentId]
+    )
     
     const latestGeneration = latestGenRows && latestGenRows.length > 0 ? latestGenRows[0] : null
     
     // Fetch new matches since timestamp (if provided)
-    let matchesQuery = supabase
-      .from('matches')
-      .select('*')
-      .eq('experiment_id', experimentId)
-      .order('created_at', { ascending: false })
-      .limit(50) // Limit to most recent 50 matches
+    let matches: Match[] = []
     
     if (sinceTimestamp) {
-      matchesQuery = matchesQuery.gt('created_at', sinceTimestamp)
+      matches = await queryAll<Match>(
+        `SELECT * FROM matches 
+         WHERE experiment_id = $1 AND created_at > $2
+         ORDER BY created_at DESC 
+         LIMIT 50`,
+        [experimentId, sinceTimestamp]
+      ) || []
     } else if (latestGeneration) {
       // If no timestamp but we have a generation, get matches from latest generation
-      matchesQuery = matchesQuery.eq('generation_id', latestGeneration.id)
-    }
-    
-    const { data: matches, error: matchesError } = await matchesQuery
-    
-    if (matchesError) {
-      return NextResponse.json({ error: matchesError.message }, { status: 500 })
+      matches = await queryAll<Match>(
+        `SELECT * FROM matches 
+         WHERE experiment_id = $1 AND generation_id = $2
+         ORDER BY created_at DESC 
+         LIMIT 50`,
+        [experimentId, latestGeneration.id]
+      ) || []
     }
     
     const hasUpdates = latestGeneration !== null && (

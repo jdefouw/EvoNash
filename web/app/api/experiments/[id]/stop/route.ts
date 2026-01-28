@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { queryOne, query } from '@/lib/postgres'
 
 // Force dynamic rendering since we modify the database
 export const dynamic = 'force-dynamic'
@@ -9,20 +9,17 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const supabase = await createServerClient()
-    
     // Handle both sync and async params (Next.js 13+ vs 15+)
     const resolvedParams = await Promise.resolve(params)
     const experimentId = resolvedParams.id
     
     // First, check if experiment exists and is RUNNING
-    const { data: experiment, error: fetchError } = await supabase
-      .from('experiments')
-      .select('status')
-      .eq('id', experimentId)
-      .single()
+    const experiment = await queryOne<{ status: string }>(
+      'SELECT status FROM experiments WHERE id = $1',
+      [experimentId]
+    )
     
-    if (fetchError || !experiment) {
+    if (!experiment) {
       return NextResponse.json(
         { error: 'Experiment not found' },
         { status: 404 }
@@ -37,17 +34,14 @@ export async function POST(
     }
     
     // Update status to STOPPED
-    const { error: updateError } = await supabase
-      .from('experiments')
-      .update({ status: 'STOPPED' })
-      .eq('id', experimentId)
-    
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 })
-    }
+    await query(
+      'UPDATE experiments SET status = $1 WHERE id = $2',
+      ['STOPPED', experimentId]
+    )
     
     return NextResponse.json({ success: true, status: 'STOPPED' })
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Error stopping experiment:', error)
     return NextResponse.json(
       { error: 'Failed to stop experiment' },
       { status: 500 }

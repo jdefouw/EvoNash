@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { query, queryAll } from '@/lib/postgres'
 
 // Force dynamic rendering since we modify the database
 export const dynamic = 'force-dynamic'
@@ -16,7 +16,6 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerClient()
     const body = await request.json()
     const { worker_id, reason } = body
 
@@ -35,46 +34,34 @@ export async function POST(request: NextRequest) {
     console.log(`[WORKERS/DISCONNECT] ========================================`)
 
     // Get the worker's current active jobs before marking offline
-    const { data: activeJobs } = await supabase
-      .from('job_assignments')
-      .select('job_id, experiment_id, generation_start, generation_end')
-      .eq('worker_id', worker_id)
-      .in('status', ['assigned', 'processing'])
+    const activeJobs = await queryAll(
+      `SELECT job_id, experiment_id, generation_start, generation_end
+       FROM job_assignments
+       WHERE worker_id = $1 AND status IN ('assigned', 'processing')`,
+      [worker_id]
+    )
 
     const activeJobCount = activeJobs?.length || 0
 
     // Mark worker as offline
-    const { error: workerError } = await supabase
-      .from('workers')
-      .update({
-        status: 'offline',
-        active_jobs_count: 0,
-        last_heartbeat: timestamp
-      })
-      .eq('id', worker_id)
-
-    if (workerError) {
-      console.error(`[WORKERS/DISCONNECT] Error updating worker status:`, workerError)
-    }
+    await query(
+      `UPDATE workers SET status = $1, active_jobs_count = $2, last_heartbeat = $3 WHERE id = $4`,
+      ['offline', 0, timestamp, worker_id]
+    )
 
     // Release all active jobs from this worker
-    const { data: releasedJobs, error: jobsError } = await supabase
-      .from('job_assignments')
-      .update({
-        status: 'failed',
-        completed_at: timestamp
-      })
-      .eq('worker_id', worker_id)
-      .in('status', ['assigned', 'processing'])
-      .select('job_id, experiment_id, generation_start, generation_end')
+    const releasedResult = await query(
+      `UPDATE job_assignments 
+       SET status = $1, completed_at = $2
+       WHERE worker_id = $3 AND status IN ('assigned', 'processing')
+       RETURNING job_id, experiment_id, generation_start, generation_end`,
+      ['failed', timestamp, worker_id]
+    )
 
-    if (jobsError) {
-      console.error(`[WORKERS/DISCONNECT] Error releasing jobs:`, jobsError)
-    }
+    const releasedJobs = releasedResult.rows || []
+    const releasedCount = releasedJobs.length
 
-    const releasedCount = releasedJobs?.length || 0
-
-    if (releasedJobs && releasedJobs.length > 0) {
+    if (releasedJobs.length > 0) {
       console.log(`[WORKERS/DISCONNECT] Released ${releasedCount} job(s):`)
       for (const job of releasedJobs) {
         console.log(`[WORKERS/DISCONNECT]   - Job ${job.job_id}: experiment ${job.experiment_id}, gens ${job.generation_start}-${job.generation_end}`)
@@ -88,7 +75,7 @@ export async function POST(request: NextRequest) {
       worker_id,
       reason,
       jobs_released: releasedCount,
-      released_jobs: releasedJobs || []
+      released_jobs: releasedJobs
     })
   } catch (error: any) {
     console.error(`[WORKERS/DISCONNECT] Unexpected error:`, error)

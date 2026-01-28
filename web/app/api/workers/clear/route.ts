@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { queryAll, query } from '@/lib/postgres'
 
 // Force dynamic rendering since we modify the database
 export const dynamic = 'force-dynamic'
@@ -13,16 +13,9 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerClient()
-
-    const { data: rows, error: fetchError } = await supabase
-      .from('workers')
-      .select('id')
-
-    if (fetchError) {
-      console.error('[WORKERS/CLEAR] Fetch error:', fetchError)
-      return NextResponse.json({ error: fetchError.message }, { status: 500 })
-    }
+    const rows = await queryAll<{ id: string }>(
+      'SELECT id FROM workers'
+    )
 
     const ids = (rows || []).map((r: { id: string }) => r.id)
     if (ids.length === 0) {
@@ -33,15 +26,13 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const { error: deleteError } = await supabase
-      .from('workers')
-      .delete()
-      .in('id', ids)
-
-    if (deleteError) {
-      console.error('[WORKERS/CLEAR] Delete error:', deleteError)
-      return NextResponse.json({ error: deleteError.message }, { status: 500 })
-    }
+    // Build placeholders for IN clause
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ')
+    
+    await query(
+      `DELETE FROM workers WHERE id IN (${placeholders})`,
+      ids
+    )
 
     console.log(`[WORKERS/CLEAR] Removed ${ids.length} workers`)
 

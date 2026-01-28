@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { queryOne, queryAll } from '@/lib/postgres'
 
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
@@ -9,29 +9,23 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createServerClient()
-    
     // Get experiment
-    const { data: experiment, error: expError } = await supabase
-      .from('experiments')
-      .select('*')
-      .eq('id', params.id)
-      .single()
+    const experiment = await queryOne(
+      'SELECT * FROM experiments WHERE id = $1',
+      [params.id]
+    )
     
-    if (expError || !experiment) {
+    if (!experiment) {
       return NextResponse.json({ error: 'Experiment not found' }, { status: 404 })
     }
     
     // Get all generations for this experiment
-    const { data: generations, error: genError } = await supabase
-      .from('generations')
-      .select('*')
-      .eq('experiment_id', params.id)
-      .order('generation_number', { ascending: true })
-    
-    if (genError) {
-      return NextResponse.json({ error: genError.message }, { status: 500 })
-    }
+    const generations = await queryAll(
+      `SELECT * FROM generations 
+       WHERE experiment_id = $1 
+       ORDER BY generation_number ASC`,
+      [params.id]
+    )
     
     if (!generations || generations.length === 0) {
       return NextResponse.json({
@@ -41,13 +35,13 @@ export async function GET(
     }
     
     // Calculate basic statistics
-    const avg_elos = generations.map(g => g.avg_elo).filter(Boolean) as number[]
-    const peak_elos = generations.map(g => g.peak_elo).filter(Boolean) as number[]
-    const entropies = generations.map(g => g.policy_entropy).filter(Boolean) as number[]
-    const entropy_variances = generations.map(g => g.entropy_variance).filter(Boolean) as number[]
+    const avg_elos = generations.map((g: any) => g.avg_elo).filter(Boolean) as number[]
+    const peak_elos = generations.map((g: any) => g.peak_elo).filter(Boolean) as number[]
+    const entropies = generations.map((g: any) => g.policy_entropy).filter(Boolean) as number[]
+    const entropy_variances = generations.map((g: any) => g.entropy_variance).filter(Boolean) as number[]
     
     // Find convergence point (entropy variance < 0.01)
-    const convergence_gen = generations.find(g => 
+    const convergence_gen = generations.find((g: any) => 
       g.entropy_variance !== null && g.entropy_variance < 0.01
     )
     
@@ -65,7 +59,8 @@ export async function GET(
     }
     
     return NextResponse.json(analysis)
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Error generating analysis:', error)
     return NextResponse.json(
       { error: 'Failed to generate analysis' },
       { status: 500 }

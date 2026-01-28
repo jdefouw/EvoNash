@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { queryOne, queryAll, query } from '@/lib/postgres'
 
 // Force dynamic rendering since we modify the database
 export const dynamic = 'force-dynamic'
@@ -19,20 +19,17 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const supabase = await createServerClient()
-    
     // Handle both sync and async params (Next.js 13+ vs 15+)
     const resolvedParams = await Promise.resolve(params)
     const experimentId = resolvedParams.id
     
     // First, check if experiment exists and is RUNNING or PENDING
-    const { data: experiment, error: fetchError } = await supabase
-      .from('experiments')
-      .select('status, max_generations')
-      .eq('id', experimentId)
-      .single()
+    const experiment = await queryOne<{ status: string; max_generations: number }>(
+      'SELECT status, max_generations FROM experiments WHERE id = $1',
+      [experimentId]
+    )
     
-    if (fetchError || !experiment) {
+    if (!experiment) {
       return NextResponse.json(
         { error: 'Experiment not found' },
         { status: 404 }
@@ -53,10 +50,10 @@ export async function POST(
     }
     
     // Check how many generations exist
-    const { data: allGenerations } = await supabase
-      .from('generations')
-      .select('generation_number')
-      .eq('experiment_id', experimentId)
+    const allGenerations = await queryAll<{ generation_number: number }>(
+      'SELECT generation_number FROM generations WHERE experiment_id = $1',
+      [experimentId]
+    )
     
     const generationNumbers = new Set((allGenerations || []).map((g: any) => g.generation_number))
     const generationCount = generationNumbers.size
@@ -89,31 +86,18 @@ export async function POST(
     }
     
     // Mark any stuck job assignments as completed or failed
-    const { error: cleanupError } = await supabase
-      .from('job_assignments')
-      .update({ 
-        status: 'completed',
-        completed_at: new Date().toISOString()
-      })
-      .eq('experiment_id', experimentId)
-      .in('status', ['assigned', 'processing'])
-    
-    if (cleanupError) {
-      console.error(`[COMPLETE] Error cleaning up job assignments:`, cleanupError)
-    }
+    await query(
+      `UPDATE job_assignments 
+       SET status = $1, completed_at = $2 
+       WHERE experiment_id = $3 AND status IN ('assigned', 'processing')`,
+      ['completed', new Date().toISOString(), experimentId]
+    )
     
     // Update status to COMPLETED
-    const { error: updateError } = await supabase
-      .from('experiments')
-      .update({ 
-        status: 'COMPLETED',
-        completed_at: new Date().toISOString()
-      })
-      .eq('id', experimentId)
-    
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 })
-    }
+    await query(
+      'UPDATE experiments SET status = $1, completed_at = $2 WHERE id = $3',
+      ['COMPLETED', new Date().toISOString(), experimentId]
+    )
     
     console.log(`[COMPLETE] Force-completed experiment ${experimentId}: ${generationCount}/${experiment.max_generations} generations (${completionPercent.toFixed(1)}%)`)
     

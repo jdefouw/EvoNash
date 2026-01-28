@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { queryAll, insertOne } from '@/lib/postgres'
 import { Experiment, ExperimentConfig } from '@/types/protocol'
 
 // Force dynamic rendering since we query the database
@@ -7,18 +7,9 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const supabase = await createServerClient()
-    
-    const { data, error } = await supabase
-      .from('experiments')
-      .select('*')
-      .order('created_at', { ascending: false })
-    
-    if (error) {
-      console.error('Supabase error:', error)
-      // Return empty array instead of error to prevent client-side issues
-      return NextResponse.json([])
-    }
+    const data = await queryAll<Experiment>(
+      'SELECT * FROM experiments ORDER BY created_at DESC'
+    )
     
     return NextResponse.json(data || [])
   } catch (error) {
@@ -36,22 +27,6 @@ export async function POST(request: NextRequest) {
       experiment_name: body.experiment_name,
       experiment_group: body.experiment_group
     })
-    
-    let supabase
-    try {
-      supabase = await createServerClient()
-      console.log('Supabase client created successfully')
-    } catch (clientError) {
-      console.error('Failed to create Supabase client:', clientError)
-      const errorMsg = clientError instanceof Error ? clientError.message : String(clientError)
-      return NextResponse.json(
-        { 
-          error: 'Database connection failed. Please check Supabase configuration.',
-          details: errorMsg
-        },
-        { status: 500 }
-      )
-    }
     
     const {
       experiment_name,
@@ -88,35 +63,21 @@ export async function POST(request: NextRequest) {
       population_size: population_size || 1000,
       max_generations: max_generations || 1500,
       ticks_per_generation: ticks_per_generation || 750,
-      mutation_rate,
-      mutation_base,
+      mutation_rate: mutation_rate || null,
+      mutation_base: mutation_base || null,
       max_possible_elo: max_possible_elo || 2000.0,
       selection_pressure: selection_pressure || 0.2,
-      network_architecture: network_architecture || {
+      network_architecture: JSON.stringify(network_architecture || {
         input_size: 24,
         hidden_layers: [64],
         output_size: 4
-      },
+      }),
       status: 'PENDING'
     }
     
     console.log('Inserting experiment data:', insertData)
     
-    const { data, error } = await supabase
-      .from('experiments')
-      .insert(insertData)
-      .select()
-      .single()
-    
-    if (error) {
-      console.error('Supabase insert error:', JSON.stringify(error, null, 2))
-      return NextResponse.json({ 
-        error: error.message || 'Database error occurred',
-        details: error.details || null,
-        hint: error.hint || null,
-        code: error.code || null
-      }, { status: 500 })
-    }
+    const data = await insertOne<Experiment>('experiments', insertData)
     
     console.log('Experiment created successfully:', data.id)
     

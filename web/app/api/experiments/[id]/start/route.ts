@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { queryOne, query } from '@/lib/postgres'
 
 // Force dynamic rendering since we modify the database
 export const dynamic = 'force-dynamic'
@@ -9,20 +9,17 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const supabase = await createServerClient()
-    
     // Handle both sync and async params (Next.js 13+ vs 15+)
     const resolvedParams = await Promise.resolve(params)
     const experimentId = resolvedParams.id
     
     // Check current status
-    const { data: experiment, error: fetchError } = await supabase
-      .from('experiments')
-      .select('status')
-      .eq('id', experimentId)
-      .single()
+    const experiment = await queryOne<{ status: string }>(
+      'SELECT status FROM experiments WHERE id = $1',
+      [experimentId]
+    )
     
-    if (fetchError || !experiment) {
+    if (!experiment) {
       return NextResponse.json(
         { error: 'Experiment not found' },
         { status: 404 }
@@ -46,14 +43,10 @@ export async function POST(
     
     // Set status to PENDING so worker can pick it up
     // The worker will change it to RUNNING when it claims the job
-    const { error } = await supabase
-      .from('experiments')
-      .update({ status: 'PENDING' })
-      .eq('id', experimentId)
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
+    await query(
+      'UPDATE experiments SET status = $1 WHERE id = $2',
+      ['PENDING', experimentId]
+    )
     
     console.log(`[START] Experiment ${experimentId} queued for GPU worker`)
     
@@ -62,7 +55,8 @@ export async function POST(
       status: 'PENDING',
       message: 'Experiment queued for GPU worker. Worker will pick it up within 30 seconds.'
     })
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Error starting experiment:', error)
     return NextResponse.json(
       { error: 'Failed to start experiment' },
       { status: 500 }

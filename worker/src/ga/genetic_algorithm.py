@@ -421,7 +421,6 @@ class GeneticAlgorithm:
             experiment_id: Experiment ID
             generation: Generation number
             max_agents: Maximum number of agents to save (default: 10% of population or 50, whichever is smaller)
-                       Reduced from 200 to 50 to stay under Vercel's 4.5MB payload limit
             
         Returns:
             Dictionary with serialized population state
@@ -429,10 +428,8 @@ class GeneticAlgorithm:
         import json
         
         # Determine how many agents to save (save top performers to reduce payload size)
-        # Reduced from 200 to 50 to avoid Vercel 4.5MB payload limit
         if max_agents is None:
             # Default: save top 10% of population, but cap at 50 to keep payloads manageable
-            # This ensures checkpoints stay well under the 4.5MB limit even after compression
             max_agents = min(int(len(self.population) * 0.1), 50)
         
         # Sort agents by Elo rating (descending) and take top performers
