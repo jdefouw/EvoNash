@@ -210,7 +210,7 @@ python tests/test_cuda_optimizations.py
 | `max_generations` | 1500 | Total evolutionary cycles |
 | `ticks_per_generation` | 750 | Simulation steps per generation (~12s simulated) |
 | `mutation_rate` | 0.05 | Static mutation rate (Control only) |
-| `mutation_base` | 0.1 | Base rate for adaptive scaling (Experimental only) |
+| `mutation_base` | 0.0615 | Base rate for adaptive scaling (chosen so adaptive ≈ static at initial Elo) |
 | `selection_pressure` | 0.2 | Top percentage selected (20%) |
 
 ---

@@ -314,9 +314,10 @@ class GeneticAlgorithm:
             mutation_rate = self.config.mutation_rate or 0.05
         else:  # ADAPTIVE
             parent_elo = agent.parent_elo if agent.parent_elo is not None else agent.elo_rating
-            # Default mutation_base = 0.06 (6%) provides good balance of exploration/exploitation
-            # with max_possible_elo = 8000, this gives mutation rates from ~5.25% (at 1500 ELO) down to 0.75% (near 8000 ELO)
-            base = self.config.mutation_base or 0.06
+            # Default mutation_base = 0.0615 chosen so that at initial Elo (~1500), adaptive rate ≈ static rate (5%)
+            # Formula: 0.05 / (1 - 1500/8000) = 0.0615. This ensures fair comparison at experiment start.
+            # With max_possible_elo = 8000: ~5% at 1500 Elo, ~3.1% at 4000 Elo, ~0.8% near 8000 Elo
+            base = self.config.mutation_base or 0.0615
             mutation_rate = base * (1.0 - parent_elo / self.config.max_possible_elo)
             # Clamp to reasonable range
             mutation_rate = np.clip(mutation_rate, 0.01, 0.2)

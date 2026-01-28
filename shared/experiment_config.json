@@ -4,7 +4,7 @@
   "experiment_name": "Example Experiment - Control Group",
   "experiment_group": "CONTROL",
   "mutation_rate": 0.05,
-  "mutation_base": 0.06,
+  "mutation_base": 0.0615,
   "max_possible_elo": 8000.0,
   "random_seed": 42,
   "population_size": 1000,
