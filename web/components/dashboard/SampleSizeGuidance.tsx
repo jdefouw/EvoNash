@@ -182,7 +182,7 @@ export default function SampleSizeGuidance({
           </div>
           <div className="text-sm font-medium text-gray-700 dark:text-gray-300">Experimental Group</div>
           <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-            Adaptive Mutation (ε = f(Elo))
+            Adaptive Mutation (starts ~5%, scales by Elo)
           </div>
           <div className="text-xs text-gray-400 dark:text-gray-600 mt-1">
             {experimentalAvgGenerations.toLocaleString()} avg generations
@@ -266,8 +266,8 @@ export default function SampleSizeGuidance({
           Understanding the Experiment
         </div>
         <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-          This experiment compares <strong>Control</strong> (static mutation ε = 0.05) vs <strong>Experimental</strong> (adaptive mutation ε = f(Elo)) 
-          to test whether fitness-scaled mutation accelerates convergence to Nash Equilibrium.
+          This experiment compares <strong>Control</strong> (static ε = 0.05) vs <strong>Experimental</strong> (adaptive, calibrated to start at ~5% then scales by fitness). 
+          Both groups begin with identical mutation rates to ensure fair comparison of the scaling mechanism.
         </p>
         <p className="text-xs text-gray-600 dark:text-gray-400">
           Running multiple experiments with different random seeds demonstrates reproducibility. 

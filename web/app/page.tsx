@@ -80,7 +80,7 @@ const PROJECT_CONTENT_STATIC = {
     independent: [
       {
         name: 'Experiment Group',
-        description: 'Determines mutation strategy: Control uses Static mutation (fixed ε=0.05), Experimental uses Adaptive mutation (fitness-scaled ε)',
+        description: 'Determines mutation strategy: Control uses Static mutation (fixed ε=0.05), Experimental uses Adaptive mutation (calibrated to start at ~5%, then scales by fitness)',
         value: 'Control (Static) vs Experimental (Adaptive)'
       }
     ],
@@ -128,6 +128,7 @@ const PROJECT_CONTENT_STATIC = {
         description: 'Multiple experiments created with Experiment Group: Experimental (which enforces Adaptive mutation).',
         details: [
           'Adaptive mutation rate: ε = Base × (1 - CurrentElo/MaxElo)',
+          'Base rate (0.0615) calibrated so initial rate ≈ 5% (same as Control) for fair comparison',
           '5 runs with same seeds as Control for fair comparison',
           'Low-fitness agents mutate more (exploration), high-fitness agents mutate less (exploitation)'
         ]

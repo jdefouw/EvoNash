@@ -808,7 +808,7 @@ export default function ExperimentDetailPage() {
                 {experiment.mutation_mode === 'ADAPTIVE' && experiment.mutation_base && (
                   <div>
                     <span className="text-gray-600 dark:text-gray-400">Mutation Base:</span>
-                    <Tooltip content="Base mutation rate for adaptive mode - starting point for dynamic mutation scaling">
+                    <Tooltip content="Base rate for adaptive mutation. Default 0.0615 is calibrated so effective rate starts at ~5% (same as static) at initial Elo, ensuring fair comparison. Rate then scales by fitness.">
                       <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{experiment.mutation_base}</span>
                     </Tooltip>
                   </div>

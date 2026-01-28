@@ -131,8 +131,8 @@ export default function NewExperimentPage() {
               <div className="bg-white dark:bg-gray-800 p-3 rounded border border-blue-100 dark:border-blue-900">
                 <div className="font-semibold text-gray-900 dark:text-white mb-1">Experimental Group</div>
                 <div className="text-gray-600 dark:text-gray-400">
-                  <strong>Adaptive Mutation</strong> — Dynamic rate where low-fitness parents produce 
-                  highly mutated offspring (exploration) and high-fitness parents produce stable offspring (exploitation).
+                  <strong>Adaptive Mutation</strong> — Dynamic rate calibrated to start at ~5% (same as Control), 
+                  then scales with fitness: low-fitness agents mutate more (exploration), high-fitness agents mutate less (exploitation).
                 </div>
               </div>
             </div>
@@ -161,7 +161,7 @@ export default function NewExperimentPage() {
             </div>
 
             <div>
-              <Tooltip content="Control group uses static mutation (fixed rate ε = 0.05). Experimental group uses adaptive mutation (fitness-scaled ε = f(Elo)) where lower-fitness agents mutate more.">
+              <Tooltip content="Control group uses static mutation (fixed ε = 0.05). Experimental group uses adaptive mutation calibrated to also start at ~5% at initial Elo, then scales by fitness (lower-fitness agents mutate more). This ensures fair comparison.">
                 <label htmlFor="experiment_group" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
                   Experiment Group *
                 </label>
@@ -274,7 +274,7 @@ export default function NewExperimentPage() {
               </div>
             ) : (
               <div>
-                <Tooltip content="Base mutation rate for adaptive mode - starting point for dynamic mutation scaling. The actual mutation rate will change based on agent fitness, with lower-performing agents mutating more and higher-performing agents mutating less.">
+                <Tooltip content="Base mutation rate for adaptive mode. Default 0.0615 is calibrated so that at initial Elo (~1500), the effective rate equals the static rate (5%). Formula: 0.05 / (1 - 1500/8000) = 0.0615. This ensures both groups start with identical mutation rates for fair comparison.">
                   <label htmlFor="mutation_base" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
                     Mutation Base (Adaptive)
                   </label>
@@ -290,7 +290,7 @@ export default function NewExperimentPage() {
                   onChange={handleChange}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 />
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Base mutation rate for adaptive mode</p>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Calibrated so adaptive starts at ~5% (same as static) at initial Elo</p>
               </div>
             )}
 

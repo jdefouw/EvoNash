@@ -215,7 +215,7 @@ export default function ExperimentsPage() {
                       </span>
                     </div>
                     <div className="flex gap-6 text-sm text-gray-600 dark:text-gray-400">
-                      <span>Mutation: <strong>{exp.mutation_mode === 'STATIC' ? 'Static (ε=0.05)' : 'Adaptive (ε=f(Elo))'}</strong></span>
+                      <span>Mutation: <strong>{exp.mutation_mode === 'STATIC' ? 'Static (ε=0.05)' : 'Adaptive (starts ~5%, scales by Elo)'}</strong></span>
                       <span>Population: <strong>{exp.population_size}</strong></span>
                       <span>Max Generations: <strong>{exp.max_generations}</strong></span>
                       <span>Seed: <strong>{exp.random_seed}</strong></span>

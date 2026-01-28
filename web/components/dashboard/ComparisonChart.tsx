@@ -326,7 +326,7 @@ export default function ComparisonChart({
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-0.5 bg-purple-500" />
-            <span>Experimental Group (Adaptive ε)</span>
+            <span>Experimental Group (Adaptive, starts ~5%)</span>
           </div>
           {showConvergenceMarker && (
             <div className="flex items-center gap-2">
