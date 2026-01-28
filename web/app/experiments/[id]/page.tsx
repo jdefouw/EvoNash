@@ -559,6 +559,34 @@ export default function ExperimentDetailPage() {
                   )}
                 </>
               )}
+              {/* Delete button - always visible but requires confirmation */}
+              <button
+                onClick={async () => {
+                  const warningMessage = experiment.status === 'RUNNING'
+                    ? `WARNING: This experiment is currently running!\n\nAre you sure you want to delete "${experiment.experiment_name}"?\n\nThis will permanently delete all generations, matches, and analysis data. This action cannot be undone.`
+                    : `Are you sure you want to delete "${experiment.experiment_name}"?\n\nThis will permanently delete all generations, matches, and analysis data. This action cannot be undone.`
+                  
+                  if (!confirm(warningMessage)) {
+                    return
+                  }
+                  try {
+                    const response = await fetch(`/api/experiments/${experimentId}`, { method: 'DELETE' })
+                    if (response.ok) {
+                      // Redirect to experiments list after successful deletion
+                      window.location.href = '/experiments'
+                    } else {
+                      const error = await response.json()
+                      alert(`Failed to delete experiment: ${error.error || 'Unknown error'}`)
+                    }
+                  } catch (error) {
+                    alert(`Failed to delete experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
+                  }
+                }}
+                className="px-6 py-3 bg-red-700 text-white rounded-lg hover:bg-red-800 transition-colors font-medium border-2 border-red-800"
+                title="Permanently delete this experiment and all its data"
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>

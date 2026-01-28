@@ -89,6 +89,32 @@ export default function ExperimentsPage() {
     return group === 'CONTROL' ? 'text-blue-600 dark:text-blue-400' : 'text-purple-600 dark:text-purple-400'
   }
 
+  const handleDelete = async (e: React.MouseEvent, expId: string, expName: string, expStatus: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    const warningMessage = expStatus === 'RUNNING'
+      ? `WARNING: This experiment is currently running!\n\nAre you sure you want to delete "${expName}"?\n\nThis will permanently delete all generations, matches, and analysis data. This action cannot be undone.`
+      : `Are you sure you want to delete "${expName}"?\n\nThis will permanently delete all generations, matches, and analysis data. This action cannot be undone.`
+    
+    if (!confirm(warningMessage)) {
+      return
+    }
+    
+    try {
+      const response = await fetch(`/api/experiments/${expId}`, { method: 'DELETE' })
+      if (response.ok) {
+        // Remove the experiment from the list
+        setExperiments(prev => prev.filter(exp => exp.id !== expId))
+      } else {
+        const error = await response.json()
+        alert(`Failed to delete experiment: ${error.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      alert(`Failed to delete experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
   if (loading) {
     return (
       <main className="min-h-screen p-8">
@@ -196,9 +222,20 @@ export default function ExperimentsPage() {
                       <span>Created: {new Date(exp.created_at).toLocaleDateString()}</span>
                     </div>
                   </div>
-                  <span className={`px-4 py-2 rounded-lg text-white text-sm font-medium ${getStatusColor(exp.status)}`}>
-                    {exp.status}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className={`px-4 py-2 rounded-lg text-white text-sm font-medium ${getStatusColor(exp.status)}`}>
+                      {exp.status}
+                    </span>
+                    <button
+                      onClick={(e) => handleDelete(e, exp.id, exp.experiment_name, exp.status)}
+                      className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                      title="Delete experiment"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </Link>
             ))
