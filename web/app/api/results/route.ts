@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
       console.log(`[RESULTS] All ${generationNumbers.length} generations already exist for experiment ${experiment_id}, skipping insert`)
       
       // Fetch existing generations for return value
-      const placeholders2 = generationNumbers.map((_, i) => `$${i + 2}`).join(', ')
+      const placeholders2 = generationNumbers.map((_: number, i: number) => `$${i + 2}`).join(', ')
       insertedGenerations = await queryAll(
         `SELECT * FROM generations WHERE experiment_id = $1 AND generation_number IN (${placeholders2})`,
         [experiment_id, ...generationNumbers]

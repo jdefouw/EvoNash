@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Build placeholders for IN clause
-    const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ')
+    const placeholders = ids.map((_: string, i: number) => `$${i + 1}`).join(', ')
     
     await query(
       `DELETE FROM workers WHERE id IN (${placeholders})`,

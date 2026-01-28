@@ -132,7 +132,7 @@ export async function GET() {
     let controlGenerations: Generation[] = []
     
     if (controlIds.length > 0) {
-      const placeholders = controlIds.map((_, i) => `$${i + 1}`).join(', ')
+      const placeholders = controlIds.map((_: string, i: number) => `$${i + 1}`).join(', ')
       controlGenerations = await queryAll<Generation>(
         `SELECT * FROM generations 
          WHERE experiment_id IN (${placeholders}) 
@@ -146,7 +146,7 @@ export async function GET() {
     let experimentalGenerations: Generation[] = []
     
     if (experimentalIds.length > 0) {
-      const placeholders = experimentalIds.map((_, i) => `$${i + 1}`).join(', ')
+      const placeholders = experimentalIds.map((_: string, i: number) => `$${i + 1}`).join(', ')
       experimentalGenerations = await queryAll<Generation>(
         `SELECT * FROM generations 
          WHERE experiment_id IN (${placeholders}) 

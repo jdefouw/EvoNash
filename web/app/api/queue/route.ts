@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
         
         // Get worker statuses for assigned batches
         const workerIds = [...new Set(assignedBatches.map((b: any) => b.worker_id))]
-        const placeholders = workerIds.map((_, i) => `$${i + 1}`).join(', ')
+        const placeholders = workerIds.map((_: unknown, i: number) => `$${i + 1}`).join(', ')
         const workers = await queryAll(
           `SELECT id, status, last_heartbeat FROM workers WHERE id IN (${placeholders})`,
           workerIds

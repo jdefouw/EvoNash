@@ -143,7 +143,7 @@ export async function POST(
       const checkpointsToDelete = allCheckpoints.slice(MAX_CHECKPOINTS)
       const idsToDelete = checkpointsToDelete.map(c => c.id)
       
-      const placeholders = idsToDelete.map((_, i) => `$${i + 1}`).join(', ')
+      const placeholders = idsToDelete.map((_: string, i: number) => `$${i + 1}`).join(', ')
       await query(
         `DELETE FROM experiment_checkpoints WHERE id IN (${placeholders})`,
         idsToDelete
