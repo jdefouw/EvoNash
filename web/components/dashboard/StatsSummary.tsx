@@ -136,9 +136,9 @@ export default function StatsSummary({
                     }
                   </h4>
                   <p className="text-white/90">
-                    {isSignificant 
-                      ? 'Results are statistically significant (p < 0.05)'
-                      : 'Results pending sufficient data'
+                    {isSignificant && pValue !== null
+                      ? `Results are statistically significant (p = ${pValue.toFixed(4)} < 0.05)`
+                      : 'Results pending sufficient data for statistical significance'
                     }
                   </p>
                 </div>

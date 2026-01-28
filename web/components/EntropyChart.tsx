@@ -66,7 +66,7 @@ export default function EntropyChart({ generations, experiment, isLive = false }
               y={0.01} 
               stroke="#10b981" 
               strokeDasharray="5 5" 
-              label={{ value: "Nash Equilibrium Threshold", position: "right" }}
+              label={{ value: "Convergence Threshold (σ < 0.01)", position: "right" }}
             />
           )}
           <Line 
@@ -93,13 +93,13 @@ export default function EntropyChart({ generations, experiment, isLive = false }
       </ResponsiveContainer>
       <div className="flex items-center justify-between mt-4">
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          Convergence to Nash Equilibrium occurs when entropy variance drops below 0.01
+          <strong>Definition:</strong> Convergence is defined as entropy variance &lt; 0.01 (policy stability threshold)
         </p>
         {isConverged && (
           <div className="flex items-center gap-2 px-3 py-1 bg-green-100 dark:bg-green-900/30 rounded-full">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
             <span className="text-green-700 dark:text-green-400 font-medium text-xs">
-              Nash Equilibrium Reached
+              Convergence Threshold Reached
             </span>
           </div>
         )}

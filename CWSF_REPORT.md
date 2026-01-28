@@ -8,12 +8,32 @@
 
 ---
 
+> **⚠️ IMPORTANT NOTE ABOUT DATA IN THIS DOCUMENT**
+> 
+> This document is a **template/projected report**. Specific numerical values such as percentages (e.g., "40%"), p-values (e.g., "p = 0.034"), and generation numbers (e.g., "Generation 630", "Generation 1,050") are **placeholder projections** and must be updated with actual experimental data before submission.
+> 
+> **To get actual results:**
+> - Run the EvoNash dashboard at the project URL
+> - The dashboard dynamically calculates all statistics from real experimental data
+> - Replace placeholder values in this document with values from the live dashboard
+> 
+> **Placeholders to update:** Section 1 (Abstract), Section 5 (Results), and Section 7 (Conclusion)
+
+---
+
 ## 1. Abstract
 *Guidance: This is a 150-word summary of the entire project.*
 
 This experiment investigates the efficiency of evolutionary algorithms in high-dimensional decision spaces. Traditional Genetic Algorithms (GAs) typically utilize static mutation rates, which often results in premature convergence to local optima or inefficient random searching. This project hypothesizes that an **Adaptive Mutation Strategy**—where mutation magnitude is inversely proportional to an agent's fitness—will accelerate convergence to a Nash Equilibrium compared to a static control.
 
-To test this, a custom distributed computing platform ("EvoNash") was engineered to run on an NVIDIA RTX 3090, simulating a deterministic biological environment ("The Petri Dish"). Two experiment groups of 1,000 Neural Networks each were evolved over 1,500 generations (750 ticks each): the **Control Group** (Static mutation, $\epsilon=0.05$) and the **Experimental Group** (Adaptive mutation, $\epsilon \propto 1/\text{Fitness}$). Telemetry demonstrates that the Experimental group achieved stable Policy Entropy (Nash Equilibrium) 40% faster than the Control group, with a statistically significant higher peak Elo rating ($p < 0.05$). These findings suggest that mimicking biological stress-response mechanisms significantly improves AI training efficiency on consumer hardware.
+To test this, a custom distributed computing platform ("EvoNash") was engineered to run on an NVIDIA RTX 3090, simulating a deterministic biological environment ("The Petri Dish"). Two experiment groups of 1,000 Neural Networks each were evolved over 1,500 generations (750 ticks each): the **Control Group** (Static mutation, $\epsilon=0.05$) and the **Experimental Group** (Adaptive mutation, $\epsilon \propto 1/\text{Fitness}$).
+
+> **[UPDATE WITH ACTUAL DATA]** The following results should be replaced with values from the EvoNash dashboard:
+> - Convergence improvement percentage
+> - Statistical significance (p-value)
+> - Actual generation numbers for convergence
+
+~~Telemetry demonstrates that the Experimental group achieved stable Policy Entropy (Nash Equilibrium) 40% faster than the Control group, with a statistically significant higher peak Elo rating ($p < 0.05$).~~ These findings suggest that mimicking biological stress-response mechanisms significantly improves AI training efficiency on consumer hardware.
 
 ---
 
@@ -83,31 +103,45 @@ To ensure scientific validity, this project utilizes a **Controlled Comparative 
 
 ---
 
-## 5. Results & Analysis (Projected)
+## 5. Results & Analysis
+
+> **⚠️ PLACEHOLDER DATA BELOW** - The specific numbers in this section (generation numbers, p-values, entropy values) are **projected examples**. Replace with actual values from the EvoNash dashboard after running experiments.
 
 ### 5.1 Convergence Velocity (Line Graph)
-* **Observation:** Group A (Static) showed a linear increase in Elo, plateauing around Generation 1,050.
-* **Observation:** Group B (Adaptive) showed a steeper initial learning curve ("punctuated equilibrium") and plateaued around Generation 630.
+* **Observation:** Group A (Static) showed a linear increase in Elo, plateauing around Generation **[CONTROL_CONVERGENCE_GEN]**.
+* **Observation:** Group B (Adaptive) showed a steeper initial learning curve ("punctuated equilibrium") and plateaued around Generation **[EXPERIMENTAL_CONVERGENCE_GEN]**.
 * **Interpretation:** The Adaptive strategy allowed "failing" agents to mutate wildly, discovering new strategies faster than the Static group.
+
+> **Example placeholder values:** Generation 1,050 (Control) vs Generation 630 (Experimental)
 
 ### 5.2 Entropy Collapse (Logarithmic Graph)
 * **Metric:** Policy Entropy ($H$) measures the randomness of the AI's moves.
-* **Finding:** Group B's entropy stabilized at $H \approx 0.4$ significantly earlier than Group A. This non-zero value indicates the discovery of a **Mixed Strategy** (a hallmark of Nash Equilibrium in combat games), rather than a deterministic loop.
+* **Finding:** Group B's entropy variance stabilized below $\sigma < 0.01$ significantly earlier than Group A. This indicates convergence to a **Nash Equilibrium** state.
 
 ### 5.3 Statistical Significance (T-Test)
-A two-sample t-test was performed on the final Elo ratings of the top 100 agents from both groups.
-* **P-Value:** $p = 0.034$ (assuming hypothetical data).
-* **Conclusion:** Since $p < 0.05$, the improvement in performance is statistically significant and not due to random chance.
+A two-sample t-test was performed on the Elo ratings from both groups using the Welch-Satterthwaite approximation for unequal variances.
+* **P-Value:** $p = $ **[ACTUAL_P_VALUE_FROM_DASHBOARD]**
+* **Significance Level:** $\alpha = 0.05$
+* **Conclusion:** **[BASED ON ACTUAL DATA]** - If $p < 0.05$, the improvement is statistically significant; otherwise, more data may be needed.
+
+> **Example placeholder:** $p = 0.034$ was used as a hypothetical projection
 
 ---
 
 ## 6. Discussion
 
 ### 6.1 Interpretation of Findings
-The data supports the hypothesis. The Adaptive Mutation mechanism successfully balanced **Exploration** (high mutation when losing) and **Exploitation** (low mutation when winning). In the "Petri Dish" simulation, this manifested as:
-* **Early Game:** High mutation led to rapid discovery of the "Foraging" strategy.
-* **Mid Game:** As agents became efficient foragers, mutation dropped, locking in the behavior.
-* **Late Game:** When "Predators" emerged, the foragers' fitness dropped, triggering a spike in mutation that allowed them to evolve "Evasive Maneuvers."
+
+> **Note:** Update this section based on actual experimental results. The interpretation below describes the expected behavior of the Adaptive Mutation mechanism.
+
+**[Conditional on data supporting hypothesis:]** The data supports the hypothesis. The Adaptive Mutation mechanism successfully balanced **Exploration** (high mutation when losing) and **Exploitation** (low mutation when winning).
+
+**Expected behavioral patterns in the "Petri Dish" simulation:**
+* **Early Game:** High mutation leads to rapid discovery of the "Foraging" strategy.
+* **Mid Game:** As agents become efficient foragers, mutation drops, locking in the behavior.
+* **Late Game:** When "Predators" emerge, the foragers' fitness drops, triggering a spike in mutation that allows them to evolve "Evasive Maneuvers."
+
+**[If data does not support hypothesis:]** Consider discussing potential reasons such as insufficient generations, parameter tuning needs, or alternative explanations for observed behavior.
 
 ### 6.2 GPU Optimization & Scientific Validity
 
@@ -133,7 +167,22 @@ This verification ensures that performance optimizations do not introduce confou
 ---
 
 ## 7. Conclusion
-This project successfully demonstrated that biological principles—specifically stress-induced mutagenesis—can be applied to artificial neural networks to improve training efficiency. The **EvoNash** platform proved that an Adaptive Mutation strategy accelerates convergence to a Nash Equilibrium by approximately 40% compared to static methods. This has significant implications for training large AI models on consumer hardware, suggesting that "smarter" training algorithms can reduce the need for massive compute clusters.
+
+> **⚠️ UPDATE REQUIRED** - Replace the percentage below with the actual `convergenceImprovement` value from the EvoNash dashboard. If the hypothesis was not supported by data, revise the conclusion accordingly.
+
+This project investigated whether biological principles—specifically stress-induced mutagenesis—can be applied to artificial neural networks to improve training efficiency. The **EvoNash** platform was designed to test whether an Adaptive Mutation strategy accelerates convergence to a Nash Equilibrium compared to static methods.
+
+**[INSERT ACTUAL CONCLUSION BASED ON DATA]**
+
+If hypothesis was supported:
+> "The experimental data demonstrated that the Adaptive Mutation strategy accelerated convergence by approximately **[CONVERGENCE_IMPROVEMENT]%** compared to static methods (p = **[P_VALUE]**). This has significant implications for training large AI models on consumer hardware."
+
+If hypothesis was not supported:
+> "The experimental data did not support the hypothesis at the α = 0.05 significance level. Further investigation may be needed to understand the conditions under which adaptive mutation strategies are effective."
+
+---
+
+*Example placeholder conclusion (40% improvement) should be replaced with actual measured values.*
 
 ---
 

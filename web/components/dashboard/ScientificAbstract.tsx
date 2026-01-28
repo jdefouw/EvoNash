@@ -1,5 +1,27 @@
 'use client'
 
+type StatisticalPowerLevel = 'insufficient' | 'minimum' | 'recommended' | 'robust'
+
+interface Statistics {
+  controlConvergenceGen: number | null
+  experimentalConvergenceGen: number | null
+  convergenceImprovement: number | null
+  controlFinalElo: number | null
+  experimentalFinalElo: number | null
+  controlPeakElo: number | null
+  experimentalPeakElo: number | null
+  pValue: number | null
+  tStatistic: number | null
+  isSignificant: boolean
+  totalGenerationsControl: number
+  totalGenerationsExperimental: number
+  controlExperimentCount: number
+  experimentalExperimentCount: number
+  controlAvgGenerations: number
+  experimentalAvgGenerations: number
+  statisticalPowerLevel: StatisticalPowerLevel
+}
+
 interface ScientificAbstractProps {
   title: string
   subtitle: string
@@ -7,6 +29,7 @@ interface ScientificAbstractProps {
   division: string
   category: string
   abstract: string
+  statistics?: Statistics | null
 }
 
 export default function ScientificAbstract({
@@ -15,15 +38,46 @@ export default function ScientificAbstract({
   studentName,
   division,
   category,
-  abstract
+  abstract,
+  statistics
 }: ScientificAbstractProps) {
-  // Highlight key terms in the abstract
-  const highlightedAbstract = abstract
+  // Highlight key terms in the abstract - using dynamic data-aware highlighting
+  let highlightedAbstract = abstract
     .replace(/Adaptive Mutation Strategy/g, '<strong class="text-purple-600 dark:text-purple-400">Adaptive Mutation Strategy</strong>')
     .replace(/Nash Equilibrium/g, '<strong class="text-blue-600 dark:text-blue-400">Nash Equilibrium</strong>')
-    .replace(/40%/g, '<strong class="text-green-600 dark:text-green-400">40%</strong>')
-    .replace(/p < 0\.05/g, '<strong class="text-green-600 dark:text-green-400">p &lt; 0.05</strong>')
-    .replace(/statistically significant/g, '<strong class="text-green-600 dark:text-green-400">statistically significant</strong>')
+  
+  // Only highlight percentages and p-values if they represent actual calculated values
+  // Match percentage patterns (e.g., "40%", "35%") and highlight in green if significant
+  if (statistics?.convergenceImprovement !== null && statistics?.convergenceImprovement > 0) {
+    highlightedAbstract = highlightedAbstract.replace(
+      /(\d+)% faster/g, 
+      '<strong class="text-green-600 dark:text-green-400">$1% faster</strong>'
+    )
+  }
+  
+  // Highlight p-values that appear in the text (these are dynamically generated from actual data)
+  if (statistics?.pValue !== null) {
+    highlightedAbstract = highlightedAbstract.replace(
+      /p = ([\d.]+)/g,
+      statistics.isSignificant 
+        ? '<strong class="text-green-600 dark:text-green-400">p = $1</strong>'
+        : '<span class="text-amber-600 dark:text-amber-400">p = $1</span>'
+    )
+  }
+  
+  // Highlight "statistically significant" only if data actually is significant
+  if (statistics?.isSignificant) {
+    highlightedAbstract = highlightedAbstract.replace(
+      /statistically significant/g, 
+      '<strong class="text-green-600 dark:text-green-400">statistically significant</strong>'
+    )
+  }
+  
+  // Highlight "did not reach statistical significance" as a neutral/warning indicator
+  highlightedAbstract = highlightedAbstract.replace(
+    /did not reach statistical significance/g,
+    '<span class="text-amber-600 dark:text-amber-400">did not reach statistical significance</span>'
+  )
 
   return (
     <section id="abstract" className="scroll-mt-20">

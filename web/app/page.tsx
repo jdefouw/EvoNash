@@ -45,15 +45,13 @@ interface DashboardData {
   }
 }
 
-// Project content from CWSF_REPORT.md
-const PROJECT_CONTENT = {
+// Static project content (methodology, hypothesis, variables - these don't change based on data)
+const PROJECT_CONTENT_STATIC = {
   title: 'EvoNash',
   subtitle: 'Accelerating Convergence to Nash Equilibrium in Genetic Neural Networks via Adaptive Mutation Rates',
   studentName: 'Joel deFouw',
   division: 'Junior - Grade 8',
   category: 'Digital Technology / Computing & Information Systems',
-  
-  abstract: `This experiment investigates the efficiency of evolutionary algorithms in high-dimensional decision spaces. Traditional Genetic Algorithms (GAs) typically utilize static mutation rates, which often results in premature convergence to local optima or inefficient random searching. This project hypothesizes that an Adaptive Mutation Strategy—where mutation magnitude is inversely proportional to an agent's fitness—will accelerate convergence to a Nash Equilibrium compared to a static control. To test this, a custom distributed computing platform ("EvoNash") was engineered to run on an NVIDIA RTX 3090, simulating a deterministic biological environment ("The Petri Dish"). Two experiment groups of 1,000 Neural Networks each were evolved over 1,500 generations (750 ticks each): the Control Group (Static mutation ε=0.05) and the Experimental Group (Adaptive mutation ε ∝ 1/Fitness). Telemetry demonstrates that the Experimental group achieved stable Policy Entropy (Nash Equilibrium) 40% faster than the Control group, with a statistically significant higher peak Elo rating (p < 0.05). These findings suggest that mimicking biological stress-response mechanisms significantly improves AI training efficiency on consumer hardware.`,
 
   problemStatement: `Deep Reinforcement Learning (DRL) is computationally expensive and often acts as a "black box," making it difficult to prove mathematical optimality. While Genetic Algorithms offer a gradient-free alternative, they struggle with the "Exploration vs. Exploitation" trade-off. A static mutation rate is either too high (destroying good traits) or too low (stagnating progress).`,
 
@@ -159,21 +157,126 @@ const PROJECT_CONTENT = {
     }
   },
 
-  conclusion: {
-    summary: 'This project successfully demonstrated that biological principles—specifically stress-induced mutagenesis—can be applied to artificial neural networks to improve training efficiency. The EvoNash platform proved that an Adaptive Mutation strategy accelerates convergence to a Nash Equilibrium by approximately 40% compared to static methods. This has significant implications for training large AI models on consumer hardware, suggesting that "smarter" training algorithms can reduce the need for massive compute clusters.',
-    keyFindings: [
-      'The Adaptive group achieved stable Policy Entropy (Nash Equilibrium) 40% faster than the Control group',
-      'The Experimental group achieved a statistically significant higher peak Elo rating (p < 0.05)',
-      'The adaptive strategy successfully balanced Exploration (high mutation when losing) and Exploitation (low mutation when winning)',
-      'In the simulation, this manifested as rapid discovery of Foraging strategy, followed by evolution of Evasive Maneuvers when Predators emerged'
-    ],
-    implications: 'These findings suggest that mimicking biological stress-response mechanisms significantly improves AI training efficiency on consumer hardware, potentially democratizing access to advanced AI training.',
-    sourcesOfError: [
-      'Floating Point Drift: Despite CUDA optimization, minor floating-point differences can occur over millions of calculations',
-      'Simulation Simplification: The "Petri Dish" is a simplified model of reality with idealized physics'
-    ],
-    futureWork: 'Further research could explore applying this adaptive mutation strategy to more complex environments and larger neural network architectures, as well as investigating the optimal scaling function for mutation rates.'
+  // Static content for conclusion that doesn't depend on data
+  sourcesOfError: [
+    'Floating Point Drift: Despite CUDA optimization, minor floating-point differences can occur over millions of calculations',
+    'Simulation Simplification: The "Petri Dish" is a simplified model of reality with idealized physics'
+  ],
+  futureWork: 'Further research could explore applying this adaptive mutation strategy to more complex environments and larger neural network architectures, as well as investigating the optimal scaling function for mutation rates.'
+}
+
+// Generate dynamic abstract based on actual statistics
+function generateAbstract(stats: DashboardData['statistics'] | null): string {
+  const baseAbstract = `This experiment investigates the efficiency of evolutionary algorithms in high-dimensional decision spaces. Traditional Genetic Algorithms (GAs) typically utilize static mutation rates, which often results in premature convergence to local optima or inefficient random searching. This project hypothesizes that an Adaptive Mutation Strategy—where mutation magnitude is inversely proportional to an agent's fitness—will accelerate convergence to a Nash Equilibrium compared to a static control. To test this, a custom distributed computing platform ("EvoNash") was engineered to run on an NVIDIA RTX 3090, simulating a deterministic biological environment ("The Petri Dish"). Two experiment groups of 1,000 Neural Networks each are evolved over multiple generations: the Control Group (Static mutation ε=0.05) and the Experimental Group (Adaptive mutation ε ∝ 1/Fitness).`
+
+  if (!stats || stats.totalGenerationsControl === 0 || stats.totalGenerationsExperimental === 0) {
+    return baseAbstract + ` Experiments are currently in progress—results will be displayed once sufficient data has been collected.`
   }
+
+  // Build results sentence based on actual data
+  const resultParts: string[] = []
+  
+  if (stats.convergenceImprovement !== null && stats.convergenceImprovement > 0) {
+    resultParts.push(`the Experimental group achieved stable Policy Entropy (Nash Equilibrium) ${Math.round(stats.convergenceImprovement)}% faster than the Control group`)
+  }
+  
+  if (stats.pValue !== null && stats.isSignificant) {
+    resultParts.push(`with a statistically significant difference in Elo ratings (p = ${stats.pValue.toFixed(3)})`)
+  } else if (stats.pValue !== null) {
+    resultParts.push(`though the difference in Elo ratings did not reach statistical significance (p = ${stats.pValue.toFixed(3)})`)
+  }
+
+  if (resultParts.length > 0) {
+    return baseAbstract + ` Telemetry demonstrates that ${resultParts.join(', ')}. These findings suggest that mimicking biological stress-response mechanisms may improve AI training efficiency on consumer hardware.`
+  }
+
+  return baseAbstract + ` Data collection is ongoing—preliminary results are being analyzed.`
+}
+
+// Generate dynamic key findings based on actual statistics
+function generateKeyFindings(stats: DashboardData['statistics'] | null): string[] {
+  const findings: string[] = []
+
+  if (!stats || (stats.totalGenerationsControl === 0 && stats.totalGenerationsExperimental === 0)) {
+    return ['Experiments are in progress—key findings will be generated from actual data once available']
+  }
+
+  // Finding 1: Convergence speed (only if data supports it)
+  if (stats.convergenceImprovement !== null && stats.convergenceImprovement > 0 && 
+      stats.controlConvergenceGen !== null && stats.experimentalConvergenceGen !== null) {
+    findings.push(
+      `The Adaptive group achieved stable Policy Entropy (Nash Equilibrium) ${Math.round(stats.convergenceImprovement)}% faster than the Control group (Generation ${stats.experimentalConvergenceGen} vs ${stats.controlConvergenceGen})`
+    )
+  } else if (stats.controlConvergenceGen === null && stats.experimentalConvergenceGen === null) {
+    findings.push('Neither group has reached Nash Equilibrium convergence yet (entropy variance has not stabilized below 0.01)')
+  } else if (stats.convergenceImprovement !== null && stats.convergenceImprovement <= 0) {
+    findings.push(`The Control group converged ${Math.abs(Math.round(stats.convergenceImprovement))}% faster than the Adaptive group, contrary to the hypothesis`)
+  }
+
+  // Finding 2: Statistical significance (based on actual p-value)
+  if (stats.pValue !== null) {
+    if (stats.isSignificant) {
+      const peakComparison = stats.experimentalPeakElo !== null && stats.controlPeakElo !== null
+        ? (stats.experimentalPeakElo > stats.controlPeakElo ? 'higher' : 'lower')
+        : 'different'
+      findings.push(
+        `The Experimental group achieved a statistically significant ${peakComparison} peak Elo rating (p = ${stats.pValue.toFixed(4)})`
+      )
+    } else {
+      findings.push(
+        `The difference between groups did not reach statistical significance (p = ${stats.pValue.toFixed(4)}, threshold: p < 0.05)`
+      )
+    }
+  }
+
+  // Finding 3: Adaptive strategy behavior (this is a design feature, not a data finding)
+  findings.push(
+    'The adaptive strategy is designed to balance Exploration (high mutation when losing) and Exploitation (low mutation when winning)'
+  )
+
+  // Finding 4: Data quantity note
+  const totalGens = stats.totalGenerationsControl + stats.totalGenerationsExperimental
+  const totalExperiments = stats.controlExperimentCount + stats.experimentalExperimentCount
+  findings.push(
+    `Analysis based on ${totalGens.toLocaleString()} generations across ${totalExperiments} experiments (${stats.controlExperimentCount} Control, ${stats.experimentalExperimentCount} Experimental)`
+  )
+
+  return findings
+}
+
+// Generate dynamic conclusion summary based on actual statistics
+function generateConclusionSummary(stats: DashboardData['statistics'] | null, isHypothesisSupported: boolean | null): string {
+  const baseSummary = 'This project investigates whether biological principles—specifically stress-induced mutagenesis—can be applied to artificial neural networks to improve training efficiency.'
+
+  if (!stats || (stats.totalGenerationsControl === 0 && stats.totalGenerationsExperimental === 0)) {
+    return baseSummary + ' Experiments are currently in progress, and conclusions will be drawn once sufficient data has been collected.'
+  }
+
+  if (isHypothesisSupported === null) {
+    return baseSummary + ' Data collection is ongoing, but insufficient data exists to draw definitive conclusions about the hypothesis.'
+  }
+
+  if (isHypothesisSupported) {
+    const improvementText = stats.convergenceImprovement !== null 
+      ? `approximately ${Math.round(stats.convergenceImprovement)}%` 
+      : 'measurably'
+    return baseSummary + ` The EvoNash platform demonstrated that an Adaptive Mutation strategy accelerates convergence to a Nash Equilibrium by ${improvementText} compared to static methods (p = ${stats.pValue?.toFixed(4) ?? 'N/A'}). This has significant implications for training large AI models on consumer hardware, suggesting that "smarter" training algorithms can reduce the need for massive compute clusters.`
+  } else {
+    return baseSummary + ` However, the current experimental data does not support the hypothesis that adaptive mutation accelerates convergence. Further investigation may be needed to understand why the expected improvement was not observed, or additional experiments may be required to achieve statistical significance.`
+  }
+}
+
+// Generate dynamic implications based on whether hypothesis is supported
+function generateImplications(isHypothesisSupported: boolean | null): string {
+  if (isHypothesisSupported === null) {
+    return 'Implications will be determined once sufficient experimental data has been collected and analyzed.'
+  }
+  
+  if (isHypothesisSupported) {
+    return 'These findings suggest that mimicking biological stress-response mechanisms significantly improves AI training efficiency on consumer hardware, potentially democratizing access to advanced AI training.'
+  }
+  
+  return 'While the current data does not support the hypothesis, this negative result provides valuable information about the conditions under which adaptive mutation strategies may or may not be effective.'
 }
 
 const NAV_SECTIONS = [
@@ -234,13 +337,23 @@ export default function ScienceFairDashboard() {
   }
 
   // Determine if hypothesis is supported based on data
-  const isHypothesisSupported: boolean = Boolean(
-    data?.statistics?.isSignificant && (data?.statistics?.convergenceImprovement ?? 0) > 0
+  // Requires: statistical significance AND positive convergence improvement
+  const hasEnoughData = Boolean(
+    data?.statistics?.totalGenerationsControl && data?.statistics?.totalGenerationsExperimental
   )
+  const isHypothesisSupported: boolean | null = hasEnoughData
+    ? Boolean(data?.statistics?.isSignificant && (data?.statistics?.convergenceImprovement ?? 0) > 0)
+    : null
 
   const supportingEvidence = data?.statistics ? 
     `The Experimental group converged ${data.statistics.convergenceImprovement?.toFixed(0) ?? '?'}% faster (Generation ${data.statistics.experimentalConvergenceGen ?? '?'} vs ${data.statistics.controlConvergenceGen ?? '?'}). T-test p-value: ${data.statistics.pValue?.toFixed(4) ?? 'N/A'}` : 
     undefined
+
+  // Generate dynamic content based on actual statistics
+  const dynamicAbstract = generateAbstract(data?.statistics ?? null)
+  const dynamicKeyFindings = generateKeyFindings(data?.statistics ?? null)
+  const dynamicConclusionSummary = generateConclusionSummary(data?.statistics ?? null, isHypothesisSupported)
+  const dynamicImplications = generateImplications(isHypothesisSupported)
 
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -250,20 +363,20 @@ export default function ScienceFairDashboard() {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
               <h1 className="text-4xl md:text-5xl font-bold mb-2">
-                {PROJECT_CONTENT.title}
+                {PROJECT_CONTENT_STATIC.title}
               </h1>
               <p className="text-lg md:text-xl text-white/90 mb-4 max-w-3xl">
-                {PROJECT_CONTENT.subtitle}
+                {PROJECT_CONTENT_STATIC.subtitle}
               </p>
               <div className="flex flex-wrap gap-4 text-sm">
                 <span className="px-3 py-1 bg-white/20 rounded-full">
-                  {PROJECT_CONTENT.studentName}
+                  {PROJECT_CONTENT_STATIC.studentName}
                 </span>
                 <span className="px-3 py-1 bg-white/20 rounded-full">
-                  {PROJECT_CONTENT.division}
+                  {PROJECT_CONTENT_STATIC.division}
                 </span>
                 <span className="px-3 py-1 bg-white/20 rounded-full">
-                  {PROJECT_CONTENT.category}
+                  {PROJECT_CONTENT_STATIC.category}
                 </span>
               </div>
             </div>
@@ -311,40 +424,41 @@ export default function ScienceFairDashboard() {
           <div className="space-y-8">
             {/* 1. Abstract */}
             <ScientificAbstract
-              title={PROJECT_CONTENT.title}
-              subtitle={PROJECT_CONTENT.subtitle}
-              studentName={PROJECT_CONTENT.studentName}
-              division={PROJECT_CONTENT.division}
-              category={PROJECT_CONTENT.category}
-              abstract={PROJECT_CONTENT.abstract}
+              title={PROJECT_CONTENT_STATIC.title}
+              subtitle={PROJECT_CONTENT_STATIC.subtitle}
+              studentName={PROJECT_CONTENT_STATIC.studentName}
+              division={PROJECT_CONTENT_STATIC.division}
+              category={PROJECT_CONTENT_STATIC.category}
+              abstract={dynamicAbstract}
+              statistics={data?.statistics ?? null}
             />
 
             {/* 2. Problem Statement */}
             <ProblemStatement
-              problemStatement={PROJECT_CONTENT.problemStatement}
-              backgroundConcepts={PROJECT_CONTENT.backgroundConcepts}
+              problemStatement={PROJECT_CONTENT_STATIC.problemStatement}
+              backgroundConcepts={PROJECT_CONTENT_STATIC.backgroundConcepts}
             />
 
             {/* 3. Hypothesis */}
             <HypothesisCard
-              ifStatement={PROJECT_CONTENT.hypothesis.if}
-              thenStatement={PROJECT_CONTENT.hypothesis.then}
-              becauseStatement={PROJECT_CONTENT.hypothesis.because}
-              isSupported={data?.statistics?.totalGenerationsControl && data?.statistics?.totalGenerationsExperimental ? isHypothesisSupported : null}
+              ifStatement={PROJECT_CONTENT_STATIC.hypothesis.if}
+              thenStatement={PROJECT_CONTENT_STATIC.hypothesis.then}
+              becauseStatement={PROJECT_CONTENT_STATIC.hypothesis.because}
+              isSupported={isHypothesisSupported}
               supportingEvidence={supportingEvidence}
             />
 
             {/* 4. Variables */}
             <VariablesTable
-              independent={PROJECT_CONTENT.variables.independent}
-              dependent={PROJECT_CONTENT.variables.dependent}
-              controlled={PROJECT_CONTENT.variables.controlled}
+              independent={PROJECT_CONTENT_STATIC.variables.independent}
+              dependent={PROJECT_CONTENT_STATIC.variables.dependent}
+              controlled={PROJECT_CONTENT_STATIC.variables.controlled}
             />
 
             {/* 5. Methodology */}
             <MethodologyTimeline
-              steps={PROJECT_CONTENT.methodology.steps}
-              materialsAndApparatus={PROJECT_CONTENT.methodology.materialsAndApparatus}
+              steps={PROJECT_CONTENT_STATIC.methodology.steps}
+              materialsAndApparatus={PROJECT_CONTENT_STATIC.methodology.materialsAndApparatus}
             />
 
             {/* 6. Results Section */}
@@ -448,12 +562,12 @@ export default function ScienceFairDashboard() {
 
             {/* 8. Conclusion */}
             <ConclusionCard
-              summary={PROJECT_CONTENT.conclusion.summary}
-              hypothesisSupported={data?.statistics?.totalGenerationsControl && data?.statistics?.totalGenerationsExperimental ? isHypothesisSupported : null}
-              keyFindings={PROJECT_CONTENT.conclusion.keyFindings}
-              implications={PROJECT_CONTENT.conclusion.implications}
-              sourcesOfError={PROJECT_CONTENT.conclusion.sourcesOfError}
-              futureWork={PROJECT_CONTENT.conclusion.futureWork}
+              summary={dynamicConclusionSummary}
+              hypothesisSupported={isHypothesisSupported}
+              keyFindings={dynamicKeyFindings}
+              implications={dynamicImplications}
+              sourcesOfError={PROJECT_CONTENT_STATIC.sourcesOfError}
+              futureWork={PROJECT_CONTENT_STATIC.futureWork}
             />
 
             {/* Workers Section */}
@@ -526,7 +640,7 @@ export default function ScienceFairDashboard() {
               EvoNash - Evolutionary Nash Equilibrium Analyzer
             </div>
             <div className="text-sm text-gray-500 dark:text-gray-500">
-              Science Fair Project by {PROJECT_CONTENT.studentName}
+              Science Fair Project by {PROJECT_CONTENT_STATIC.studentName}
             </div>
           </div>
         </div>
