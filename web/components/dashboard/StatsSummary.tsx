@@ -241,6 +241,19 @@ export default function StatsSummary({
                 )}
               </p>
             </div>
+
+            {/* Convergence Detection Methodology */}
+            <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+              <h5 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Nash Equilibrium Detection
+              </h5>
+              <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                <p><strong>Metric:</strong> Entropy Variance (σ) — measures how similar all agents&apos; strategies are</p>
+                <p><strong>Control Threshold:</strong> σ &lt; 0.01 (static mutation → homogeneous population)</p>
+                <p><strong>Experimental Threshold:</strong> σ &lt; 0.025 (adaptive mutation → maintains diversity)</p>
+                <p><strong>Method:</strong> Population must first diverge (σ ≥ threshold), then converge. Prevents false positives from identical initial agents.</p>
+              </div>
+            </div>
           </>
         ) : (
           <div className="flex items-center justify-center h-48 text-gray-500 dark:text-gray-400">

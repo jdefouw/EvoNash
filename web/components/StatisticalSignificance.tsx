@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 
 interface StatisticalSignificanceProps {
   experimentId: string
+  mutationMode?: 'STATIC' | 'ADAPTIVE'
 }
 
 interface AnalysisData {
@@ -15,7 +16,9 @@ interface AnalysisData {
   entropy_trend: number[]
 }
 
-export default function StatisticalSignificance({ experimentId }: StatisticalSignificanceProps) {
+export default function StatisticalSignificance({ experimentId, mutationMode }: StatisticalSignificanceProps) {
+  // Convergence threshold differs by mutation mode
+  const convergenceThreshold = mutationMode === 'ADAPTIVE' ? 0.025 : 0.01
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -120,7 +123,7 @@ export default function StatisticalSignificance({ experimentId }: StatisticalSig
           <span className="ml-2 font-medium">{analysis.final_peak_elo?.toFixed(2) || 'N/A'}</span>
         </div>
         <div>
-          <span className="text-gray-600 dark:text-gray-400">Convergence Gen:</span>
+          <span className="text-gray-600 dark:text-gray-400">Convergence Gen (σ &lt; {convergenceThreshold}):</span>
           <span className="ml-2 font-medium">{analysis.convergence_generation || 'Not converged'}</span>
         </div>
       </div>

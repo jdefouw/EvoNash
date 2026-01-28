@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { Experiment, Generation } from '@/types/protocol'
 
@@ -10,8 +10,19 @@ interface EntropyChartProps {
   isLive?: boolean
 }
 
+// Convergence thresholds differ by mutation mode:
+// STATIC mutation (CONTROL): 0.01 - uniform mutation leads to homogeneous population
+// ADAPTIVE mutation (EXPERIMENTAL): 0.025 - fitness-scaled mutation maintains more diversity
+const CONTROL_CONVERGENCE_THRESHOLD = 0.01
+const EXPERIMENTAL_CONVERGENCE_THRESHOLD = 0.025
+
 export default function EntropyChart({ generations, experiment, isLive = false }: EntropyChartProps) {
   const prevLengthRef = useRef(0)
+
+  // Determine threshold based on experiment type
+  const convergenceThreshold = experiment.mutation_mode === 'ADAPTIVE' 
+    ? EXPERIMENTAL_CONVERGENCE_THRESHOLD 
+    : CONTROL_CONVERGENCE_THRESHOLD
 
   useEffect(() => {
     if (generations.length > prevLengthRef.current) {
@@ -25,8 +36,33 @@ export default function EntropyChart({ generations, experiment, isLive = false }
     entropyVariance: gen.entropy_variance || 0
   }))
 
+  // Check for convergence using divergence-first logic:
+  // 1. Population must first diverge (entropy variance >= threshold)
+  // 2. Then converge (entropy variance < threshold)
+  // This prevents false positives from generation 0 when all agents are identical
+  const convergenceInfo = useMemo(() => {
+    // Find first divergence point
+    const divergenceIndex = generations.findIndex(
+      g => (g.entropy_variance ?? 0) >= convergenceThreshold
+    )
+    
+    if (divergenceIndex === -1) {
+      return { isConverged: false, convergenceGen: null, hasDiverged: false }
+    }
+    
+    // Find convergence after divergence
+    const convergenceGen = generations.slice(divergenceIndex).find(
+      g => (g.entropy_variance ?? 0) < convergenceThreshold
+    )
+    
+    return {
+      isConverged: convergenceGen !== undefined,
+      convergenceGen: convergenceGen?.generation_number ?? null,
+      hasDiverged: true
+    }
+  }, [generations, convergenceThreshold])
+
   const latestGen = generations.length > 0 ? generations[generations.length - 1] : null
-  const isConverged = latestGen && (latestGen.entropy_variance || 0) < 0.01
 
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -61,12 +97,16 @@ export default function EntropyChart({ generations, experiment, isLive = false }
             }}
           />
           <Legend />
-          {isConverged && (
+          {/* Always show threshold line when population has diverged */}
+          {convergenceInfo.hasDiverged && (
             <ReferenceLine 
-              y={0.01} 
+              y={convergenceThreshold} 
               stroke="#10b981" 
               strokeDasharray="5 5" 
-              label={{ value: "Convergence Threshold (σ < 0.01)", position: "right" }}
+              label={{ 
+                value: `Convergence Threshold (σ < ${convergenceThreshold})`, 
+                position: "right" 
+              }}
             />
           )}
           <Line 
@@ -91,18 +131,24 @@ export default function EntropyChart({ generations, experiment, isLive = false }
           />
         </LineChart>
       </ResponsiveContainer>
-      <div className="flex items-center justify-between mt-4">
-        <p className="text-sm text-gray-600 dark:text-gray-400">
-          <strong>Definition:</strong> Convergence is defined as entropy variance &lt; 0.01 (policy stability threshold)
+      <div className="mt-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            <strong>Threshold:</strong> σ &lt; {convergenceThreshold} ({experiment.mutation_mode === 'ADAPTIVE' ? 'Adaptive maintains more diversity' : 'Static converges to lower variance'})
+          </p>
+          {convergenceInfo.isConverged && (
+            <div className="flex items-center gap-2 px-3 py-1 bg-green-100 dark:bg-green-900/30 rounded-full">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              <span className="text-green-700 dark:text-green-400 font-medium text-xs">
+                Nash Equilibrium Reached (Gen {convergenceInfo.convergenceGen})
+              </span>
+            </div>
+          )}
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-500">
+          <strong>Detection Method:</strong> Population must first diverge (σ ≥ threshold), then converge (σ &lt; threshold). 
+          This prevents false positives from generation 0 when all agents are identical clones.
         </p>
-        {isConverged && (
-          <div className="flex items-center gap-2 px-3 py-1 bg-green-100 dark:bg-green-900/30 rounded-full">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            <span className="text-green-700 dark:text-green-400 font-medium text-xs">
-              Convergence Threshold Reached
-            </span>
-          </div>
-        )}
       </div>
     </div>
   )

@@ -87,7 +87,7 @@ const PROJECT_CONTENT_STATIC = {
     dependent: [
       {
         name: 'Convergence Velocity',
-        description: 'Number of generations required for Policy Entropy variance to drop below σ < 0.01'
+        description: 'Number of generations for Entropy Variance to stabilize below threshold (σ < 0.01 for Control, σ < 0.025 for Experimental) after initial divergence'
       },
       {
         name: 'Peak Performance',
@@ -138,9 +138,10 @@ const PROJECT_CONTENT_STATIC = {
         title: 'Statistical Analysis',
         description: 'Raw telemetry exported to CSV for analysis. Two-sample t-test performed to determine significance.',
         details: [
-          'Compare convergence velocity between groups',
-          'Compare peak Elo ratings with p < 0.05 threshold',
-          'Analyze entropy collapse patterns'
+          'Nash Equilibrium detected when entropy variance drops below threshold AFTER initial divergence',
+          'Different thresholds: Control (σ < 0.01) vs Experimental (σ < 0.025) due to maintained diversity',
+          'Divergence-first requirement prevents false positives from identical initial agents',
+          'Compare peak Elo ratings with p < 0.05 significance threshold'
         ]
       }
     ],

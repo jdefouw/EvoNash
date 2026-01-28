@@ -76,8 +76,13 @@ export default function LiveViewLegend() {
             <div className="flex items-center gap-3">
               <div className="w-4 h-0.5 bg-green-500 border-dashed border-t-2" />
               <span className="text-gray-600 dark:text-gray-400">
-                <strong className="text-gray-900 dark:text-white">Nash Equilibrium Threshold</strong> - Entropy variance &lt; 0.01 indicates convergence (green dashed line)
+                <strong className="text-gray-900 dark:text-white">Nash Equilibrium Threshold</strong> - Entropy variance below threshold indicates convergence (green dashed line)
               </span>
+            </div>
+            <div className="ml-7 mt-1 text-xs text-gray-500 dark:text-gray-500 space-y-1">
+              <div>• <strong>Control (Static):</strong> σ &lt; 0.01 — uniform mutation leads to homogeneous population</div>
+              <div>• <strong>Experimental (Adaptive):</strong> σ &lt; 0.025 — fitness-scaled mutation maintains more diversity</div>
+              <div>• <strong>Detection:</strong> Population must first diverge (σ ≥ threshold), then converge. This prevents false positives from generation 0.</div>
             </div>
           </div>
         </div>

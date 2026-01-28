@@ -188,12 +188,18 @@ export default function ComparisonChart({
               dot={false}
               connectNulls
             />
-            {/* Nash Equilibrium threshold line */}
+            {/* Nash Equilibrium threshold lines - different for each group */}
             <ReferenceLine 
               y={0.01} 
-              stroke="#10b981" 
+              stroke="#3b82f6" 
               strokeDasharray="5 5" 
-              label={{ value: "Convergence Threshold (σ < 0.01)", position: "right", fontSize: 10 }}
+              label={{ value: "Control Threshold (σ < 0.01)", position: "right", fontSize: 9 }}
+            />
+            <ReferenceLine 
+              y={0.025} 
+              stroke="#8b5cf6" 
+              strokeDasharray="5 5" 
+              label={{ value: "Experimental Threshold (σ < 0.025)", position: "right", fontSize: 9 }}
             />
           </>
         )}
@@ -329,10 +335,16 @@ export default function ComparisonChart({
             <span>Experimental Group (Adaptive, starts ~5%)</span>
           </div>
           {showConvergenceMarker && (
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-0.5 bg-green-500 border-dashed" style={{ borderTop: '2px dashed' }} />
-              <span>Convergence Threshold</span>
-            </div>
+            <>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-0.5 bg-blue-500 border-dashed" style={{ borderTop: '2px dashed' }} />
+                <span>Control Threshold (σ &lt; 0.01)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-0.5 bg-purple-500 border-dashed" style={{ borderTop: '2px dashed' }} />
+                <span>Experimental Threshold (σ &lt; 0.025)</span>
+              </div>
+            </>
           )}
         </div>
       </div>

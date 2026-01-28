@@ -856,7 +856,7 @@ export default function ExperimentDetailPage() {
               experiment={experiment}
               isLive={experiment.status === 'RUNNING'}
             />
-            <StatisticalSignificance experimentId={experimentId} />
+            <StatisticalSignificance experimentId={experimentId} mutationMode={experiment.mutation_mode} />
           </div>
         )}
 
