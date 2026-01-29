@@ -51,21 +51,21 @@ export async function POST(
         [id]
       )
 
-      // Cancel any pending job assignments for this experiment
-      // This prevents other workers from picking up new batches
-      const cancelResult = await query(
+      // Mark all active job assignments as completed for this experiment
+      // This ensures workers can move on to the next experiment
+      const completedResult = await query(
         `UPDATE job_assignments 
-         SET status = 'cancelled' 
-         WHERE experiment_id = $1 AND status = 'assigned'
+         SET status = 'completed', completed_at = NOW()
+         WHERE experiment_id = $1 AND status IN ('assigned', 'processing')
          RETURNING job_id`,
         [id]
       )
 
-      const cancelledJobs = cancelResult.rows?.length || 0
+      const completedJobs = completedResult.rows?.length || 0
       
       console.log(`[EQUILIBRIUM] ✓ Experiment ${id} (${experiment.experiment_name}) marked COMPLETED`)
       console.log(`[EQUILIBRIUM]   Convergence generation: ${convergence_generation}`)
-      console.log(`[EQUILIBRIUM]   Cancelled ${cancelledJobs} pending job assignments`)
+      console.log(`[EQUILIBRIUM]   Completed ${completedJobs} active job assignments`)
 
       return NextResponse.json({
         success: true,
@@ -74,7 +74,7 @@ export async function POST(
         convergence_generation,
         previous_status: experiment.status,
         new_status: 'COMPLETED',
-        cancelled_jobs: cancelledJobs
+        completed_jobs: completedJobs
       })
     } else {
       // Experiment already completed or stopped

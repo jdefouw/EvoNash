@@ -349,18 +349,18 @@ export async function POST(request: NextRequest) {
             ['COMPLETED', new Date().toISOString(), experiment_id]
           )
           
-          // Cancel any pending job assignments for this experiment
-          // This prevents other workers from picking up new batches
-          const cancelResult = await query(
-            `UPDATE job_assignments SET status = 'cancelled' 
-             WHERE experiment_id = $1 AND status = 'assigned'
+          // Mark all active job assignments as completed for this experiment
+          // This ensures workers can move on to the next experiment
+          const completedResult = await query(
+            `UPDATE job_assignments SET status = 'completed', completed_at = NOW()
+             WHERE experiment_id = $1 AND status IN ('assigned', 'processing')
              RETURNING job_id`,
             [experiment_id]
           )
           
-          const cancelledJobs = cancelResult.rows?.length || 0
+          const completedJobs = completedResult.rows?.length || 0
           console.log(`[RESULTS] ✓ Experiment ${experiment_id} marked COMPLETED (Nash equilibrium at gen ${convergenceGeneration})`)
-          console.log(`[RESULTS]   Cancelled ${cancelledJobs} pending job assignments`)
+          console.log(`[RESULTS]   Completed ${completedJobs} active job assignments`)
           
           // Signal to worker that job is complete
           jobComplete = true
@@ -411,7 +411,20 @@ export async function POST(request: NextRequest) {
               'UPDATE experiments SET status = $1, completed_at = $2 WHERE id = $3',
               ['COMPLETED', new Date().toISOString(), experiment_id]
             )
+            
+            // Mark all remaining active job assignments as completed
+            const completedResult = await query(
+              `UPDATE job_assignments SET status = 'completed', completed_at = NOW()
+               WHERE experiment_id = $1 AND status IN ('assigned', 'processing')
+               RETURNING job_id`,
+              [experiment_id]
+            )
+            const completedJobs = completedResult.rows?.length || 0
+            
             console.log(`[RESULTS] ✓ Successfully marked experiment ${experiment_id} as COMPLETED`)
+            if (completedJobs > 0) {
+              console.log(`[RESULTS]   Completed ${completedJobs} remaining job assignments`)
+            }
             jobComplete = true
           } else {
             const completedBatches = allAssignments?.filter((a: any) => a.status === 'completed').length || 0

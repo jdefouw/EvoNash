@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     // CRITICAL: Worker stickiness - a worker with an active job MUST stay with that job
     // A worker should NEVER receive a new job while it has one in progress
     if (worker_id) {
-      // Check if worker has ANY active job (assigned or processing)
+      // Check if worker has ANY active job (assigned or processing) on a non-completed experiment
       const activeJob = await queryOne<{ 
         job_id: string; 
         experiment_id: string; 
@@ -42,10 +42,39 @@ export async function POST(request: NextRequest) {
          FROM job_assignments ja
          JOIN experiments e ON e.id = ja.experiment_id
          WHERE ja.worker_id = $1 AND ja.status IN ('assigned', 'processing')
+           AND e.status NOT IN ('COMPLETED', 'STOPPED', 'FAILED')
          ORDER BY ja.assigned_at ASC
          LIMIT 1`,
         [worker_id]
       )
+      
+      // If worker has jobs on completed experiments, mark them as completed so worker can move on
+      // Also decrement the worker's active_jobs_count for each completed job
+      const staleJobsResult = await query(
+        `UPDATE job_assignments ja
+         SET status = 'completed', completed_at = NOW()
+         FROM experiments e
+         WHERE ja.experiment_id = e.id
+           AND ja.worker_id = $1
+           AND ja.status IN ('assigned', 'processing')
+           AND e.status IN ('COMPLETED', 'STOPPED', 'FAILED')
+         RETURNING ja.job_id`,
+        [worker_id]
+      )
+      
+      const staleJobsCount = staleJobsResult.rows?.length || 0
+      if (staleJobsCount > 0) {
+        // Decrement the worker's active_jobs_count and update status
+        await query(
+          `UPDATE workers 
+           SET active_jobs_count = GREATEST(0, active_jobs_count - $1),
+               status = CASE WHEN GREATEST(0, active_jobs_count - $1) = 0 THEN 'idle' ELSE status END,
+               last_heartbeat = NOW()
+           WHERE id = $2`,
+          [staleJobsCount, worker_id]
+        )
+        console.log(`[QUEUE] Cleaned up ${staleJobsCount} stale jobs from completed experiments for worker ${worker_id?.slice(0,8)}`)
+      }
       
       if (activeJob) {
         // Worker already has an active job - return that job (recovery/continuation)

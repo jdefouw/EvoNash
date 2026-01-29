@@ -39,7 +39,19 @@ export async function POST(
       ['STOPPED', experimentId]
     )
     
-    return NextResponse.json({ success: true, status: 'STOPPED' })
+    // Mark all active job assignments as cancelled so workers can move on
+    const cancelledResult = await query(
+      `UPDATE job_assignments 
+       SET status = 'cancelled', completed_at = NOW()
+       WHERE experiment_id = $1 AND status IN ('assigned', 'processing')
+       RETURNING job_id`,
+      [experimentId]
+    )
+    
+    const cancelledJobs = cancelledResult.rows?.length || 0
+    console.log(`[STOP] Experiment ${experimentId} stopped, cancelled ${cancelledJobs} active job assignments`)
+    
+    return NextResponse.json({ success: true, status: 'STOPPED', cancelled_jobs: cancelledJobs })
   } catch (error: any) {
     console.error('Error stopping experiment:', error)
     return NextResponse.json(
