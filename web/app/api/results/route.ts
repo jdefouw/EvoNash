@@ -4,8 +4,9 @@ import { queryOne, queryAll, query, rpc, insertMany } from '@/lib/postgres'
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
 
-// Nash equilibrium detection constants (must match worker values)
-const CONVERGENCE_THRESHOLD = 0.01  // Entropy variance threshold
+// Nash equilibrium detection constants
+const ABSOLUTE_THRESHOLD = 0.01     // Minimum floor for convergence threshold
+const RELATIVE_THRESHOLD_PERCENT = 0.10  // 10% of peak variance
 const STABILITY_WINDOW = 20         // Consecutive generations below threshold required
 const POST_CONVERGENCE_BUFFER = 30  // Additional generations after convergence before completing
 
@@ -13,9 +14,10 @@ const POST_CONVERGENCE_BUFFER = 30  // Additional generations after convergence 
  * Detect Nash equilibrium based on entropy variance convergence.
  * 
  * Algorithm:
- * 1. Population must first diverge (entropy_variance >= threshold)
- * 2. Then converge (STABILITY_WINDOW consecutive generations below threshold)
- * 3. Then have POST_CONVERGENCE_BUFFER additional generations after convergence
+ * 1. Find peak entropy variance (skip first 5 generations for stability)
+ * 2. Use relative threshold (10% of peak) when peak is high, absolute (0.01) when peak is low
+ * 3. Find when variance drops below threshold for STABILITY_WINDOW consecutive generations after peak
+ * 4. Require POST_CONVERGENCE_BUFFER additional generations after convergence
  * 
  * @param experimentId - The experiment ID to check
  * @returns Object with equilibriumReached boolean and convergenceGeneration number
@@ -33,37 +35,44 @@ async function detectEquilibrium(experimentId: string): Promise<{
     [experimentId]
   )
   
-  // Need at least STABILITY_WINDOW + POST_CONVERGENCE_BUFFER generations to detect equilibrium
+  // Need enough generations to detect equilibrium
   if (!generations || generations.length < STABILITY_WINDOW + POST_CONVERGENCE_BUFFER) {
     return { equilibriumReached: false, convergenceGeneration: null }
   }
   
-  // Detection algorithm (same as worker)
-  let hasDiverged = false
-  let stabilityCounter = 0
-  let convergenceGen: number | null = null
+  // Skip first 5 generations (unstable data)
+  const varianceData = generations.slice(5).map(g => ({
+    gen: g.generation_number,
+    variance: g.entropy_variance ?? 0
+  }))
   
-  for (const gen of generations) {
-    const entropyVariance = gen.entropy_variance ?? 0
-    
-    // First check if population has diverged
-    if (!hasDiverged && entropyVariance >= CONVERGENCE_THRESHOLD) {
-      hasDiverged = true
-    }
-    
-    // Only check for convergence after divergence
-    if (hasDiverged) {
-      if (entropyVariance < CONVERGENCE_THRESHOLD) {
-        stabilityCounter++
-        if (stabilityCounter >= STABILITY_WINDOW && convergenceGen === null) {
-          // Convergence detected at this generation minus the stability window
-          convergenceGen = gen.generation_number - STABILITY_WINDOW + 1
-        }
-      } else {
-        // Reset counter if variance goes back above threshold
-        stabilityCounter = 0
-        convergenceGen = null  // Reset convergence if we go back above threshold
-      }
+  if (varianceData.length === 0) {
+    return { equilibriumReached: false, convergenceGeneration: null }
+  }
+  
+  // Find peak variance
+  const peakVariance = Math.max(...varianceData.map(d => d.variance))
+  const peakIndex = varianceData.findIndex(d => d.variance === peakVariance)
+  
+  // Must have diverged (peak > minimum threshold)
+  if (peakVariance <= 0.0001) {
+    return { equilibriumReached: false, convergenceGeneration: null }
+  }
+  
+  // Use relative threshold (10% of peak) when peak is high, absolute when peak is low
+  const relativeThreshold = peakVariance * RELATIVE_THRESHOLD_PERCENT
+  const effectiveThreshold = Math.max(ABSOLUTE_THRESHOLD, relativeThreshold)
+  
+  // Get data after peak
+  const afterPeak = varianceData.slice(peakIndex)
+  
+  // Find first generation that starts a stable run of STABILITY_WINDOW generations below threshold
+  let convergenceGen: number | null = null
+  for (let i = 0; i <= afterPeak.length - STABILITY_WINDOW; i++) {
+    const window = afterPeak.slice(i, i + STABILITY_WINDOW)
+    if (window.every(d => d.variance < effectiveThreshold)) {
+      convergenceGen = window[0].gen
+      break
     }
   }
   
@@ -73,6 +82,7 @@ async function detectEquilibrium(experimentId: string): Promise<{
     const gensPastConvergence = maxGen - convergenceGen
     
     if (gensPastConvergence >= POST_CONVERGENCE_BUFFER) {
+      console.log(`[detectEquilibrium] Nash equilibrium confirmed: convergence at gen ${convergenceGen}, ${gensPastConvergence} generations past (threshold: ${effectiveThreshold.toFixed(4)}, peak: ${peakVariance.toFixed(4)})`)
       return { equilibriumReached: true, convergenceGeneration: convergenceGen }
     }
   }

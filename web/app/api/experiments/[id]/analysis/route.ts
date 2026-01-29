@@ -64,9 +64,9 @@ export async function GET(
         
         // Must have diverged (peak > minimum)
         if (peakVariance > 0.0001) {
-          // Use stricter of absolute or relative (5% of peak) threshold
-          const relativeThreshold = peakVariance * 0.05
-          const effectiveThreshold = Math.min(absoluteThreshold, relativeThreshold)
+          // Use relative threshold (10% of peak) when peak is high, absolute when peak is low
+          const relativeThreshold = peakVariance * 0.10
+          const effectiveThreshold = Math.max(absoluteThreshold, relativeThreshold)
           
           // Find convergence after peak
           const convergencePoint = varianceData.slice(peakIndex).find(

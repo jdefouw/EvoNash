@@ -62,8 +62,14 @@ export async function POST(request: NextRequest) {
       )
     }
     
+    // Check for both Control and Experimental experiments
+    const controlExperiments = experiments.filter((e: any) => e.experiment_group === 'CONTROL')
+    const experimentalExperiments = experiments.filter((e: any) => e.experiment_group === 'EXPERIMENTAL')
+    const hasBothGroups = controlExperiments.length > 0 && experimentalExperiments.length > 0
+    
     // Log the interleaved experiment order
     console.log(`[QUEUE] Interleaved experiment order (${experiments.length} experiments):`)
+    console.log(`[QUEUE]   Control: ${controlExperiments.length}, Experimental: ${experimentalExperiments.length}`)
     experiments.slice(0, 10).forEach((exp: any, idx: number) => {
       console.log(`[QUEUE]   ${idx + 1}. ${exp.experiment_name} (${exp.experiment_group})`)
     })
@@ -71,9 +77,11 @@ export async function POST(request: NextRequest) {
       console.log(`[QUEUE]   ... and ${experiments.length - 10} more`)
     }
 
-    // Experiment affinity: when worker has no active batch, prefer the experiment they last completed a job for
+    // Experiment affinity is DISABLED when both groups have pending work
+    // This ensures proper interleaving between Control and Experimental for fair comparison
+    // Only use affinity when there's only one group left (to efficiently complete remaining experiments)
     let experimentOrder: any[] = experiments
-    if (worker_id) {
+    if (worker_id && !hasBothGroups) {
       const lastCompletedJob = await queryOne<{ experiment_id: string }>(
         `SELECT experiment_id FROM job_assignments 
          WHERE worker_id = $1 AND status = 'completed' 
@@ -86,8 +94,10 @@ export async function POST(request: NextRequest) {
         const preferred = experiments.find((e: any) => e.id === lastExperimentId)
         const rest = experiments.filter((e: any) => e.id !== lastExperimentId)
         experimentOrder = preferred ? [preferred, ...rest] : experiments
-        console.log(`[QUEUE] Experiment affinity: preferring experiment ${lastExperimentId.slice(0, 8)}… for worker ${worker_id.slice(0, 8)}…`)
+        console.log(`[QUEUE] Experiment affinity (single group): preferring experiment ${lastExperimentId.slice(0, 8)}… for worker ${worker_id.slice(0, 8)}…`)
       }
+    } else if (hasBothGroups) {
+      console.log(`[QUEUE] Both groups have pending work - using strict interleaving (no affinity)`)
     }
 
     // Try to find an unassigned batch for each experiment (affinity order when worker_id set)

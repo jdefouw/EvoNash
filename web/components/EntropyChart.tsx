@@ -15,8 +15,8 @@ interface EntropyChartProps {
 const CONVERGENCE_THRESHOLD = 0.01
 
 // Stability window: require N consecutive generations below threshold
-// This prevents false positives from noise
-const STABILITY_WINDOW = 20
+// UI uses 10 for faster visual feedback; backend early stopping uses 20 for scientific rigor
+const STABILITY_WINDOW = 10
 
 export default function EntropyChart({ generations, experiment, isLive = false }: EntropyChartProps) {
   const prevLengthRef = useRef(0)
@@ -67,11 +67,12 @@ export default function EntropyChart({ generations, experiment, isLive = false }
       return { isConverged: false, convergenceGen: null, hasDiverged: false, peakVariance }
     }
 
-    // For convergence detection, use the stricter of:
-    // - The absolute threshold (0.01)
-    // - 5% of peak variance (relative threshold for cases where peak is small)
-    const relativeThreshold = peakVariance * 0.05
-    const effectiveThreshold = Math.min(convergenceThreshold, relativeThreshold)
+    // For convergence detection, use relative threshold (10% of peak) when peak is high
+    // This ensures convergence detection scales appropriately with the magnitude of variance
+    // When peak is small, use the absolute threshold as a floor
+    // 10% provides a good balance between detecting true convergence and avoiding false positives
+    const relativeThreshold = peakVariance * 0.10
+    const effectiveThreshold = Math.max(convergenceThreshold, relativeThreshold)
     
     // Get data after peak
     const afterPeak = varianceData.slice(peakIndex)

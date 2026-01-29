@@ -15,7 +15,8 @@ interface ExperimentChartProps {
 const CONVERGENCE_THRESHOLD = 0.01
 
 // Stability window: require N consecutive generations below threshold
-const STABILITY_WINDOW = 20
+// UI uses 10 for faster visual feedback; backend early stopping uses 20 for scientific rigor
+const STABILITY_WINDOW = 10
 
 export default function ExperimentChart({ generations, experiment, isLive = false }: ExperimentChartProps) {
   const prevLengthRef = useRef(0)
@@ -54,9 +55,11 @@ export default function ExperimentChart({ generations, experiment, isLive = fals
     // Must have diverged (peak > minimum)
     if (peakVariance <= 0.0001) return null
 
-    // Use stricter of absolute or relative (5% of peak) threshold
-    const relativeThreshold = peakVariance * 0.05
-    const effectiveThreshold = Math.min(convergenceThreshold, relativeThreshold)
+    // Use relative threshold (10% of peak) when peak is high, absolute when peak is low
+    // This ensures convergence detection scales appropriately with the magnitude of variance
+    // 10% provides a good balance between detecting true convergence and avoiding false positives
+    const relativeThreshold = peakVariance * 0.10
+    const effectiveThreshold = Math.max(convergenceThreshold, relativeThreshold)
     
     // Get data after peak
     const afterPeak = varianceData.slice(peakIndex)
