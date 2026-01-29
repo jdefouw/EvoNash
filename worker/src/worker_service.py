@@ -796,6 +796,7 @@ class WorkerService:
         experiment_config = job.get('experiment_config', {})
         generation_start = job.get('generation_start', 0)
         generation_end = job.get('generation_end', None)
+        is_recovery = job.get('recovery', False)  # Check if this is a recovery job
         
         if not experiment_config:
             self.logger.error("Invalid job: missing experiment_config")
@@ -809,7 +810,10 @@ class WorkerService:
         self.active_jobs_count += 1
         
         # Claim the job before processing to prevent conflicts
-        if job_id and not self._claim_job(job_id):
+        # SKIP claiming for recovery jobs - they're already in 'processing' status
+        if is_recovery:
+            self.logger.info(f"🔄 Recovery job {job_id} - skipping claim (already processing)")
+        elif job_id and not self._claim_job(job_id):
             self.logger.error(f"✗ Failed to claim job {job_id}, skipping")
             # Rollback counter on claim failure
             self.active_jobs_count = max(0, self.active_jobs_count - 1)
@@ -1092,7 +1096,11 @@ class WorkerService:
                                 consecutive_errors = 0
                                 # Process job synchronously (blocks until complete)
                                 # This ensures deterministic execution and data integrity
-                                self.logger.info(f"✅ Job {job.get('job_id')} received, processing synchronously")
+                                is_recovery = job.get('recovery', False)
+                                if is_recovery:
+                                    self.logger.info(f"🔄 Recovery job {job.get('job_id')} received - resuming previous work")
+                                else:
+                                    self.logger.info(f"✅ Job {job.get('job_id')} received, processing synchronously")
                                 self.status = 'processing'
                                 self.process_job(job)
                                 self.status = 'idle'
