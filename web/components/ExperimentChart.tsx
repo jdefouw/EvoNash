@@ -10,17 +10,18 @@ interface ExperimentChartProps {
   isLive?: boolean
 }
 
-// Convergence thresholds differ by mutation mode
-const CONTROL_CONVERGENCE_THRESHOLD = 0.01
-const EXPERIMENTAL_CONVERGENCE_THRESHOLD = 0.025
+// Unified convergence threshold for BOTH groups (scientific best practice)
+// Using the same threshold enables fair comparison of convergence generations
+const CONVERGENCE_THRESHOLD = 0.01
+
+// Stability window: require N consecutive generations below threshold
+const STABILITY_WINDOW = 20
 
 export default function ExperimentChart({ generations, experiment, isLive = false }: ExperimentChartProps) {
   const prevLengthRef = useRef(0)
 
-  // Determine threshold based on experiment type
-  const convergenceThreshold = experiment.mutation_mode === 'ADAPTIVE' 
-    ? EXPERIMENTAL_CONVERGENCE_THRESHOLD 
-    : CONTROL_CONVERGENCE_THRESHOLD
+  // Same threshold for all experiments (fair comparison)
+  const convergenceThreshold = CONVERGENCE_THRESHOLD
 
   useEffect(() => {
     if (generations.length > prevLengthRef.current) {
@@ -34,7 +35,7 @@ export default function ExperimentChart({ generations, experiment, isLive = fals
     peakElo: gen.peak_elo || 0
   }))
 
-  // Calculate convergence generation using improved detection logic
+  // Calculate convergence generation using improved detection logic with stability window
   const convergenceGen = useMemo(() => {
     if (generations.length < 10) return null
 
@@ -57,12 +58,18 @@ export default function ExperimentChart({ generations, experiment, isLive = fals
     const relativeThreshold = peakVariance * 0.05
     const effectiveThreshold = Math.min(convergenceThreshold, relativeThreshold)
     
-    // Find convergence after peak
-    const convergencePoint = varianceData.slice(peakIndex).find(
-      d => d.variance < effectiveThreshold
-    )
+    // Get data after peak
+    const afterPeak = varianceData.slice(peakIndex)
     
-    return convergencePoint?.gen ?? null
+    // Find first generation that starts a stable run of STABILITY_WINDOW generations below threshold
+    for (let i = 0; i <= afterPeak.length - STABILITY_WINDOW; i++) {
+      const window = afterPeak.slice(i, i + STABILITY_WINDOW)
+      if (window.every(d => d.variance < effectiveThreshold)) {
+        return window[0].gen
+      }
+    }
+    
+    return null
   }, [generations, convergenceThreshold])
 
   const latestGen = generations.length > 0 ? generations[generations.length - 1] : null

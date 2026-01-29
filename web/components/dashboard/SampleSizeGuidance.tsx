@@ -10,10 +10,13 @@ interface SampleSizeGuidanceProps {
   statisticalPowerLevel: StatisticalPowerLevel
 }
 
+// Statistical power comes from NUMBER OF EXPERIMENTS, not generation count
+// Each experiment provides one data point (convergence generation)
+// Generation count only needs to be sufficient for convergence detection
 const THRESHOLDS = [
-  { level: 'minimum', experiments: 1, generations: 500, label: 'Minimum' },
-  { level: 'recommended', experiments: 2, generations: 1000, label: 'Recommended' },
-  { level: 'robust', experiments: 5, generations: 2000, label: 'Robust' },
+  { level: 'minimum', experiments: 3, label: 'Minimum', description: 'Minimum for t-test (df > 1)' },
+  { level: 'recommended', experiments: 5, label: 'Recommended', description: '80% power for medium effect' },
+  { level: 'robust', experiments: 8, label: 'Robust', description: '90%+ power, publication-quality' },
 ] as const
 
 export default function SampleSizeGuidance({
@@ -89,43 +92,36 @@ export default function SampleSizeGuidance({
   }
 
   // Calculate progress toward next level
+  // Statistical power is driven by NUMBER OF EXPERIMENTS, not generation count
   const getProgressToNextLevel = () => {
     const minCount = Math.min(controlExperimentCount, experimentalExperimentCount)
-    const minGens = Math.min(controlAvgGenerations, experimentalAvgGenerations)
 
     if (statisticalPowerLevel === 'robust') {
       return { progress: 100, nextLevel: null, needed: null }
     }
 
     let targetExperiments = 0
-    let targetGens = 0
     let nextLevel = ''
 
     if (statisticalPowerLevel === 'insufficient') {
-      targetExperiments = 1
-      targetGens = 500
+      targetExperiments = 3
       nextLevel = 'Minimum'
     } else if (statisticalPowerLevel === 'minimum') {
-      targetExperiments = 2
-      targetGens = 1000
+      targetExperiments = 5
       nextLevel = 'Recommended'
     } else if (statisticalPowerLevel === 'recommended') {
-      targetExperiments = 5
-      targetGens = 2000
+      targetExperiments = 8
       nextLevel = 'Robust'
     }
 
-    const expProgress = Math.min(100, (minCount / targetExperiments) * 100)
-    const genProgress = Math.min(100, (minGens / targetGens) * 100)
-    const overallProgress = Math.round((expProgress + genProgress) / 2)
-
+    // Progress is based solely on experiment count (not generations)
+    const progress = Math.min(100, Math.round((minCount / targetExperiments) * 100))
     const neededExps = Math.max(0, targetExperiments - minCount)
-    const neededGens = Math.max(0, targetGens - minGens)
 
     return {
-      progress: overallProgress,
+      progress,
       nextLevel,
-      needed: { experiments: neededExps, generations: neededGens }
+      needed: { experiments: neededExps }
     }
   }
 
@@ -207,11 +203,9 @@ export default function SampleSizeGuidance({
               style={{ width: `${progressInfo.progress}%` }}
             />
           </div>
-          {progressInfo.needed && (progressInfo.needed.experiments > 0 || progressInfo.needed.generations > 0) && (
+          {progressInfo.needed && progressInfo.needed.experiments > 0 && (
             <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              Need: {progressInfo.needed.experiments > 0 && `${progressInfo.needed.experiments} more experiment${progressInfo.needed.experiments > 1 ? 's' : ''} per group`}
-              {progressInfo.needed.experiments > 0 && progressInfo.needed.generations > 0 && ' or '}
-              {progressInfo.needed.generations > 0 && `${progressInfo.needed.generations.toLocaleString()}+ generations each`}
+              Need: {progressInfo.needed.experiments} more experiment{progressInfo.needed.experiments > 1 ? 's' : ''} per group
             </div>
           )}
         </div>
@@ -223,8 +217,8 @@ export default function SampleSizeGuidance({
           <thead className="bg-gray-50 dark:bg-gray-900/50">
             <tr>
               <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Level</th>
-              <th className="text-center py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Experiments</th>
-              <th className="text-center py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Generations</th>
+              <th className="text-center py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Experiments per Group</th>
+              <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Rationale</th>
               <th className="text-center py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Status</th>
             </tr>
           </thead>
@@ -237,10 +231,10 @@ export default function SampleSizeGuidance({
                     {threshold.label}
                   </td>
                   <td className="py-2 px-3 text-center text-gray-600 dark:text-gray-400">
-                    {threshold.experiments}+ per group
+                    {threshold.experiments}+
                   </td>
-                  <td className="py-2 px-3 text-center text-gray-600 dark:text-gray-400">
-                    {threshold.generations.toLocaleString()}+
+                  <td className="py-2 px-3 text-xs text-gray-500 dark:text-gray-400">
+                    {threshold.description}
                   </td>
                   <td className="py-2 px-3 text-center">
                     {achieved ? (
@@ -263,16 +257,19 @@ export default function SampleSizeGuidance({
       {/* Why This Matters */}
       <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
         <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Understanding the Experiment
+          Why Experiment Count Matters More Than Generation Count
         </div>
         <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-          This experiment compares <strong>Control</strong> (static ε = 0.05) vs <strong>Experimental</strong> (adaptive, calibrated to start at ~5% then scales by fitness). 
-          Both groups begin with identical mutation rates to ensure fair comparison of the scaling mechanism.
+          <strong>Statistical power comes from the number of independent experiments</strong>, not from running each experiment longer.
+          Each experiment provides one data point (its convergence generation) for the t-test.
+        </p>
+        <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+          Experiments use early stopping: once Nash equilibrium is detected (entropy variance stable for 20+ generations), 
+          the experiment can stop. Typical convergence occurs around generation 80-150, so experiments don&apos;t need thousands of generations.
         </p>
         <p className="text-xs text-gray-600 dark:text-gray-400">
-          Running multiple experiments with different random seeds demonstrates reproducibility. 
-          A two-sample t-test requires sufficient data points to achieve statistical significance (p &lt; 0.05).
-          <strong> Aim for 5+ experiments per group</strong> with 2,000+ generations each for publication-quality results.
+          <strong>Aim for 5+ experiments per group</strong> with different random seeds for reliable statistical significance.
+          8+ experiments per group provides publication-quality power (90%+).
         </p>
       </div>
     </div>

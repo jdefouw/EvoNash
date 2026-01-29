@@ -81,8 +81,8 @@ To ensure scientific validity, this project utilizes a **Controlled Comparative 
     
     > **Note:** In the EvoNash platform, selecting "Control" automatically enforces Static mutation, and selecting "Experimental" automatically enforces Adaptive mutation. This design prevents misconfiguration and ensures proper experimental methodology.
 * **Dependent Variables:**
-    * *Convergence Velocity:* The number of generations required for the population's Policy Entropy variance to drop below $\sigma < 0.01$.
-    * *Peak Performance:* The maximum Elo rating achieved after 1,500 generations.
+    * *Convergence Velocity (Primary):* The generation at which Nash Equilibrium is confirmed. Detected when entropy variance stays below threshold ($\sigma < 0.01$) for 20 consecutive generations. This is the primary metric for testing the hypothesis.
+    * *Peak Performance (Secondary):* The maximum Elo rating achieved at convergence.
 * **Controlled Variables (Constants):**
     * **The Random Seed:** Set to `42` for both runs to ensure identical starting populations.
     * **Population Size:** $N = 1000$ agents.
@@ -102,14 +102,15 @@ To ensure scientific validity, this project utilizes a **Controlled Comparative 
 2.  **Phase I: Control Run (Static Mutation):**
     * A new experiment was created with **Experiment Group: Control** (which automatically applies Static mutation with $\epsilon = 0.05$).
     * The Random Seed was set to `42`.
-    * The simulation ran for 1,500 generations (750 ticks each).
+    * The simulation ran with **early stopping**: Once Nash Equilibrium is detected (entropy variance stable below 0.01 for 20 consecutive generations), the experiment runs 30 additional generations and stops. Typical convergence occurs around generation 80-150.
     * Every generation, the `Mean Elo`, `Policy Entropy`, and other metrics were logged to the database.
 3.  **Phase II: Experimental Run (Adaptive Mutation):**
     * A new experiment was created with **Experiment Group: Experimental** (which automatically applies Adaptive mutation).
     * The Random Seed was set to `42` (same as Control for identical starting conditions).
-    * The simulation ran for 1,500 generations (750 ticks each).
-4.  **Replication:** To achieve statistical significance, 5 runs of each group were conducted with different random seeds (42, 43, 44, 45, 46).
+    * The simulation ran with the same early stopping criteria as Control.
+4.  **Replication:** To achieve statistical significance, 5+ runs of each group were conducted with different random seeds (42, 43, 44, 45, 46, etc.). Statistical power comes from the number of experiments, not from running each experiment longer.
 5.  **Data Extraction:** Raw telemetry was exported to CSV format for statistical analysis using SciPy.
+6.  **Primary Analysis:** A two-sample Welch's t-test was performed on the convergence generation from each experiment to directly test the hypothesis.
 
 ---
 
@@ -129,12 +130,20 @@ To ensure scientific validity, this project utilizes a **Controlled Comparative 
 * **Finding:** Group B's entropy variance stabilized below $\sigma < 0.01$ significantly earlier than Group A. This indicates convergence to a **Nash Equilibrium** state.
 
 ### 5.3 Statistical Significance (T-Test)
-A two-sample t-test was performed on the Elo ratings from both groups using the Welch-Satterthwaite approximation for unequal variances.
-* **P-Value:** $p = $ **[ACTUAL_P_VALUE_FROM_DASHBOARD]**
-* **Significance Level:** $\alpha = 0.05$
-* **Conclusion:** **[BASED ON ACTUAL DATA]** - If $p < 0.05$, the improvement is statistically significant; otherwise, more data may be needed.
+Two separate t-tests are performed using the Welch-Satterthwaite approximation for unequal variances:
 
-> **Example placeholder:** $p = 0.034$ was used as a hypothetical projection
+**Primary Test (Convergence Generation):** Tests the hypothesis directly.
+* Tests whether adaptive mutation reaches Nash Equilibrium in fewer generations.
+* Each experiment provides one data point: its convergence generation.
+* **P-Value:** $p = $ **[CONVERGENCE_P_VALUE_FROM_DASHBOARD]**
+* **Significance Level:** $\alpha = 0.05$
+
+**Secondary Test (Final Elo):** Confirms fitness improvement.
+* Tests whether adaptive mutation achieves higher final Elo ratings.
+* Each experiment provides one data point: average of last 10 generations' Elo.
+* **P-Value:** $p = $ **[ELO_P_VALUE_FROM_DASHBOARD]**
+
+> **Note:** Statistical power comes from the number of experiments per group (aim for 5+), not from running each experiment for more generations.
 
 ---
 

@@ -10,19 +10,19 @@ interface EntropyChartProps {
   isLive?: boolean
 }
 
-// Convergence thresholds differ by mutation mode:
-// STATIC mutation (CONTROL): 0.01 - uniform mutation leads to homogeneous population
-// ADAPTIVE mutation (EXPERIMENTAL): 0.025 - fitness-scaled mutation maintains more diversity
-const CONTROL_CONVERGENCE_THRESHOLD = 0.01
-const EXPERIMENTAL_CONVERGENCE_THRESHOLD = 0.025
+// Unified convergence threshold for BOTH groups (scientific best practice)
+// Using the same threshold enables fair comparison of convergence generations
+const CONVERGENCE_THRESHOLD = 0.01
+
+// Stability window: require N consecutive generations below threshold
+// This prevents false positives from noise
+const STABILITY_WINDOW = 20
 
 export default function EntropyChart({ generations, experiment, isLive = false }: EntropyChartProps) {
   const prevLengthRef = useRef(0)
 
-  // Determine threshold based on experiment type
-  const convergenceThreshold = experiment.mutation_mode === 'ADAPTIVE' 
-    ? EXPERIMENTAL_CONVERGENCE_THRESHOLD 
-    : CONTROL_CONVERGENCE_THRESHOLD
+  // Same threshold for all experiments (fair comparison)
+  const convergenceThreshold = CONVERGENCE_THRESHOLD
 
   useEffect(() => {
     if (generations.length > prevLengthRef.current) {
@@ -36,10 +36,10 @@ export default function EntropyChart({ generations, experiment, isLive = false }
     entropyVariance: gen.entropy_variance || 0
   }))
 
-  // Check for convergence using improved detection logic:
+  // Check for convergence using improved detection logic with stability window:
   // 1. Find peak entropy variance (must be above minimum to show divergence)
-  // 2. Find when variance drops significantly from peak AND below threshold
-  // This handles cases where variance never exceeds the threshold but clearly converges
+  // 2. Find when variance drops below threshold AND stays there for STABILITY_WINDOW generations
+  // This prevents false positives from noise
   const convergenceInfo = useMemo(() => {
     if (generations.length < 10) {
       return { isConverged: false, convergenceGen: null, hasDiverged: false, peakVariance: 0 }
@@ -68,19 +68,27 @@ export default function EntropyChart({ generations, experiment, isLive = false }
     }
 
     // For convergence detection, use the stricter of:
-    // - The absolute threshold (0.01 or 0.025)
+    // - The absolute threshold (0.01)
     // - 5% of peak variance (relative threshold for cases where peak is small)
     const relativeThreshold = peakVariance * 0.05
     const effectiveThreshold = Math.min(convergenceThreshold, relativeThreshold)
     
-    // Find first generation AFTER peak where variance drops below effective threshold
-    const convergencePoint = varianceData.slice(peakIndex).find(
-      d => d.variance < effectiveThreshold
-    )
+    // Get data after peak
+    const afterPeak = varianceData.slice(peakIndex)
+    
+    // Find first generation that starts a stable run of STABILITY_WINDOW generations below threshold
+    let convergenceGen: number | null = null
+    for (let i = 0; i <= afterPeak.length - STABILITY_WINDOW; i++) {
+      const window = afterPeak.slice(i, i + STABILITY_WINDOW)
+      if (window.every(d => d.variance < effectiveThreshold)) {
+        convergenceGen = window[0].gen
+        break
+      }
+    }
     
     return {
-      isConverged: convergencePoint !== undefined,
-      convergenceGen: convergencePoint?.gen ?? null,
+      isConverged: convergenceGen !== null,
+      convergenceGen,
       hasDiverged: true,
       peakVariance,
       effectiveThreshold

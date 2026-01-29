@@ -16,9 +16,12 @@ interface AnalysisData {
   entropy_trend: number[]
 }
 
+// Unified convergence threshold for all experiments (scientific best practice)
+const CONVERGENCE_THRESHOLD = 0.01
+
 export default function StatisticalSignificance({ experimentId, mutationMode }: StatisticalSignificanceProps) {
-  // Convergence threshold differs by mutation mode
-  const convergenceThreshold = mutationMode === 'ADAPTIVE' ? 0.025 : 0.01
+  // Same threshold for all experiments (fair comparison)
+  const convergenceThreshold = CONVERGENCE_THRESHOLD
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null)
   const [loading, setLoading] = useState(true)
 

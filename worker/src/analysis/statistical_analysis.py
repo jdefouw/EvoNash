@@ -641,30 +641,33 @@ class StatisticalAnalyzer:
         self.control_df = pd.read_csv(control_csv_path, encoding='utf-8')
         self.experimental_df = pd.read_csv(experimental_csv_path, encoding='utf-8')
     
-    # Convergence thresholds differ by mutation mode:
-    # STATIC mutation (CONTROL): 0.01 - uniform mutation leads to homogeneous population
-    # ADAPTIVE mutation (EXPERIMENTAL): 0.025 - fitness-scaled mutation maintains more diversity
-    CONTROL_CONVERGENCE_THRESHOLD = 0.01
-    EXPERIMENTAL_CONVERGENCE_THRESHOLD = 0.025
+    # Unified convergence threshold for BOTH groups (scientific best practice)
+    # Using the same threshold enables fair comparison of convergence generations
+    # The threshold is based on entropy variance stabilization
+    CONVERGENCE_THRESHOLD = 0.01
     
-    def calculate_convergence_generation(self, df: pd.DataFrame, threshold: float = 0.01) -> Optional[int]:
+    # Stability window: require N consecutive generations below threshold
+    # This prevents false positives from noise
+    STABILITY_WINDOW = 20
+    
+    def calculate_convergence_generation(self, df: pd.DataFrame, threshold: float = 0.01, stability_window: int = 20) -> Optional[int]:
         """
-        Calculate generation at which entropy variance drops below threshold.
+        Calculate generation at which entropy variance drops below threshold AND stays there.
         
         IMPORTANT: We need to find convergence AFTER the population has diverged first.
         At generation 0, all agents are identical (same seed), so variance is artificially low.
         True convergence = population evolved, diverged, then stabilized to Nash Equilibrium.
         
-        NOTE: Use different thresholds for different mutation modes:
-        - CONTROL (STATIC mutation): threshold = 0.01 (default)
-        - EXPERIMENTAL (ADAPTIVE mutation): threshold = 0.025 (higher due to maintained diversity)
+        For scientific rigor, we require stability_window consecutive generations below
+        threshold before declaring convergence. This prevents false positives from noise.
         
         Args:
             df: DataFrame with generation data
-            threshold: Entropy variance threshold (default 0.01 for CONTROL/STATIC)
+            threshold: Entropy variance threshold (default 0.01, same for all groups)
+            stability_window: Number of consecutive generations below threshold required (default 20)
             
         Returns:
-            Generation number where convergence occurred, or None if never converged
+            Generation number where stable convergence began, or None if never converged
         """
         if 'entropy_variance' not in df.columns:
             return None
@@ -678,14 +681,74 @@ class StatisticalAnalyzer:
         # Get the generation where divergence first occurred
         first_divergence_gen = int(diverged.iloc[0]['generation'])
         
-        # Now find the first generation AFTER divergence where variance drops below threshold
-        converged_after_divergence = df[
-            (df['generation'] > first_divergence_gen) & 
-            (df['entropy_variance'] < threshold)
-        ]
+        # Filter to generations after divergence
+        after_divergence = df[df['generation'] > first_divergence_gen].copy()
+        if len(after_divergence) < stability_window:
+            return None
         
-        if len(converged_after_divergence) > 0:
-            return int(converged_after_divergence.iloc[0]['generation'])
+        # Find first generation that starts a stable run of stability_window generations below threshold
+        below_threshold = (after_divergence['entropy_variance'] < threshold).values
+        
+        for i in range(len(below_threshold) - stability_window + 1):
+            # Check if we have stability_window consecutive True values
+            if all(below_threshold[i:i + stability_window]):
+                return int(after_divergence.iloc[i]['generation'])
+        
+        return None
+    
+    def calculate_convergence_generation_multi_metric(
+        self, 
+        df: pd.DataFrame, 
+        entropy_threshold: float = 0.01,
+        elo_std_threshold: float = 50.0,
+        stability_window: int = 20
+    ) -> Optional[int]:
+        """
+        Calculate convergence using multiple metrics for more robust Nash equilibrium detection.
+        
+        This method uses a combination of:
+        1. Entropy variance (primary) - policy homogeneity
+        2. Elo standard deviation (secondary) - fitness stability
+        
+        Both metrics must be stable for the stability_window to confirm true Nash equilibrium.
+        
+        Args:
+            df: DataFrame with generation data
+            entropy_threshold: Entropy variance threshold (default 0.01)
+            elo_std_threshold: Elo standard deviation threshold (default 50.0, ~5% of typical range)
+            stability_window: Consecutive generations required below thresholds (default 20)
+            
+        Returns:
+            Generation number where multi-metric convergence occurred, or None if not converged
+        """
+        required_cols = ['entropy_variance', 'std_elo', 'generation']
+        if not all(col in df.columns for col in required_cols):
+            # Fall back to single-metric if std_elo not available
+            return self.calculate_convergence_generation(df, entropy_threshold, stability_window)
+        
+        # First, find where entropy variance exceeds threshold (population diverged)
+        diverged = df[df['entropy_variance'] >= entropy_threshold]
+        if len(diverged) == 0:
+            return None
+        
+        first_divergence_gen = int(diverged.iloc[0]['generation'])
+        
+        # Filter to generations after divergence
+        after_divergence = df[df['generation'] > first_divergence_gen].copy()
+        if len(after_divergence) < stability_window:
+            return None
+        
+        # Check both metrics: entropy variance AND Elo stability
+        entropy_stable = (after_divergence['entropy_variance'] < entropy_threshold).values
+        elo_stable = (after_divergence['std_elo'] < elo_std_threshold).values
+        
+        # Both must be stable
+        both_stable = entropy_stable & elo_stable
+        
+        for i in range(len(both_stable) - stability_window + 1):
+            if all(both_stable[i:i + stability_window]):
+                return int(after_divergence.iloc[i]['generation'])
+        
         return None
     
     def perform_t_test(self) -> Dict:
@@ -755,20 +818,22 @@ class StatisticalAnalyzer:
         """
         Analyze convergence speed for both groups.
         
-        Uses different thresholds for each mutation mode:
-        - CONTROL (STATIC mutation): 0.01 threshold
-        - EXPERIMENTAL (ADAPTIVE mutation): 0.025 threshold
+        Uses the SAME threshold for both groups (scientific best practice for fair comparison).
+        Convergence requires stability_window consecutive generations below threshold.
         
         Returns:
             Dictionary with convergence analysis
         """
+        # Use unified threshold and stability window for both groups
         control_convergence = self.calculate_convergence_generation(
             self.control_df, 
-            threshold=self.CONTROL_CONVERGENCE_THRESHOLD
+            threshold=self.CONVERGENCE_THRESHOLD,
+            stability_window=self.STABILITY_WINDOW
         )
         experimental_convergence = self.calculate_convergence_generation(
             self.experimental_df,
-            threshold=self.EXPERIMENTAL_CONVERGENCE_THRESHOLD
+            threshold=self.CONVERGENCE_THRESHOLD,
+            stability_window=self.STABILITY_WINDOW
         )
         
         acceleration = None
@@ -780,7 +845,9 @@ class StatisticalAnalyzer:
             'experimental_convergence_gen': experimental_convergence,
             'acceleration_percent': acceleration,
             'control_peak_elo': float(self.control_df['peak_elo'].max()),
-            'experimental_peak_elo': float(self.experimental_df['peak_elo'].max())
+            'experimental_peak_elo': float(self.experimental_df['peak_elo'].max()),
+            'threshold_used': self.CONVERGENCE_THRESHOLD,
+            'stability_window': self.STABILITY_WINDOW
         }
     
     def plot_convergence_velocity(self, output_path: str):

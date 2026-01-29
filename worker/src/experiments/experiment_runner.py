@@ -444,9 +444,21 @@ class ExperimentRunner:
         
         return stats
     
+    # Early stopping configuration for Nash equilibrium detection
+    # These are scientifically-grounded values based on convergence research
+    CONVERGENCE_THRESHOLD = 0.01  # Entropy variance threshold
+    STABILITY_WINDOW = 20  # Consecutive generations below threshold required
+    POST_CONVERGENCE_BUFFER = 30  # Additional generations to run after convergence detection
+    ENABLE_EARLY_STOPPING = True  # Set to False to disable early stopping
+    
     def run_experiment(self) -> Dict:
         """
         Run the experiment for the specified generation range.
+        
+        Features early stopping: if Nash equilibrium is detected (entropy variance
+        stable below threshold for STABILITY_WINDOW consecutive generations),
+        the experiment will run for POST_CONVERGENCE_BUFFER additional generations
+        and then stop to save computational resources.
         
         Returns:
             Dictionary with final experiment results
@@ -462,9 +474,18 @@ class ExperimentRunner:
         print(f"Generation range: {self.generation_start} to {self.generation_end} (inclusive)")
         print(f"Batch size: {num_generations} generations")
         print(f"Population size: {self.config.population_size}")
+        if self.ENABLE_EARLY_STOPPING:
+            print(f"Early stopping: ENABLED (threshold={self.CONVERGENCE_THRESHOLD}, window={self.STABILITY_WINDOW})")
+        else:
+            print(f"Early stopping: DISABLED")
         print(f"{'='*80}\n")
         
         stopped = False
+        early_stopped = False
+        convergence_detected_gen = None
+        stability_counter = 0  # Count consecutive generations below threshold
+        has_diverged = False  # Track if population has diverged first
+        
         import time
         experiment_start_time = time.time()
         
@@ -526,6 +547,40 @@ class ExperimentRunner:
                     print(f"Warning: Stop check callback failed: {e}")
                     # Continue execution even if stop check fails
             
+            # Early stopping: detect Nash equilibrium convergence
+            if self.ENABLE_EARLY_STOPPING and not early_stopped:
+                entropy_variance = stats.get('entropy_variance', float('inf'))
+                
+                # First, check if population has diverged (required before convergence can be detected)
+                if not has_diverged and entropy_variance >= self.CONVERGENCE_THRESHOLD:
+                    has_diverged = True
+                    print(f"  📈 Population divergence detected (entropy_variance={entropy_variance:.6f} >= {self.CONVERGENCE_THRESHOLD})")
+                
+                # Only check for convergence after divergence has occurred
+                if has_diverged:
+                    if entropy_variance < self.CONVERGENCE_THRESHOLD:
+                        stability_counter += 1
+                        if stability_counter >= self.STABILITY_WINDOW and convergence_detected_gen is None:
+                            convergence_detected_gen = gen - self.STABILITY_WINDOW + 1
+                            print(f"\n🎯 NASH EQUILIBRIUM DETECTED at generation {convergence_detected_gen}")
+                            print(f"   Entropy variance stable below {self.CONVERGENCE_THRESHOLD} for {self.STABILITY_WINDOW} generations")
+                            print(f"   Running {self.POST_CONVERGENCE_BUFFER} more generations for post-convergence data...")
+                    else:
+                        # Reset counter if variance goes back above threshold
+                        if stability_counter > 0:
+                            print(f"  📉 Stability counter reset (variance {entropy_variance:.6f} >= threshold)")
+                        stability_counter = 0
+                
+                # Check if we should stop (convergence detected + buffer complete)
+                if convergence_detected_gen is not None:
+                    generations_since_convergence = gen - convergence_detected_gen
+                    if generations_since_convergence >= self.POST_CONVERGENCE_BUFFER:
+                        print(f"\n✅ EARLY STOPPING: Nash equilibrium confirmed")
+                        print(f"   Convergence at generation {convergence_detected_gen}")
+                        print(f"   Post-convergence buffer of {self.POST_CONVERGENCE_BUFFER} generations complete")
+                        early_stopped = True
+                        break
+            
             # Detailed stats every 10 generations or first generation in batch
             if (gen - self.generation_start) % 10 == 0 or gen == self.generation_start:
                 print(f"\n{'='*80}")
@@ -550,6 +605,8 @@ class ExperimentRunner:
         
         if stopped:
             print("Experiment stopped by user")
+        elif early_stopped:
+            print(f"Experiment completed early (Nash equilibrium at generation {convergence_detected_gen})")
         else:
             print("Experiment completed!")
         
@@ -557,5 +614,8 @@ class ExperimentRunner:
             'final_stats': self.generation_stats_history[-1] if self.generation_stats_history else {},
             'all_stats': self.generation_stats_history,
             'csv_path': str(self.logger.get_filepath()),
-            'stopped': stopped
+            'stopped': stopped,
+            'early_stopped': early_stopped,
+            'convergence_generation': convergence_detected_gen,
+            'generations_completed': len(self.generation_stats_history)
         }

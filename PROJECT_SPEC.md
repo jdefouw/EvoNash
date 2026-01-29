@@ -22,9 +22,10 @@
     
     > **Note:** The `experiment_group` field automatically determines the `mutation_mode`. Selecting CONTROL enforces STATIC mutation; selecting EXPERIMENTAL enforces ADAPTIVE mutation. This prevents misconfiguration.
 * **Dependent Variables:**
-    * *Convergence Velocity:* $\Delta G$ (Generations) to reach $\Delta \text{Entropy} < 0.01$.
-    * *Peak Fitness:* Max Elo Rating.
+    * *Convergence Velocity (Primary):* Generation number when Nash Equilibrium is reached. Detected when entropy variance stays below threshold (0.01) for 20 consecutive generations. This is the primary metric for the hypothesis test.
+    * *Peak Fitness (Secondary):* Max Elo Rating at convergence.
 * **Constants:** Population Size ($N=1000$), Simulation Rules (Petri Dish), Selection Pressure (Top 20%), Neural Architecture (Input 24 -> Hidden 64 -> Output 4).
+* **Convergence Detection:** Uses a unified threshold of 0.01 for both groups (scientific best practice for fair comparison). Requires 20 consecutive generations of stability to confirm true Nash Equilibrium.
 
 ### 2.3. Mathematical Proofs Implemented
 The code must calculate and log these metrics in real-time:
@@ -101,9 +102,9 @@ The system uses a **Controller-Worker** pattern to decouple visualization from t
 * **Workflow:**
     1.  Request Config (e.g., "Run Experiment Group B").
     2.  Init Population (Random Seed `42`).
-    3.  Loop 1,500 Generations (750 ticks each).
+    3.  Run generations with early stopping: When Nash Equilibrium is detected (entropy variance stable below 0.01 for 20 consecutive generations), run 30 additional generations and stop. Typical convergence: ~80-150 generations.
     4.  Log metrics to CSV.
-    5.  Upload results to Controller.
+    5.  Upload results to Controller (including convergence generation).
 
 ### 4.3. GPU Optimization & Scientific Validity
 

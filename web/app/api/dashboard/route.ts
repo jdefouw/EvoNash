@@ -838,14 +838,22 @@ export interface DashboardData {
   statistics: {
     controlConvergenceGen: number | null
     experimentalConvergenceGen: number | null
-    convergenceImprovement: number | null
+    convergenceImprovement: number | null  // Percentage improvement in convergence speed
     controlFinalElo: number | null
     experimentalFinalElo: number | null
     controlPeakElo: number | null
     experimentalPeakElo: number | null
+    // Primary t-test on Final Elo (secondary metric)
     pValue: number | null
     tStatistic: number | null
     isSignificant: boolean
+    // Convergence generation t-test (PRIMARY hypothesis test)
+    convergencePValue?: number | null
+    convergenceTStatistic?: number | null
+    convergenceIsSignificant?: boolean
+    convergenceControlMean?: number | null  // Mean convergence generation for control
+    convergenceExperimentalMean?: number | null  // Mean convergence generation for experimental
+    // Experiment counts and generations
     totalGenerationsControl: number
     totalGenerationsExperimental: number
     // Statistical power and sample size
@@ -978,16 +986,16 @@ export async function GET() {
       .map((g: Generation) => g.avg_elo)
       .filter((e): e is number => e !== null && e !== undefined)
 
-    // Find convergence points using improved relative threshold detection
-    // This handles cases where variance never exceeds the absolute threshold but clearly converges
+    // Find convergence points using improved detection with stability window
     // 
     // Logic:
     // 1. Find peak entropy variance (must be above minimum to show divergence)
     // 2. Use min(absolute threshold, 5% of peak) for convergence detection
-    // 3. Find when variance drops below effective threshold after peak
+    // 3. Require STABILITY_WINDOW consecutive generations below threshold
     // 
     // IMPORTANT: Both groups use the same threshold for fair comparison
     const CONVERGENCE_THRESHOLD = 0.01
+    const STABILITY_WINDOW = 20  // Require 20 consecutive generations below threshold
     
     const findConvergenceGeneration = (generations: Generation[], absoluteThreshold: number): number | null => {
       if (generations.length < 10) return null
@@ -1013,12 +1021,18 @@ export async function GET() {
       const relativeThreshold = peakVariance * 0.05
       const effectiveThreshold = Math.min(absoluteThreshold, relativeThreshold)
       
-      // Find convergence after peak
-      const convergencePoint = varianceData.slice(peakIndex).find(
-        d => d.variance < effectiveThreshold
-      )
+      // Get data after peak
+      const afterPeak = varianceData.slice(peakIndex)
       
-      return convergencePoint?.gen ?? null
+      // Find first generation that starts a stable run of STABILITY_WINDOW generations below threshold
+      for (let i = 0; i <= afterPeak.length - STABILITY_WINDOW; i++) {
+        const window = afterPeak.slice(i, i + STABILITY_WINDOW)
+        if (window.every(d => d.variance < effectiveThreshold)) {
+          return window[0].gen
+        }
+      }
+      
+      return null
     }
     
     const controlConvergenceGen = findConvergenceGeneration(controlGenerations, CONVERGENCE_THRESHOLD)
@@ -1100,6 +1114,89 @@ export async function GET() {
       controlMean = controlExperimentElos.reduce((a, b) => a + b, 0) / controlExperimentElos.length
       experimentalMean = experimentalExperimentElos.reduce((a, b) => a + b, 0) / experimentalExperimentElos.length
       meanDifference = experimentalMean - controlMean
+    }
+
+    // =========================================================================
+    // CONVERGENCE GENERATION T-TEST (Primary Hypothesis Test)
+    // =========================================================================
+    // This directly tests the hypothesis: "Does adaptive mutation reach Nash
+    // equilibrium in fewer generations than static mutation?"
+    // Each experiment provides ONE data point: its convergence generation.
+    // =========================================================================
+    
+    // Get convergence generation for each experiment
+    const getExperimentConvergenceGens = (experiments: Experiment[], generations: Generation[]): number[] => {
+      return experiments.map(exp => {
+        // Get all generations for this experiment, sorted
+        const expGens = generations
+          .filter(g => g.experiment_id === exp.id)
+          .sort((a, b) => a.generation_number - b.generation_number)
+        
+        if (expGens.length < 10) return null
+        
+        // Apply the same convergence detection logic as findConvergenceGeneration
+        const varianceData = expGens.slice(5)
+          .filter(g => g.entropy_variance != null)
+          .map(g => ({
+            gen: g.generation_number,
+            variance: g.entropy_variance as number
+          }))
+        
+        if (varianceData.length === 0) return null
+        
+        const peakVariance = Math.max(...varianceData.map(d => d.variance))
+        const peakIndex = varianceData.findIndex(d => d.variance === peakVariance)
+        
+        if (peakVariance <= 0.0001) return null
+        
+        const relativeThreshold = peakVariance * 0.05
+        const effectiveThreshold = Math.min(CONVERGENCE_THRESHOLD, relativeThreshold)
+        
+        const afterPeak = varianceData.slice(peakIndex)
+        
+        // Find stable convergence window
+        for (let i = 0; i <= afterPeak.length - STABILITY_WINDOW; i++) {
+          const window = afterPeak.slice(i, i + STABILITY_WINDOW)
+          if (window.every(d => d.variance < effectiveThreshold)) {
+            return window[0].gen
+          }
+        }
+        
+        return null
+      }).filter((gen): gen is number => gen !== null)
+    }
+    
+    const controlConvergenceGens = getExperimentConvergenceGens(controlExperiments, controlGenerations)
+    const experimentalConvergenceGens = getExperimentConvergenceGens(experimentalExperiments, experimentalGenerations)
+    
+    // T-test on convergence generations (PRIMARY hypothesis test)
+    let convergenceTTestResult: TTestResult | null = null
+    let convergencePValue: number | null = null
+    let convergenceTStatistic: number | null = null
+    let convergenceIsSignificant = false
+    let convergenceControlMean: number | null = null
+    let convergenceExperimentalMean: number | null = null
+    let convergenceImprovement: number | null = null
+    
+    if (controlConvergenceGens.length >= 2 && experimentalConvergenceGens.length >= 2) {
+      convergenceTTestResult = welchTTest(controlConvergenceGens, experimentalConvergenceGens)
+      convergencePValue = convergenceTTestResult.pValue
+      convergenceTStatistic = convergenceTTestResult.tStatistic
+      convergenceControlMean = convergenceTTestResult.controlMean
+      convergenceExperimentalMean = convergenceTTestResult.experimentalMean
+      convergenceIsSignificant = convergencePValue < 0.05
+      
+      // Calculate improvement percentage (positive = experimental converges faster)
+      if (convergenceControlMean && convergenceExperimentalMean && convergenceControlMean > 0) {
+        convergenceImprovement = ((convergenceControlMean - convergenceExperimentalMean) / convergenceControlMean) * 100
+      }
+    } else if (controlConvergenceGens.length >= 1 && experimentalConvergenceGens.length >= 1) {
+      // With only 1 experiment per group, report means but no significance test
+      convergenceControlMean = controlConvergenceGens.reduce((a, b) => a + b, 0) / controlConvergenceGens.length
+      convergenceExperimentalMean = experimentalConvergenceGens.reduce((a, b) => a + b, 0) / experimentalConvergenceGens.length
+      if (convergenceControlMean > 0) {
+        convergenceImprovement = ((convergenceControlMean - convergenceExperimentalMean) / convergenceControlMean) * 100
+      }
     }
 
     // Calculate average generations per experiment
@@ -1218,14 +1315,22 @@ export async function GET() {
       statistics: {
         controlConvergenceGen,
         experimentalConvergenceGen,
-        convergenceImprovement,
+        convergenceImprovement,  // From multi-experiment convergence t-test
         controlFinalElo,
         experimentalFinalElo,
         controlPeakElo,
         experimentalPeakElo,
+        // Primary t-test: Final Elo (secondary metric)
         pValue,
         tStatistic,
         isSignificant,
+        // Convergence t-test: Primary hypothesis test
+        convergencePValue,
+        convergenceTStatistic,
+        convergenceIsSignificant,
+        convergenceControlMean,
+        convergenceExperimentalMean,
+        // Experiment counts
         totalGenerationsControl: controlGenerations.length,
         totalGenerationsExperimental: experimentalGenerations.length,
         controlExperimentCount,
