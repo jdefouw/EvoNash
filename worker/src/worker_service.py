@@ -148,6 +148,10 @@ class WorkerService:
         # Ensures only one job can be processed at a time even if threading is re-enabled
         self._job_lock = threading.Lock()
         
+        # Job completion signal from server (Nash equilibrium detected by web app)
+        # This flag is set when the server responds with job_complete=True
+        self._job_complete_signal = False
+        
         # Setup signal handlers for graceful shutdown
         # Windows only supports SIGINT, SIGTERM is Unix-only
         if hasattr(signal, 'SIGINT'):
@@ -506,6 +510,11 @@ class WorkerService:
                 if response.status_code == 200:
                     result = response.json()
                     self.logger.info(f"✅ Successfully uploaded {len(stats_to_upload)} generations ({reason}): {result.get('generations_inserted', 0)} inserted")
+                    
+                    # Check for job completion signal from server (Nash equilibrium detected)
+                    if result.get('job_complete'):
+                        self.logger.info("🎯 Job complete signal received from server - Nash equilibrium reached!")
+                        self._job_complete_signal = True
                 else:
                     self.logger.warning(f"⚠️ Batch upload failed: {response.status_code}")
                     self.logger.warning(f"  Response: {response.text[:200]}")
@@ -544,7 +553,14 @@ class WorkerService:
             Callback function that returns True if experiment should stop
         """
         def stop_check_callback() -> bool:
-            """Check if experiment status is STOPPED or COMPLETED (e.g., equilibrium reached by another worker)."""
+            """Check if experiment should stop (status STOPPED/COMPLETED or job_complete signal received)."""
+            # Check for job completion signal from server (Nash equilibrium detected by web app)
+            # This is the fastest way to know the experiment is done - no network call needed
+            if self._job_complete_signal:
+                self.logger.info(f"Experiment {experiment_id} stopping: job_complete signal received from server")
+                return True
+            
+            # Also check experiment status from API as backup
             status = check_experiment_status(self.controller_url, experiment_id)
             if status == 'STOPPED':
                 self.logger.info(f"Experiment {experiment_id} status is STOPPED, stopping worker")
@@ -785,6 +801,9 @@ class WorkerService:
             self.logger.error("Invalid job: missing experiment_config")
             return
         
+        # Reset job completion signal for new job
+        self._job_complete_signal = False
+        
         # Increment active jobs count BEFORE claiming (atomic reserve)
         # This prevents race conditions where multiple jobs could be claimed simultaneously
         self.active_jobs_count += 1
@@ -922,8 +941,10 @@ class WorkerService:
             # Create generation check callback to avoid duplicate work
             generation_check_callback = self._create_generation_check_callback(experiment_id)
             
-            # Create equilibrium reached callback to notify API when Nash equilibrium is detected
-            equilibrium_reached_callback = self._create_equilibrium_reached_callback(experiment_id)
+            # NOTE: equilibrium_reached_callback is no longer used - Nash equilibrium detection
+            # is now handled by the web app, which signals completion via job_complete in the
+            # /api/results response. The worker stops via the stop_check_callback when it
+            # receives the job_complete signal or when the experiment status is COMPLETED.
             
             # Create checkpoint loader callback for loading checkpoints when skipping generations
             def checkpoint_loader_callback(generation_number: int) -> Optional[Dict]:
@@ -953,7 +974,7 @@ class WorkerService:
                 checkpoint_callback=checkpoint_callback,
                 generation_check_callback=generation_check_callback,
                 checkpoint_loader_callback=checkpoint_loader_callback,
-                equilibrium_reached_callback=equilibrium_reached_callback
+                equilibrium_reached_callback=None  # Disabled: web app handles equilibrium detection
             )
             
             # Load checkpoint state if available

@@ -4,6 +4,82 @@ import { queryOne, queryAll, query, rpc, insertMany } from '@/lib/postgres'
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
 
+// Nash equilibrium detection constants (must match worker values)
+const CONVERGENCE_THRESHOLD = 0.01  // Entropy variance threshold
+const STABILITY_WINDOW = 20         // Consecutive generations below threshold required
+const POST_CONVERGENCE_BUFFER = 30  // Additional generations after convergence before completing
+
+/**
+ * Detect Nash equilibrium based on entropy variance convergence.
+ * 
+ * Algorithm:
+ * 1. Population must first diverge (entropy_variance >= threshold)
+ * 2. Then converge (STABILITY_WINDOW consecutive generations below threshold)
+ * 3. Then have POST_CONVERGENCE_BUFFER additional generations after convergence
+ * 
+ * @param experimentId - The experiment ID to check
+ * @returns Object with equilibriumReached boolean and convergenceGeneration number
+ */
+async function detectEquilibrium(experimentId: string): Promise<{
+  equilibriumReached: boolean
+  convergenceGeneration: number | null
+}> {
+  // Query all generations ordered by generation_number
+  const generations = await queryAll<{ generation_number: number; entropy_variance: number | null }>(
+    `SELECT generation_number, entropy_variance 
+     FROM generations 
+     WHERE experiment_id = $1 
+     ORDER BY generation_number ASC`,
+    [experimentId]
+  )
+  
+  // Need at least STABILITY_WINDOW + POST_CONVERGENCE_BUFFER generations to detect equilibrium
+  if (!generations || generations.length < STABILITY_WINDOW + POST_CONVERGENCE_BUFFER) {
+    return { equilibriumReached: false, convergenceGeneration: null }
+  }
+  
+  // Detection algorithm (same as worker)
+  let hasDiverged = false
+  let stabilityCounter = 0
+  let convergenceGen: number | null = null
+  
+  for (const gen of generations) {
+    const entropyVariance = gen.entropy_variance ?? 0
+    
+    // First check if population has diverged
+    if (!hasDiverged && entropyVariance >= CONVERGENCE_THRESHOLD) {
+      hasDiverged = true
+    }
+    
+    // Only check for convergence after divergence
+    if (hasDiverged) {
+      if (entropyVariance < CONVERGENCE_THRESHOLD) {
+        stabilityCounter++
+        if (stabilityCounter >= STABILITY_WINDOW && convergenceGen === null) {
+          // Convergence detected at this generation minus the stability window
+          convergenceGen = gen.generation_number - STABILITY_WINDOW + 1
+        }
+      } else {
+        // Reset counter if variance goes back above threshold
+        stabilityCounter = 0
+        convergenceGen = null  // Reset convergence if we go back above threshold
+      }
+    }
+  }
+  
+  // Check if we have POST_CONVERGENCE_BUFFER generations after convergence
+  if (convergenceGen !== null) {
+    const maxGen = generations[generations.length - 1].generation_number
+    const gensPastConvergence = maxGen - convergenceGen
+    
+    if (gensPastConvergence >= POST_CONVERGENCE_BUFFER) {
+      return { equilibriumReached: true, convergenceGeneration: convergenceGen }
+    }
+  }
+  
+  return { equilibriumReached: false, convergenceGeneration: null }
+}
+
 // Handle result uploads from workers (supports both single and batch uploads)
 export async function POST(request: NextRequest) {
   try {
@@ -245,74 +321,113 @@ export async function POST(request: NextRequest) {
       [experiment_id]
     )
     
+    // Track whether we should signal job completion to the worker
+    let jobComplete = false
+    
     if (experiment) {
-      // Check if we have all generations
-      const allGenerations = await queryAll<{ generation_number: number }>(
-        'SELECT generation_number FROM generations WHERE experiment_id = $1',
-        [experiment_id]
-      )
-      
-      const generationNums = new Set((allGenerations || []).map((g: any) => g.generation_number))
-      const expectedGenerations = new Set(Array.from({ length: experiment.max_generations }, (_, i) => i))
-      
-      const hasAllGenerations = generationNums.size >= experiment.max_generations && 
-        Array.from(expectedGenerations).every(gen => generationNums.has(gen))
-      
-      const finalGenerationExists = generationNums.has(experiment.max_generations - 1)
-      const hasEnoughGenerations = generationNums.size >= experiment.max_generations
-      const shouldComplete = hasAllGenerations || (finalGenerationExists && hasEnoughGenerations)
-      
-      // Get all job assignments
-      const allAssignments = await queryAll(
-        'SELECT status, started_at, assigned_at FROM job_assignments WHERE experiment_id = $1',
-        [experiment_id]
-      )
-      
-      // Only check for completion if experiment is still RUNNING or PENDING
-      if (shouldComplete && (experiment.status === 'RUNNING' || experiment.status === 'PENDING')) {
-        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
-        const hasActiveAssignments = allAssignments && allAssignments.some((a: any) => {
-          if (a.status === 'assigned') return true
-          if (a.status === 'processing') {
-            const checkTime = a.started_at || a.assigned_at
-            return checkTime && checkTime > tenMinutesAgo
-          }
-          return false
-        })
+      // Check for Nash equilibrium (web app-side detection)
+      // This runs on every results upload and checks if equilibrium conditions are met
+      if (experiment.status === 'RUNNING' || experiment.status === 'PENDING') {
+        const { equilibriumReached, convergenceGeneration } = await detectEquilibrium(experiment_id)
         
-        if (!hasActiveAssignments) {
-          const reason = hasAllGenerations 
-            ? `all ${generationNums.size} generations present`
-            : `final generation ${experiment.max_generations - 1} exists with ${generationNums.size} total`
-          console.log(`[RESULTS] Experiment ${experiment_id} completing: ${reason}`)
+        if (equilibriumReached) {
+          console.log(`[RESULTS] Nash equilibrium detected at generation ${convergenceGeneration}, ${POST_CONVERGENCE_BUFFER}+ generations past, marking COMPLETED`)
+          
+          // Mark experiment as COMPLETED
           await query(
             'UPDATE experiments SET status = $1, completed_at = $2 WHERE id = $3',
             ['COMPLETED', new Date().toISOString(), experiment_id]
           )
-          console.log(`[RESULTS] ✓ Successfully marked experiment ${experiment_id} as COMPLETED`)
+          
+          // Cancel any pending job assignments for this experiment
+          // This prevents other workers from picking up new batches
+          const cancelResult = await query(
+            `UPDATE job_assignments SET status = 'cancelled' 
+             WHERE experiment_id = $1 AND status = 'assigned'
+             RETURNING job_id`,
+            [experiment_id]
+          )
+          
+          const cancelledJobs = cancelResult.rows?.length || 0
+          console.log(`[RESULTS] ✓ Experiment ${experiment_id} marked COMPLETED (Nash equilibrium at gen ${convergenceGeneration})`)
+          console.log(`[RESULTS]   Cancelled ${cancelledJobs} pending job assignments`)
+          
+          // Signal to worker that job is complete
+          jobComplete = true
+        }
+      }
+      
+      // If not completed by equilibrium, check if we have all generations (fallback completion)
+      if (!jobComplete) {
+        const allGenerations = await queryAll<{ generation_number: number }>(
+          'SELECT generation_number FROM generations WHERE experiment_id = $1',
+          [experiment_id]
+        )
+        
+        const generationNums = new Set((allGenerations || []).map((g: any) => g.generation_number))
+        const expectedGenerations = new Set(Array.from({ length: experiment.max_generations }, (_, i) => i))
+        
+        const hasAllGenerations = generationNums.size >= experiment.max_generations && 
+          Array.from(expectedGenerations).every(gen => generationNums.has(gen))
+        
+        const finalGenerationExists = generationNums.has(experiment.max_generations - 1)
+        const hasEnoughGenerations = generationNums.size >= experiment.max_generations
+        const shouldComplete = hasAllGenerations || (finalGenerationExists && hasEnoughGenerations)
+        
+        // Get all job assignments
+        const allAssignments = await queryAll(
+          'SELECT status, started_at, assigned_at FROM job_assignments WHERE experiment_id = $1',
+          [experiment_id]
+        )
+        
+        // Only check for completion if experiment is still RUNNING or PENDING
+        if (shouldComplete && (experiment.status === 'RUNNING' || experiment.status === 'PENDING')) {
+          const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+          const hasActiveAssignments = allAssignments && allAssignments.some((a: any) => {
+            if (a.status === 'assigned') return true
+            if (a.status === 'processing') {
+              const checkTime = a.started_at || a.assigned_at
+              return checkTime && checkTime > tenMinutesAgo
+            }
+            return false
+          })
+          
+          if (!hasActiveAssignments) {
+            const reason = hasAllGenerations 
+              ? `all ${generationNums.size} generations present`
+              : `final generation ${experiment.max_generations - 1} exists with ${generationNums.size} total`
+            console.log(`[RESULTS] Experiment ${experiment_id} completing: ${reason}`)
+            await query(
+              'UPDATE experiments SET status = $1, completed_at = $2 WHERE id = $3',
+              ['COMPLETED', new Date().toISOString(), experiment_id]
+            )
+            console.log(`[RESULTS] ✓ Successfully marked experiment ${experiment_id} as COMPLETED`)
+            jobComplete = true
+          } else {
+            const completedBatches = allAssignments?.filter((a: any) => a.status === 'completed').length || 0
+            const totalBatches = allAssignments?.length || 0
+            const activeBatches = allAssignments?.filter((a: any) => 
+              a.status === 'assigned' || (a.status === 'processing' && (a.started_at || a.assigned_at) > tenMinutesAgo)
+            ).length || 0
+            const missingGenerations = Array.from(expectedGenerations).filter(gen => !generationNums.has(gen))
+            console.log(`[RESULTS] Batch saved. Progress: ${completedBatches}/${totalBatches} batches (${activeBatches} active), ${generationNums.size}/${experiment.max_generations} generations. Missing: ${missingGenerations.length > 0 ? missingGenerations.slice(0, 10).join(',') + (missingGenerations.length > 10 ? '...' : '') : 'none'}`)
+          }
         } else {
           const completedBatches = allAssignments?.filter((a: any) => a.status === 'completed').length || 0
           const totalBatches = allAssignments?.length || 0
-          const activeBatches = allAssignments?.filter((a: any) => 
-            a.status === 'assigned' || (a.status === 'processing' && (a.started_at || a.assigned_at) > tenMinutesAgo)
-          ).length || 0
+          const activeBatches = allAssignments?.filter((a: any) => a.status === 'assigned' || a.status === 'processing').length || 0
           const missingGenerations = Array.from(expectedGenerations).filter(gen => !generationNums.has(gen))
-          console.log(`[RESULTS] Batch saved. Progress: ${completedBatches}/${totalBatches} batches (${activeBatches} active), ${generationNums.size}/${experiment.max_generations} generations. Missing: ${missingGenerations.length > 0 ? missingGenerations.slice(0, 10).join(',') + (missingGenerations.length > 10 ? '...' : '') : 'none'}`)
+          const maxGenInDb = generationNums.size > 0 ? Math.max(...Array.from(generationNums)) : -1
+          console.log(`[RESULTS] Batch saved. Status: ${experiment.status}, Progress: ${completedBatches}/${totalBatches} batches (${activeBatches} active), ${generationNums.size}/${experiment.max_generations} generations (max: ${maxGenInDb}). Missing: ${missingGenerations.length > 0 ? missingGenerations.slice(0, 10).join(',') + (missingGenerations.length > 10 ? '...' : '') : 'none'}`)
         }
-      } else {
-        const completedBatches = allAssignments?.filter((a: any) => a.status === 'completed').length || 0
-        const totalBatches = allAssignments?.length || 0
-        const activeBatches = allAssignments?.filter((a: any) => a.status === 'assigned' || a.status === 'processing').length || 0
-        const missingGenerations = Array.from(expectedGenerations).filter(gen => !generationNums.has(gen))
-        const maxGenInDb = generationNums.size > 0 ? Math.max(...Array.from(generationNums)) : -1
-        console.log(`[RESULTS] Batch saved. Status: ${experiment.status}, Progress: ${completedBatches}/${totalBatches} batches (${activeBatches} active), ${generationNums.size}/${experiment.max_generations} generations (max: ${maxGenInDb}). Missing: ${missingGenerations.length > 0 ? missingGenerations.slice(0, 10).join(',') + (missingGenerations.length > 10 ? '...' : '') : 'none'}`)
       }
     }
     
     return NextResponse.json({ 
       success: true, 
       generations_inserted: insertedGenerations?.length || 0,
-      generation_ids: insertedGenerations?.map((g: any) => g.id) || []
+      generation_ids: insertedGenerations?.map((g: any) => g.id) || [],
+      job_complete: jobComplete  // Signal to worker that experiment is complete
     })
   } catch (error: any) {
     console.error(`[RESULTS] Unexpected error processing upload:`, error)

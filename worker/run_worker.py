@@ -45,8 +45,7 @@ from src.worker_service import WorkerService
 
 def prompt_worker_name(config_path: Path, config: dict) -> dict:
     """
-    Prompt for worker name if not set in config.
-    Also generates worker_id if not present.
+    Always prompt for worker name, showing current name as default.
     Saves updates back to config file.
     
     Args:
@@ -56,39 +55,48 @@ def prompt_worker_name(config_path: Path, config: dict) -> dict:
     Returns:
         Updated config dictionary
     """
-    config_changed = False
-    
     # NOTE: worker_id is now generated per-machine in worker_service.py using machine_id.txt
     # This ensures each machine has a unique ID even if config files are copied
     
-    # Prompt for worker name if not set
-    if not config.get('worker_name'):
-        print("\n" + "=" * 60)
-        print("  EVONASH WORKER SETUP - First Time Configuration")
-        print("=" * 60)
-        print("\nThis name will identify your worker in the dashboard.")
-        print("Examples: 'Gaming-PC', 'Lab-Server-1', 'Home-Desktop'\n")
-        
-        try:
-            worker_name = input("Enter a name for this worker: ").strip()
-        except EOFError:
-            # Running non-interactively (e.g., as a service)
-            worker_name = ""
-        
-        if not worker_name:
+    current_name = config.get('worker_name', '')
+    
+    print("\n" + "=" * 60)
+    print("  EVONASH WORKER - Worker Name")
+    print("=" * 60)
+    print("\nThis name will identify your worker in the dashboard.")
+    print("Examples: 'Gaming-PC', 'Lab-Server-1', 'Home-Desktop'\n")
+    
+    if current_name:
+        print(f"Current worker name: {current_name}")
+        print("Press Enter to keep current name, or type a new name.\n")
+    
+    try:
+        prompt = "Enter worker name: " if not current_name else "Enter new name (or press Enter to keep current): "
+        worker_name = input(prompt).strip()
+    except EOFError:
+        # Running non-interactively (e.g., as a service)
+        worker_name = ""
+    
+    if not worker_name:
+        if current_name:
+            # Keep current name
+            worker_name = current_name
+            print(f"Keeping current name: {worker_name}")
+        else:
             # Generate a default name using random suffix
             worker_name = f"Worker-{uuid.uuid4().hex[:8]}"
             print(f"Using default name: {worker_name}")
-        
-        config['worker_name'] = worker_name
-        config_changed = True
-        print(f"\nWorker name set to: {worker_name}")
-        print("=" * 60 + "\n")
+    else:
+        print(f"Worker name set to: {worker_name}")
     
-    # Save config if changed
-    if config_changed:
+    # Save config if name changed
+    if worker_name != current_name:
+        config['worker_name'] = worker_name
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2)
+        print("Configuration saved.")
+    
+    print("=" * 60 + "\n")
     
     return config
 
@@ -109,9 +117,9 @@ def main():
         help='Set worker name (overrides config and skips prompt)'
     )
     parser.add_argument(
-        '--reset-name',
+        '--no-prompt',
         action='store_true',
-        help='Clear saved worker name and prompt for a new one'
+        help='Skip worker name prompt and use existing config value'
     )
     
     args = parser.parse_args()
@@ -133,22 +141,24 @@ def main():
     with open(config_path, 'r', encoding='utf-8') as f:
         config = json.load(f)
     
-    # If --reset-name flag provided, clear the worker name to force re-prompt
-    if args.reset_name:
-        config['worker_name'] = None
-        with open(config_path, 'w', encoding='utf-8') as f:
-            json.dump(config, f, indent=2)
-        print("Worker name cleared. You will be prompted for a new name.")
-    
-    # If --name argument provided, use it directly
+    # If --name argument provided, use it directly (skip prompt)
     if args.name:
         config['worker_name'] = args.name
-        # NOTE: worker_id is now generated per-machine in worker_service.py using machine_id.txt
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2)
         print(f"Worker name set to: {args.name}")
+    elif args.no_prompt:
+        # Skip prompt, use existing config value
+        if config.get('worker_name'):
+            print(f"Using configured worker name: {config['worker_name']}")
+        else:
+            # No name set and no prompt - generate default
+            config['worker_name'] = f"Worker-{uuid.uuid4().hex[:8]}"
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2)
+            print(f"Generated worker name: {config['worker_name']}")
     else:
-        # Interactive prompt for name if not set
+        # Always prompt for worker name (shows current name as default)
         config = prompt_worker_name(config_path, config)
     
     # Create and run worker service

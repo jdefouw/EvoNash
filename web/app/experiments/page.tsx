@@ -90,6 +90,31 @@ export default function ExperimentsPage() {
     return group === 'CONTROL' ? 'text-blue-600 dark:text-blue-400' : 'text-purple-600 dark:text-purple-400'
   }
 
+  // Get sort priority for experiment status (lower = higher priority)
+  const getStatusSortOrder = (status: string) => {
+    switch (status) {
+      case 'RUNNING': return 0   // Running first
+      case 'COMPLETED': return 1 // Completed second
+      case 'PENDING': return 2   // Pending third
+      case 'FAILED': return 3    // Failed fourth
+      case 'STOPPED': return 4   // Stopped last
+      default: return 5
+    }
+  }
+
+  // Sort experiments: RUNNING first, COMPLETED second, PENDING last, then by created_at desc within each group
+  const sortedExperiments = [...experiments].sort((a, b) => {
+    const statusOrderA = getStatusSortOrder(a.status)
+    const statusOrderB = getStatusSortOrder(b.status)
+    
+    if (statusOrderA !== statusOrderB) {
+      return statusOrderA - statusOrderB
+    }
+    
+    // Within same status, sort by created_at descending (newest first)
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  })
+
   const handleDelete = async (e: React.MouseEvent, expId: string, expName: string, expStatus: string) => {
     e.preventDefault()
     e.stopPropagation()
@@ -257,7 +282,7 @@ export default function ExperimentsPage() {
         {showWorkers && <WorkerList className="mb-8" />}
 
         <div className="grid gap-4">
-          {experiments.length === 0 ? (
+          {sortedExperiments.length === 0 ? (
             <div className="p-12 text-center border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800">
               <p className="text-gray-600 dark:text-gray-400 mb-4">No experiments yet.</p>
               <Link
@@ -268,7 +293,7 @@ export default function ExperimentsPage() {
               </Link>
             </div>
           ) : (
-            experiments.map((exp) => (
+            sortedExperiments.map((exp) => (
               <Link
                 key={exp.id}
                 href={`/experiments/${exp.id}`}
