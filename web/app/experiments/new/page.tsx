@@ -9,6 +9,8 @@ export default function NewExperimentPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [bulkMode, setBulkMode] = useState(false)
+  const [bulkCount, setBulkCount] = useState(10)
   
   const [formData, setFormData] = useState({
     experiment_name: '',
@@ -46,7 +48,9 @@ export default function NewExperimentPage() {
             input_size: 24,
             hidden_layers: [64],
             output_size: 4
-          }
+          },
+          // Include bulk mode parameters
+          bulk_count: bulkMode ? bulkCount : undefined
         }),
       })
 
@@ -59,7 +63,13 @@ export default function NewExperimentPage() {
       }
 
       const data = await response.json()
-      router.push(`/experiments/${data.experiment.id}`)
+      
+      // If bulk mode, redirect to experiments list; otherwise to single experiment
+      if (bulkMode && data.experiments) {
+        router.push(`/experiments?created=${data.experiments.length}`)
+      } else {
+        router.push(`/experiments/${data.experiment.id}`)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create experiment')
       setLoading(false)
@@ -143,9 +153,12 @@ export default function NewExperimentPage() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <Tooltip content="A descriptive name for this experiment run. Include the group type and seed for easy identification (e.g., 'Control Run - Seed 42').">
+              <Tooltip content={bulkMode 
+                ? "Base name for bulk experiments. Numbers will be appended (e.g., 'CONTROL' becomes 'CONTROL 1', 'CONTROL 2', etc.)"
+                : "A descriptive name for this experiment run. Include the group type and seed for easy identification (e.g., 'Control Run - Seed 42')."
+              }>
                 <label htmlFor="experiment_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                  Experiment Name *
+                  {bulkMode ? 'Base Experiment Name *' : 'Experiment Name *'}
                 </label>
               </Tooltip>
               <input
@@ -156,8 +169,53 @@ export default function NewExperimentPage() {
                 value={formData.experiment_name}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                placeholder="e.g., Control Run - Seed 42"
+                placeholder={bulkMode ? "e.g., CONTROL" : "e.g., Control Run - Seed 42"}
               />
+              {bulkMode && formData.experiment_name && (
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  Will create: {formData.experiment_name} 1, {formData.experiment_name} 2, ... {formData.experiment_name} {bulkCount}
+                </p>
+              )}
+            </div>
+
+            {/* Bulk Add Section */}
+            <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="bulk_mode"
+                  checked={bulkMode}
+                  onChange={(e) => setBulkMode(e.target.checked)}
+                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                />
+                <Tooltip content="Create multiple experiments at once with sequential naming (e.g., CONTROL 1, CONTROL 2, etc.). Useful for setting up large experiment batches.">
+                  <label htmlFor="bulk_mode" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-help">
+                    Bulk Add Experiments
+                  </label>
+                </Tooltip>
+              </div>
+              
+              {bulkMode && (
+                <div className="mt-4">
+                  <Tooltip content="Number of experiments to create (1-100). Each experiment will be named with a sequential number appended to the base name.">
+                    <label htmlFor="bulk_count" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                      Number of Experiments to Create
+                    </label>
+                  </Tooltip>
+                  <input
+                    type="number"
+                    id="bulk_count"
+                    min="1"
+                    max="100"
+                    value={bulkCount}
+                    onChange={(e) => setBulkCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Maximum 100 experiments per bulk operation
+                  </p>
+                </div>
+              )}
             </div>
 
             <div>
@@ -339,7 +397,10 @@ export default function NewExperimentPage() {
                 disabled={loading}
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Creating...' : 'Create Experiment'}
+                {loading 
+                  ? (bulkMode ? `Creating ${bulkCount} Experiments...` : 'Creating...') 
+                  : (bulkMode ? `Create ${bulkCount} Experiments` : 'Create Experiment')
+                }
               </button>
               <Link
                 href="/experiments"

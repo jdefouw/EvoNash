@@ -41,10 +41,17 @@ export async function POST(request: NextRequest) {
     }
     
     // Find experiments with status PENDING or RUNNING
+    // Use interleaved ordering: alternate between CONTROL and EXPERIMENTAL experiments
+    // This ensures workers process both groups fairly (CONTROL 1, EXPERIMENTAL 1, CONTROL 2, EXPERIMENTAL 2, ...)
     const experiments = await queryAll(
-      `SELECT * FROM experiments 
-       WHERE status IN ('PENDING', 'RUNNING') 
-       ORDER BY created_at ASC`
+      `WITH ranked_experiments AS (
+        SELECT *,
+          ROW_NUMBER() OVER (PARTITION BY experiment_group ORDER BY created_at ASC) as group_rank
+        FROM experiments
+        WHERE status IN ('PENDING', 'RUNNING')
+      )
+      SELECT * FROM ranked_experiments
+      ORDER BY group_rank ASC, experiment_group ASC`
     )
     
     if (!experiments || experiments.length === 0) {
@@ -53,6 +60,15 @@ export async function POST(request: NextRequest) {
         { error: 'No pending experiments available' },
         { status: 404 }
       )
+    }
+    
+    // Log the interleaved experiment order
+    console.log(`[QUEUE] Interleaved experiment order (${experiments.length} experiments):`)
+    experiments.slice(0, 10).forEach((exp: any, idx: number) => {
+      console.log(`[QUEUE]   ${idx + 1}. ${exp.experiment_name} (${exp.experiment_group})`)
+    })
+    if (experiments.length > 10) {
+      console.log(`[QUEUE]   ... and ${experiments.length - 10} more`)
     }
 
     // Experiment affinity: when worker has no active batch, prefer the experiment they last completed a job for
