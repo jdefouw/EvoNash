@@ -81,11 +81,13 @@ The system uses a **Controller-Worker** pattern to decouple visualization from t
 
 ### 4.1. The Controller (Web - Next.js)
 * **Role:** Dashboard, Experiment Orchestrator, Database Viewer.
-* **Stack:** Next.js, TypeScript, TailwindCSS, Recharts.
-* **Database:** PostgreSQL + TimescaleDB (for handling million-row time-series data).
+* **Stack:** Next.js 14, TypeScript, TailwindCSS, Recharts.
+* **Deployment:** Debian server with nginx reverse proxy and PM2 process manager.
+* **Database:** PostgreSQL 16 (direct connection via `pg` library).
 * **API Routes:**
-    * `POST /api/jobs`: Worker requests a simulation config.
-    * `POST /api/results`: Worker uploads "Generation Stats" (CSV/JSON blob).
+    * `POST /api/queue`: Worker requests a job assignment.
+    * `POST /api/results`: Worker uploads "Generation Stats" (JSON).
+    * `POST /api/workers/register`: Worker registration and heartbeat.
 
 ### 4.2. The Worker (Compute - Python)
 * **Role:** The "Lab Bench." Runs the biological simulation and GA loop.
@@ -151,22 +153,26 @@ These tests compare outputs from optimized vs. legacy implementations:
 
 ---
 
-## 5. Development Roadmap (Cursor Prompting Strategy)
+## 5. Development Roadmap (Completed)
 
-### Phase 1: The Lab Bench (Python Core)
-1.  Implement `VectorEnv` class (The Petri Dish physics).
-2.  Implement `Agent` class (PyTorch Neural Network).
-3.  Create `ExperimentRunner` class that handles the `Seed` and `MutationMode` logic.
+> **Note:** This roadmap reflects the original development plan. All phases have been completed.
 
-### Phase 2: The Data Pipeline (API)
-1.  Design PostgreSQL Schema:
-    * `Experiments` (id, type, status)
-    * `Generations` (experiment_id, gen_number, avg_elo, entropy, timestamp)
-2.  Build the Next.js API to accept these streams.
+### Phase 1: The Lab Bench (Python Core) ✓
+1.  ✓ Implemented `VectorizedPetriDish` class (optimized physics with CUDA).
+2.  ✓ Implemented `BatchedNetworkEnsemble` class (PyTorch Neural Network with batched inference).
+3.  ✓ Created `ExperimentRunner` and `OptimizedExperimentRunner` classes with `Seed` and `MutationMode` logic.
 
-### Phase 3: The Dashboard (UI)
-1.  Build "Comparative Graph" component (Group A vs Group B lines).
-2.  Build "Replay Viewer" (HTML5 Canvas to render a saved match JSON).
+### Phase 2: The Data Pipeline (API) ✓
+1.  ✓ Designed PostgreSQL Schema:
+    * `experiments` (id, group, mutation_mode, status, etc.)
+    * `generations` (experiment_id, generation_number, avg_elo, policy_entropy, etc.)
+    * `workers`, `job_assignments`, `experiment_checkpoints`
+2.  ✓ Built Next.js API routes for job distribution, results upload, and worker management.
+
+### Phase 3: The Dashboard (UI) ✓
+1.  ✓ Built "Comparative Chart" component (Control vs Experimental groups).
+2.  ✓ Built "Petri Dish Viewer" (HTML5 Canvas simulation visualization).
+3.  ✓ Built science fair dashboard with statistical analysis and dynamic conclusions.
 
 ---
 

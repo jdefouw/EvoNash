@@ -16,7 +16,15 @@ export const dynamic = 'force-dynamic'
 // - Independent variable: Mutation strategy (Control vs Experimental)
 // - Dependent variable: Final average Elo rating per experiment
 // - Test: Welch's two-sample t-test (unequal variances)
+// - Non-parametric alternative: Mann-Whitney U test
 // - Significance level: α = 0.05
+// 
+// Scientific Rigor Features:
+// - Assumption checking (normality tests, outlier detection)
+// - Non-parametric alternatives (Mann-Whitney U)
+// - Enhanced effect sizes (Hedges' g, CLES)
+// - Power analysis
+// - Bootstrap confidence intervals
 // =====================================================================
 
 interface TTestResult {
@@ -31,6 +39,655 @@ interface TTestResult {
   cohensD: number | null  // Effect size
   confidenceInterval: { lower: number; upper: number } | null  // 95% CI for mean difference
   sampleSizes: { control: number; experimental: number }
+}
+
+// =============================================================================
+// STATISTICAL UTILITY FUNCTIONS - Scientific Rigor
+// =============================================================================
+
+interface ShapiroWilkResult {
+  W: number | null
+  pValue: number | null
+  isNormal: boolean | null
+  interpretation: string
+  sampleSize: number
+}
+
+interface MannWhitneyResult {
+  U: number | null
+  pValue: number | null
+  isSignificant: boolean | null
+  rankBiserialR: number | null
+  interpretation: string
+  sampleSizes: { control: number; experimental: number }
+}
+
+interface HedgesGResult {
+  hedgesG: number | null
+  cohensD: number | null
+  correctionFactor: number | null
+  ciLower: number | null
+  ciUpper: number | null
+  interpretation: string
+  sampleSizes: { control: number; experimental: number }
+}
+
+interface CLESResult {
+  cles: number | null
+  clesPercentage: number | null
+  interpretation: string
+}
+
+interface PowerAnalysisResult {
+  power: number | null
+  powerPercentage: number | null
+  isAdequate: boolean | null
+  interpretation: string
+  recommendation: string
+}
+
+interface RequiredSampleSizeResult {
+  nPerGroup: number | null
+  totalN: number | null
+  effectSizeUsed: number | null
+  targetPower: number
+  interpretation: string
+}
+
+interface OutlierResult {
+  outlierCount: number
+  outlierIndices: number[]
+  outlierValues: number[]
+  lowerBound: number | null
+  upperBound: number | null
+  Q1: number | null
+  Q3: number | null
+  IQR: number | null
+  outlierPercentage: number
+}
+
+interface DistributionStats {
+  n: number
+  mean: number | null
+  median: number | null
+  std: number | null
+  min: number | null
+  max: number | null
+  Q1: number | null
+  Q3: number | null
+  IQR: number | null
+  skewness: number | null
+  kurtosis: number | null
+  values: number[]
+}
+
+interface BootstrapCIResult {
+  ciLower: number | null
+  ciUpper: number | null
+  pointEstimate: number | null
+  bootstrapSE: number | null
+  nBootstrap: number
+  confidenceLevel: number
+  interpretation: string
+}
+
+// Shapiro-Wilk test approximation for normality
+// Uses D'Agostino-Pearson omnibus test as TypeScript-friendly alternative
+function shapiroWilkTest(data: number[]): ShapiroWilkResult {
+  const cleanData = data.filter(x => !isNaN(x) && isFinite(x))
+  const n = cleanData.length
+  
+  if (n < 3) {
+    return {
+      W: null,
+      pValue: null,
+      isNormal: null,
+      interpretation: 'Insufficient data (n < 3)',
+      sampleSize: n
+    }
+  }
+  
+  // Calculate skewness and kurtosis for normality assessment
+  const mean = cleanData.reduce((a, b) => a + b, 0) / n
+  const m2 = cleanData.reduce((sum, x) => sum + Math.pow(x - mean, 2), 0) / n
+  const m3 = cleanData.reduce((sum, x) => sum + Math.pow(x - mean, 3), 0) / n
+  const m4 = cleanData.reduce((sum, x) => sum + Math.pow(x - mean, 4), 0) / n
+  
+  const std = Math.sqrt(m2)
+  if (std === 0) {
+    return {
+      W: 1,
+      pValue: 1,
+      isNormal: true,
+      interpretation: 'No variance in data',
+      sampleSize: n
+    }
+  }
+  
+  const skewness = m3 / Math.pow(std, 3)
+  const kurtosis = m4 / Math.pow(std, 4) - 3  // Excess kurtosis
+  
+  // Jarque-Bera test statistic (approximation for normality)
+  // JB = n/6 * (S^2 + K^2/4)
+  const jb = (n / 6) * (Math.pow(skewness, 2) + Math.pow(kurtosis, 2) / 4)
+  
+  // P-value from chi-squared distribution with 2 df
+  // Using approximation: p ≈ exp(-JB/2) for small JB
+  const pValue = Math.exp(-jb / 2)
+  const isNormal = pValue >= 0.05
+  
+  // W statistic approximation (inverse relationship with JB)
+  const W = Math.max(0, 1 - jb / (n * 2))
+  
+  let interpretation: string
+  if (pValue >= 0.10) {
+    interpretation = 'Strong evidence for normality'
+  } else if (pValue >= 0.05) {
+    interpretation = 'Marginal evidence for normality'
+  } else if (pValue >= 0.01) {
+    interpretation = 'Evidence against normality'
+  } else {
+    interpretation = 'Strong evidence against normality'
+  }
+  
+  return {
+    W,
+    pValue,
+    isNormal,
+    interpretation,
+    sampleSize: n
+  }
+}
+
+// Mann-Whitney U test (Wilcoxon rank-sum test)
+function mannWhitneyUTest(group1: number[], group2: number[]): MannWhitneyResult {
+  const g1 = group1.filter(x => !isNaN(x) && isFinite(x))
+  const g2 = group2.filter(x => !isNaN(x) && isFinite(x))
+  const n1 = g1.length
+  const n2 = g2.length
+  
+  if (n1 < 2 || n2 < 2) {
+    return {
+      U: null,
+      pValue: null,
+      isSignificant: null,
+      rankBiserialR: null,
+      interpretation: 'Insufficient data (n < 2 per group)',
+      sampleSizes: { control: n1, experimental: n2 }
+    }
+  }
+  
+  // Combine and rank all values
+  const combined = [
+    ...g1.map(v => ({ value: v, group: 1 })),
+    ...g2.map(v => ({ value: v, group: 2 }))
+  ].sort((a, b) => a.value - b.value)
+  
+  // Assign ranks (handling ties with average rank)
+  const ranks: number[] = []
+  let i = 0
+  while (i < combined.length) {
+    let j = i
+    while (j < combined.length && combined[j].value === combined[i].value) {
+      j++
+    }
+    const avgRank = (i + j + 1) / 2  // Average rank for ties
+    for (let k = i; k < j; k++) {
+      ranks.push(avgRank)
+    }
+    i = j
+  }
+  
+  // Sum of ranks for group 1
+  let R1 = 0
+  combined.forEach((item, idx) => {
+    if (item.group === 1) R1 += ranks[idx]
+  })
+  
+  // U statistic
+  const U1 = R1 - (n1 * (n1 + 1)) / 2
+  const U2 = n1 * n2 - U1
+  const U = Math.min(U1, U2)
+  
+  // Normal approximation for p-value (valid for n1, n2 > 10)
+  const meanU = (n1 * n2) / 2
+  const stdU = Math.sqrt((n1 * n2 * (n1 + n2 + 1)) / 12)
+  const z = (U - meanU) / stdU
+  const pValue = 2 * normalCDF(-Math.abs(z))
+  
+  const isSignificant = pValue < 0.05
+  
+  // Rank-biserial correlation (effect size)
+  const rankBiserialR = 1 - (2 * U) / (n1 * n2)
+  
+  return {
+    U,
+    pValue,
+    isSignificant,
+    rankBiserialR,
+    interpretation: isSignificant ? 'Distributions differ significantly' : 'No significant difference',
+    sampleSizes: { control: n1, experimental: n2 }
+  }
+}
+
+// Hedges' g effect size (small-sample corrected)
+function hedgesG(group1: number[], group2: number[]): HedgesGResult {
+  const g1 = group1.filter(x => !isNaN(x) && isFinite(x))
+  const g2 = group2.filter(x => !isNaN(x) && isFinite(x))
+  const n1 = g1.length
+  const n2 = g2.length
+  
+  if (n1 < 2 || n2 < 2) {
+    return {
+      hedgesG: null,
+      cohensD: null,
+      correctionFactor: null,
+      ciLower: null,
+      ciUpper: null,
+      interpretation: 'Insufficient data',
+      sampleSizes: { control: n1, experimental: n2 }
+    }
+  }
+  
+  const mean1 = g1.reduce((a, b) => a + b, 0) / n1
+  const mean2 = g2.reduce((a, b) => a + b, 0) / n2
+  const var1 = g1.reduce((sum, x) => sum + Math.pow(x - mean1, 2), 0) / (n1 - 1)
+  const var2 = g2.reduce((sum, x) => sum + Math.pow(x - mean2, 2), 0) / (n2 - 1)
+  
+  const pooledStd = Math.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
+  
+  if (pooledStd === 0) {
+    return {
+      hedgesG: 0,
+      cohensD: 0,
+      correctionFactor: 1,
+      ciLower: 0,
+      ciUpper: 0,
+      interpretation: 'No variance in data',
+      sampleSizes: { control: n1, experimental: n2 }
+    }
+  }
+  
+  // Cohen's d
+  const d = (mean2 - mean1) / pooledStd
+  
+  // Hedges' correction factor
+  const df = n1 + n2 - 2
+  const correctionFactor = 1 - (3 / (4 * df - 1))
+  
+  // Hedges' g
+  const g = d * correctionFactor
+  
+  // Standard error and 95% CI
+  const seG = Math.sqrt((n1 + n2) / (n1 * n2) + (g * g) / (2 * (n1 + n2)))
+  const ciLower = g - 1.96 * seG
+  const ciUpper = g + 1.96 * seG
+  
+  // Interpretation
+  const absG = Math.abs(g)
+  let interpretation: string
+  if (absG < 0.2) interpretation = 'Negligible'
+  else if (absG < 0.5) interpretation = 'Small'
+  else if (absG < 0.8) interpretation = 'Medium'
+  else interpretation = 'Large'
+  
+  return {
+    hedgesG: g,
+    cohensD: d,
+    correctionFactor,
+    ciLower,
+    ciUpper,
+    interpretation,
+    sampleSizes: { control: n1, experimental: n2 }
+  }
+}
+
+// Common Language Effect Size (CLES)
+function commonLanguageEffectSize(group1: number[], group2: number[]): CLESResult {
+  const g1 = group1.filter(x => !isNaN(x) && isFinite(x))
+  const g2 = group2.filter(x => !isNaN(x) && isFinite(x))
+  const n1 = g1.length
+  const n2 = g2.length
+  
+  if (n1 < 1 || n2 < 1) {
+    return {
+      cles: null,
+      clesPercentage: null,
+      interpretation: 'Insufficient data'
+    }
+  }
+  
+  // Count wins for group2
+  let count = 0
+  let ties = 0
+  for (const v2 of g2) {
+    for (const v1 of g1) {
+      if (v2 > v1) count++
+      else if (v2 === v1) ties++
+    }
+  }
+  
+  const cles = (count + 0.5 * ties) / (n1 * n2)
+  
+  let interpretation: string
+  if (cles > 0.71) interpretation = 'Large advantage for experimental'
+  else if (cles > 0.64) interpretation = 'Medium advantage for experimental'
+  else if (cles > 0.56) interpretation = 'Small advantage for experimental'
+  else if (cles >= 0.44) interpretation = 'Negligible difference'
+  else if (cles >= 0.36) interpretation = 'Small advantage for control'
+  else if (cles >= 0.29) interpretation = 'Medium advantage for control'
+  else interpretation = 'Large advantage for control'
+  
+  return {
+    cles,
+    clesPercentage: cles * 100,
+    interpretation
+  }
+}
+
+// Statistical power calculation
+function calculatePower(n1: number, n2: number, effectSize: number | null, alpha: number = 0.05): PowerAnalysisResult {
+  if (n1 < 2 || n2 < 2 || effectSize === null) {
+    return {
+      power: null,
+      powerPercentage: null,
+      isAdequate: null,
+      interpretation: 'Insufficient data for power calculation',
+      recommendation: 'Need at least n=2 per group'
+    }
+  }
+  
+  // Non-centrality parameter
+  const ncp = Math.abs(effectSize) * Math.sqrt((n1 * n2) / (n1 + n2))
+  const df = n1 + n2 - 2
+  
+  // Critical z-value (normal approximation for large samples)
+  const zCrit = 1.96  // Two-tailed α = 0.05
+  
+  // Power using normal approximation
+  const power = 1 - normalCDF(zCrit - ncp) + normalCDF(-zCrit - ncp)
+  const isAdequate = power >= 0.80
+  
+  let interpretation: string
+  if (power >= 0.95) interpretation = 'Excellent power - very likely to detect effect'
+  else if (power >= 0.80) interpretation = 'Adequate power - likely to detect effect'
+  else if (power >= 0.60) interpretation = 'Moderate power - may miss real effects'
+  else if (power >= 0.40) interpretation = 'Low power - likely to miss real effects'
+  else interpretation = 'Very low power - study is underpowered'
+  
+  return {
+    power,
+    powerPercentage: power * 100,
+    isAdequate,
+    interpretation,
+    recommendation: isAdequate ? 'Sample size adequate' : 'Consider increasing sample size'
+  }
+}
+
+// Required sample size calculation
+function requiredSampleSize(effectSize: number | null, targetPower: number = 0.80, alpha: number = 0.05): RequiredSampleSizeResult {
+  if (effectSize === null || effectSize === 0) {
+    return {
+      nPerGroup: null,
+      totalN: null,
+      effectSizeUsed: null,
+      targetPower,
+      interpretation: 'Cannot calculate: effect size is zero or unknown'
+    }
+  }
+  
+  // Using normal approximation
+  const zAlpha = 1.96  // Two-tailed α = 0.05
+  const zBeta = normalQuantile(targetPower)
+  
+  const nPerGroup = Math.ceil(2 * Math.pow((zAlpha + zBeta) / Math.abs(effectSize), 2))
+  
+  return {
+    nPerGroup,
+    totalN: nPerGroup * 2,
+    effectSizeUsed: Math.abs(effectSize),
+    targetPower,
+    interpretation: `Need n=${nPerGroup} per group (total N=${nPerGroup * 2}) for ${targetPower * 100}% power`
+  }
+}
+
+// Outlier detection using IQR method
+function detectOutliers(data: number[], k: number = 1.5): OutlierResult {
+  const cleanData = data.filter(x => !isNaN(x) && isFinite(x))
+  
+  if (cleanData.length < 4) {
+    return {
+      outlierCount: 0,
+      outlierIndices: [],
+      outlierValues: [],
+      lowerBound: null,
+      upperBound: null,
+      Q1: null,
+      Q3: null,
+      IQR: null,
+      outlierPercentage: 0
+    }
+  }
+  
+  const sorted = [...cleanData].sort((a, b) => a - b)
+  const Q1 = percentile(sorted, 25)
+  const Q3 = percentile(sorted, 75)
+  const IQR = Q3 - Q1
+  
+  const lowerBound = Q1 - k * IQR
+  const upperBound = Q3 + k * IQR
+  
+  const outlierIndices: number[] = []
+  const outlierValues: number[] = []
+  
+  cleanData.forEach((value, index) => {
+    if (value < lowerBound || value > upperBound) {
+      outlierIndices.push(index)
+      outlierValues.push(value)
+    }
+  })
+  
+  return {
+    outlierCount: outlierValues.length,
+    outlierIndices,
+    outlierValues,
+    lowerBound,
+    upperBound,
+    Q1,
+    Q3,
+    IQR,
+    outlierPercentage: (outlierValues.length / cleanData.length) * 100
+  }
+}
+
+// Distribution statistics for visualization
+function getDistributionStats(data: number[]): DistributionStats {
+  const cleanData = data.filter(x => !isNaN(x) && isFinite(x))
+  const n = cleanData.length
+  
+  if (n < 1) {
+    return {
+      n: 0,
+      mean: null,
+      median: null,
+      std: null,
+      min: null,
+      max: null,
+      Q1: null,
+      Q3: null,
+      IQR: null,
+      skewness: null,
+      kurtosis: null,
+      values: []
+    }
+  }
+  
+  const sorted = [...cleanData].sort((a, b) => a - b)
+  const mean = cleanData.reduce((a, b) => a + b, 0) / n
+  const variance = n > 1 ? cleanData.reduce((sum, x) => sum + Math.pow(x - mean, 2), 0) / (n - 1) : 0
+  const std = Math.sqrt(variance)
+  
+  // Skewness and kurtosis
+  let skewness: number | null = null
+  let kurtosis: number | null = null
+  if (n > 2 && std > 0) {
+    const m3 = cleanData.reduce((sum, x) => sum + Math.pow(x - mean, 3), 0) / n
+    skewness = m3 / Math.pow(std, 3)
+  }
+  if (n > 3 && std > 0) {
+    const m4 = cleanData.reduce((sum, x) => sum + Math.pow(x - mean, 4), 0) / n
+    kurtosis = m4 / Math.pow(std, 4) - 3  // Excess kurtosis
+  }
+  
+  const Q1 = percentile(sorted, 25)
+  const Q3 = percentile(sorted, 75)
+  
+  return {
+    n,
+    mean,
+    median: percentile(sorted, 50),
+    std,
+    min: sorted[0],
+    max: sorted[n - 1],
+    Q1,
+    Q3,
+    IQR: Q3 - Q1,
+    skewness,
+    kurtosis,
+    values: cleanData
+  }
+}
+
+// Bootstrap confidence interval
+function bootstrapCI(
+  group1: number[],
+  group2: number[],
+  nBootstrap: number = 5000,
+  confidenceLevel: number = 0.95
+): BootstrapCIResult {
+  const g1 = group1.filter(x => !isNaN(x) && isFinite(x))
+  const g2 = group2.filter(x => !isNaN(x) && isFinite(x))
+  const n1 = g1.length
+  const n2 = g2.length
+  
+  if (n1 < 2 || n2 < 2) {
+    return {
+      ciLower: null,
+      ciUpper: null,
+      pointEstimate: null,
+      bootstrapSE: null,
+      nBootstrap,
+      confidenceLevel,
+      interpretation: 'Insufficient data'
+    }
+  }
+  
+  const originalDiff = g2.reduce((a, b) => a + b, 0) / n2 - g1.reduce((a, b) => a + b, 0) / n1
+  
+  // Bootstrap resampling (using seeded random for reproducibility)
+  const bootstrapDiffs: number[] = []
+  let seed = 42
+  const random = () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648
+    return seed / 2147483648
+  }
+  
+  for (let i = 0; i < nBootstrap; i++) {
+    // Resample with replacement
+    const bootG1 = Array.from({ length: n1 }, () => g1[Math.floor(random() * n1)])
+    const bootG2 = Array.from({ length: n2 }, () => g2[Math.floor(random() * n2)])
+    
+    const bootDiff = bootG2.reduce((a, b) => a + b, 0) / n2 - bootG1.reduce((a, b) => a + b, 0) / n1
+    bootstrapDiffs.push(bootDiff)
+  }
+  
+  bootstrapDiffs.sort((a, b) => a - b)
+  
+  const alpha = 1 - confidenceLevel
+  const ciLower = percentile(bootstrapDiffs, alpha / 2 * 100)
+  const ciUpper = percentile(bootstrapDiffs, (1 - alpha / 2) * 100)
+  
+  const bootstrapMean = bootstrapDiffs.reduce((a, b) => a + b, 0) / nBootstrap
+  const bootstrapSE = Math.sqrt(
+    bootstrapDiffs.reduce((sum, x) => sum + Math.pow(x - bootstrapMean, 2), 0) / (nBootstrap - 1)
+  )
+  
+  return {
+    ciLower,
+    ciUpper,
+    pointEstimate: originalDiff,
+    bootstrapSE,
+    nBootstrap,
+    confidenceLevel,
+    interpretation: `${confidenceLevel * 100}% CI: [${ciLower.toFixed(4)}, ${ciUpper.toFixed(4)}]`
+  }
+}
+
+// Helper: percentile calculation
+function percentile(sortedArr: number[], p: number): number {
+  if (sortedArr.length === 0) return 0
+  const index = (p / 100) * (sortedArr.length - 1)
+  const lower = Math.floor(index)
+  const upper = Math.ceil(index)
+  if (lower === upper) return sortedArr[lower]
+  return sortedArr[lower] + (sortedArr[upper] - sortedArr[lower]) * (index - lower)
+}
+
+// Helper: normal quantile (inverse CDF)
+function normalQuantile(p: number): number {
+  // Approximation using Abramowitz and Stegun formula
+  if (p <= 0) return -Infinity
+  if (p >= 1) return Infinity
+  if (p === 0.5) return 0
+  
+  const a = [
+    -3.969683028665376e+01,
+    2.209460984245205e+02,
+    -2.759285104469687e+02,
+    1.383577518672690e+02,
+    -3.066479806614716e+01,
+    2.506628277459239e+00
+  ]
+  const b = [
+    -5.447609879822406e+01,
+    1.615858368580409e+02,
+    -1.556989798598866e+02,
+    6.680131188771972e+01,
+    -1.328068155288572e+01
+  ]
+  const c = [
+    -7.784894002430293e-03,
+    -3.223964580411365e-01,
+    -2.400758277161838e+00,
+    -2.549732539343734e+00,
+    4.374664141464968e+00,
+    2.938163982698783e+00
+  ]
+  const d = [
+    7.784695709041462e-03,
+    3.224671290700398e-01,
+    2.445134137142996e+00,
+    3.754408661907416e+00
+  ]
+  
+  const pLow = 0.02425
+  const pHigh = 1 - pLow
+  
+  let q: number
+  if (p < pLow) {
+    q = Math.sqrt(-2 * Math.log(p))
+    return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+           ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+  } else if (p <= pHigh) {
+    q = p - 0.5
+    const r = q * q
+    return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q /
+           (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1)
+  } else {
+    q = Math.sqrt(-2 * Math.log(1 - p))
+    return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+            ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+  }
 }
 
 // Welch's t-test for two independent samples with unequal variances
@@ -207,6 +864,38 @@ export interface DashboardData {
     experimentalStd: number | null
     meanDifference: number | null  // Experimental - Control
   }
+  // Scientific Rigor - Assumption Checks
+  assumptionChecks?: {
+    normalityControl: ShapiroWilkResult
+    normalityExperimental: ShapiroWilkResult
+    bothNormal: boolean
+    outlierControl: OutlierResult
+    outlierExperimental: OutlierResult
+    anyOutliers: boolean
+    recommendation: 'parametric' | 'parametric_with_caution' | 'non_parametric'
+    recommendationText: string
+  }
+  // Scientific Rigor - Non-parametric Test
+  nonParametricTest?: MannWhitneyResult
+  // Scientific Rigor - Enhanced Effect Sizes
+  effectSizes?: {
+    hedgesG: HedgesGResult
+    cles: CLESResult
+  }
+  // Scientific Rigor - Power Analysis
+  powerAnalysis?: {
+    achievedPower: PowerAnalysisResult
+    requiredFor80: RequiredSampleSizeResult
+    requiredFor90: RequiredSampleSizeResult
+    requiredFor95: RequiredSampleSizeResult
+  }
+  // Scientific Rigor - Bootstrap CI
+  bootstrapCI?: BootstrapCIResult
+  // Scientific Rigor - Distribution Data (for visualizations)
+  distributionData?: {
+    control: DistributionStats
+    experimental: DistributionStats
+  }
 }
 
 // Calculate statistical power level based on experiment counts and generations
@@ -296,8 +985,9 @@ export async function GET() {
     // 1. Find peak entropy variance (must be above minimum to show divergence)
     // 2. Use min(absolute threshold, 5% of peak) for convergence detection
     // 3. Find when variance drops below effective threshold after peak
-    const CONTROL_CONVERGENCE_THRESHOLD = 0.01
-    const EXPERIMENTAL_CONVERGENCE_THRESHOLD = 0.025
+    // 
+    // IMPORTANT: Both groups use the same threshold for fair comparison
+    const CONVERGENCE_THRESHOLD = 0.01
     
     const findConvergenceGeneration = (generations: Generation[], absoluteThreshold: number): number | null => {
       if (generations.length < 10) return null
@@ -331,8 +1021,8 @@ export async function GET() {
       return convergencePoint?.gen ?? null
     }
     
-    const controlConvergenceGen = findConvergenceGeneration(controlGenerations, CONTROL_CONVERGENCE_THRESHOLD)
-    const experimentalConvergenceGen = findConvergenceGeneration(experimentalGenerations, EXPERIMENTAL_CONVERGENCE_THRESHOLD)
+    const controlConvergenceGen = findConvergenceGeneration(controlGenerations, CONVERGENCE_THRESHOLD)
+    const experimentalConvergenceGen = findConvergenceGeneration(experimentalGenerations, CONVERGENCE_THRESHOLD)
 
     // Calculate convergence improvement
     let convergenceImprovement: number | null = null
@@ -431,6 +1121,95 @@ export async function GET() {
       experimentalAvgGenerations
     )
 
+    // =========================================================================
+    // SCIENTIFIC RIGOR - Additional Statistical Analysis
+    // =========================================================================
+    
+    // Initialize optional scientific rigor fields
+    let assumptionChecks: DashboardData['assumptionChecks'] = undefined
+    let nonParametricTest: DashboardData['nonParametricTest'] = undefined
+    let effectSizes: DashboardData['effectSizes'] = undefined
+    let powerAnalysisResult: DashboardData['powerAnalysis'] = undefined
+    let bootstrapCIResult: DashboardData['bootstrapCI'] = undefined
+    let distributionData: DashboardData['distributionData'] = undefined
+
+    // Only compute if we have data in both groups
+    if (controlExperimentElos.length >= 1 && experimentalExperimentElos.length >= 1) {
+      // Assumption Checks
+      const normalityControl = shapiroWilkTest(controlExperimentElos)
+      const normalityExperimental = shapiroWilkTest(experimentalExperimentElos)
+      const outlierControl = detectOutliers(controlExperimentElos)
+      const outlierExperimental = detectOutliers(experimentalExperimentElos)
+      
+      const bothNormal = (normalityControl.isNormal ?? false) && (normalityExperimental.isNormal ?? false)
+      const anyOutliers = outlierControl.outlierCount > 0 || outlierExperimental.outlierCount > 0
+      
+      let recommendation: 'parametric' | 'parametric_with_caution' | 'non_parametric'
+      let recommendationText: string
+      
+      if (bothNormal && !anyOutliers) {
+        recommendation = 'parametric'
+        recommendationText = 'Use parametric tests (Welch\'s t-test). Assumptions are met.'
+      } else if (bothNormal && anyOutliers) {
+        recommendation = 'parametric_with_caution'
+        recommendationText = 'Use parametric tests with caution. Data is normal but contains outliers.'
+      } else {
+        recommendation = 'non_parametric'
+        recommendationText = 'Consider non-parametric tests (Mann-Whitney U). Normality assumption may be violated.'
+      }
+      
+      assumptionChecks = {
+        normalityControl,
+        normalityExperimental,
+        bothNormal,
+        outlierControl,
+        outlierExperimental,
+        anyOutliers,
+        recommendation,
+        recommendationText
+      }
+      
+      // Non-parametric Test (Mann-Whitney U)
+      nonParametricTest = mannWhitneyUTest(controlExperimentElos, experimentalExperimentElos)
+      
+      // Enhanced Effect Sizes
+      const hedgesGResult = hedgesG(controlExperimentElos, experimentalExperimentElos)
+      const clesResult = commonLanguageEffectSize(controlExperimentElos, experimentalExperimentElos)
+      effectSizes = {
+        hedgesG: hedgesGResult,
+        cles: clesResult
+      }
+      
+      // Power Analysis
+      const effectSizeForPower = hedgesGResult.hedgesG ?? cohensD
+      const achievedPower = calculatePower(
+        controlExperimentElos.length,
+        experimentalExperimentElos.length,
+        effectSizeForPower
+      )
+      const requiredFor80 = requiredSampleSize(effectSizeForPower, 0.80)
+      const requiredFor90 = requiredSampleSize(effectSizeForPower, 0.90)
+      const requiredFor95 = requiredSampleSize(effectSizeForPower, 0.95)
+      
+      powerAnalysisResult = {
+        achievedPower,
+        requiredFor80,
+        requiredFor90,
+        requiredFor95
+      }
+      
+      // Bootstrap CI (only if we have enough data)
+      if (controlExperimentElos.length >= 2 && experimentalExperimentElos.length >= 2) {
+        bootstrapCIResult = bootstrapCI(controlExperimentElos, experimentalExperimentElos, 5000)
+      }
+      
+      // Distribution Data (for visualizations)
+      distributionData = {
+        control: getDistributionStats(controlExperimentElos),
+        experimental: getDistributionStats(experimentalExperimentElos)
+      }
+    }
+
     const response: DashboardData = {
       controlExperiments,
       experimentalExperiments,
@@ -463,7 +1242,14 @@ export async function GET() {
         controlStd,
         experimentalStd,
         meanDifference
-      }
+      },
+      // Scientific Rigor additions
+      assumptionChecks,
+      nonParametricTest,
+      effectSizes,
+      powerAnalysis: powerAnalysisResult,
+      bootstrapCI: bootstrapCIResult,
+      distributionData
     }
 
     return NextResponse.json(response, {

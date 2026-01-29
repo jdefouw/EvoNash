@@ -12,10 +12,20 @@
 > 
 > This document is a **template/projected report**. Specific numerical values such as percentages (e.g., "40%"), p-values (e.g., "p = 0.034"), and generation numbers (e.g., "Generation 630", "Generation 1,050") are **placeholder projections** and must be updated with actual experimental data before submission.
 > 
-> **To get actual results:**
-> - Run the EvoNash dashboard at the project URL
-> - The dashboard dynamically calculates all statistics from real experimental data
-> - Replace placeholder values in this document with values from the live dashboard
+> **To get actual results from the dashboard at `https://sf.defouw.ca`:**
+> 
+> 1. **Statistical Summary Section** (top of dashboard):
+>    - `Convergence Improvement` - percentage improvement of Experimental vs Control
+>    - `P-Value` - statistical significance from t-test
+>    - `Statistical Power` - sample size adequacy indicator
+> 
+> 2. **Comparison Charts**:
+>    - Control vs Experimental Elo progression over generations
+>    - Entropy collapse timelines showing convergence points
+> 
+> 3. **Data Tables**:
+>    - Individual experiment results with convergence generation numbers
+>    - Peak Elo ratings for each experiment
 > 
 > **Placeholders to update:** Section 1 (Abstract), Section 5 (Results), and Section 7 (Conclusion)
 
@@ -28,10 +38,10 @@ This experiment investigates the efficiency of evolutionary algorithms in high-d
 
 To test this, a custom distributed computing platform ("EvoNash") was engineered to run on an NVIDIA RTX 3090, simulating a deterministic biological environment ("The Petri Dish"). Two experiment groups of 1,000 Neural Networks each were evolved over 1,500 generations (750 ticks each): the **Control Group** (Static mutation, $\epsilon=0.05$) and the **Experimental Group** (Adaptive mutation, $\epsilon \propto 1/\text{Fitness}$).
 
-> **[UPDATE WITH ACTUAL DATA]** The following results should be replaced with values from the EvoNash dashboard:
-> - Convergence improvement percentage
-> - Statistical significance (p-value)
-> - Actual generation numbers for convergence
+> **[UPDATE WITH ACTUAL DATA]** Replace the following with values from the dashboard at `https://sf.defouw.ca`:
+> - Convergence improvement percentage → Dashboard "Stats Summary" section
+> - Statistical significance (p-value) → Dashboard "Statistical Significance" panel
+> - Actual generation numbers for convergence → "Data Tables" section, "Convergence Gen" column
 
 ~~Telemetry demonstrates that the Experimental group achieved stable Policy Entropy (Nash Equilibrium) 40% faster than the Control group, with a statistically significant higher peak Elo rating ($p < 0.05$).~~ These findings suggest that mimicking biological stress-response mechanisms significantly improves AI training efficiency on consumer hardware.
 

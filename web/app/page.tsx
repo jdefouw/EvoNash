@@ -12,12 +12,105 @@ import {
   ExperimentDataTable,
   StatsSummary,
   ConclusionCard,
-  SampleSizeGuidance
+  SampleSizeGuidance,
+  // Scientific Rigor Components
+  BoxPlotChart,
+  QQPlot,
+  AssumptionChecksCard,
+  PowerAnalysisCard,
+  EffectSizeCard
 } from '@/components/dashboard'
 import { Experiment, Generation } from '@/types/protocol'
 import WorkerList from '@/components/WorkerList'
 
 type StatisticalPowerLevel = 'insufficient' | 'minimum' | 'recommended' | 'robust'
+
+// Scientific Rigor Types
+interface ShapiroWilkResult {
+  W: number | null
+  pValue: number | null
+  isNormal: boolean | null
+  interpretation: string
+  sampleSize: number
+}
+
+interface OutlierResult {
+  outlierCount: number
+  outlierIndices: number[]
+  outlierValues: number[]
+  lowerBound: number | null
+  upperBound: number | null
+  Q1: number | null
+  Q3: number | null
+  IQR: number | null
+  outlierPercentage: number
+}
+
+interface MannWhitneyResult {
+  U: number | null
+  pValue: number | null
+  isSignificant: boolean | null
+  rankBiserialR: number | null
+  interpretation: string
+  sampleSizes: { control: number; experimental: number }
+}
+
+interface HedgesGResult {
+  hedgesG: number | null
+  cohensD: number | null
+  correctionFactor: number | null
+  ciLower: number | null
+  ciUpper: number | null
+  interpretation: string
+  sampleSizes: { control: number; experimental: number }
+}
+
+interface CLESResult {
+  cles: number | null
+  clesPercentage: number | null
+  interpretation: string
+}
+
+interface PowerAnalysisResult {
+  power: number | null
+  powerPercentage: number | null
+  isAdequate: boolean | null
+  interpretation: string
+  recommendation: string
+}
+
+interface RequiredSampleSizeResult {
+  nPerGroup: number | null
+  totalN: number | null
+  effectSizeUsed: number | null
+  targetPower: number
+  interpretation: string
+}
+
+interface DistributionStats {
+  n: number
+  mean: number | null
+  median: number | null
+  std: number | null
+  min: number | null
+  max: number | null
+  Q1: number | null
+  Q3: number | null
+  IQR: number | null
+  skewness: number | null
+  kurtosis: number | null
+  values: number[]
+}
+
+interface BootstrapCIResult {
+  ciLower: number | null
+  ciUpper: number | null
+  pointEstimate: number | null
+  bootstrapSE: number | null
+  nBootstrap: number
+  confidenceLevel: number
+  interpretation: string
+}
 
 interface DashboardData {
   controlExperiments: Experiment[]
@@ -51,6 +144,38 @@ interface DashboardData {
     controlStd: number | null
     experimentalStd: number | null
     meanDifference: number | null
+  }
+  // Scientific Rigor - Assumption Checks
+  assumptionChecks?: {
+    normalityControl: ShapiroWilkResult
+    normalityExperimental: ShapiroWilkResult
+    bothNormal: boolean
+    outlierControl: OutlierResult
+    outlierExperimental: OutlierResult
+    anyOutliers: boolean
+    recommendation: 'parametric' | 'parametric_with_caution' | 'non_parametric'
+    recommendationText: string
+  }
+  // Scientific Rigor - Non-parametric Test
+  nonParametricTest?: MannWhitneyResult
+  // Scientific Rigor - Enhanced Effect Sizes
+  effectSizes?: {
+    hedgesG: HedgesGResult
+    cles: CLESResult
+  }
+  // Scientific Rigor - Power Analysis
+  powerAnalysis?: {
+    achievedPower: PowerAnalysisResult
+    requiredFor80: RequiredSampleSizeResult
+    requiredFor90: RequiredSampleSizeResult
+    requiredFor95: RequiredSampleSizeResult
+  }
+  // Scientific Rigor - Bootstrap CI
+  bootstrapCI?: BootstrapCIResult
+  // Scientific Rigor - Distribution Data
+  distributionData?: {
+    control: DistributionStats
+    experimental: DistributionStats
   }
 }
 
@@ -305,6 +430,7 @@ const NAV_SECTIONS = [
   { id: 'variables', label: 'Variables' },
   { id: 'methodology', label: 'Methodology' },
   { id: 'results', label: 'Results' },
+  { id: 'rigor', label: 'Statistical Rigor' },
   { id: 'data', label: 'Data' },
   { id: 'conclusion', label: 'Conclusion' },
   { id: 'workers', label: 'Workers' }
@@ -579,6 +705,172 @@ export default function ScienceFairDashboard() {
                 experimentalStd={data?.statistics?.experimentalStd ?? null}
                 meanDifference={data?.statistics?.meanDifference ?? null}
               />
+            </section>
+
+            {/* 6.5 Statistical Rigor Section */}
+            <section id="rigor" className="scroll-mt-20 space-y-6">
+              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                  Statistical Rigor Analysis
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                  Comprehensive statistical validation including assumption checks, non-parametric alternatives, 
+                  enhanced effect sizes, and power analysis to ensure publication-quality scientific rigor.
+                </p>
+
+                {data?.assumptionChecks || data?.effectSizes || data?.powerAnalysis ? (
+                  <div className="space-y-6">
+                    {/* Row 1: Assumption Checks and Effect Sizes */}
+                    <div className="grid lg:grid-cols-2 gap-6">
+                      {/* Assumption Checks */}
+                      {data?.assumptionChecks && (
+                        <AssumptionChecksCard
+                          normalityControl={data.assumptionChecks.normalityControl}
+                          normalityExperimental={data.assumptionChecks.normalityExperimental}
+                          outlierControl={data.assumptionChecks.outlierControl}
+                          outlierExperimental={data.assumptionChecks.outlierExperimental}
+                          bothNormal={data.assumptionChecks.bothNormal}
+                          anyOutliers={data.assumptionChecks.anyOutliers}
+                          recommendation={data.assumptionChecks.recommendation}
+                          recommendationText={data.assumptionChecks.recommendationText}
+                        />
+                      )}
+
+                      {/* Effect Sizes */}
+                      {data?.effectSizes && (
+                        <EffectSizeCard
+                          hedgesG={data.effectSizes.hedgesG}
+                          cles={data.effectSizes.cles}
+                          cohensD={data?.statistics?.cohensD ?? null}
+                        />
+                      )}
+                    </div>
+
+                    {/* Row 2: Power Analysis and Distribution */}
+                    <div className="grid lg:grid-cols-2 gap-6">
+                      {/* Power Analysis */}
+                      {data?.powerAnalysis && (
+                        <PowerAnalysisCard
+                          achievedPower={data.powerAnalysis.achievedPower}
+                          requiredFor80={data.powerAnalysis.requiredFor80}
+                          requiredFor90={data.powerAnalysis.requiredFor90}
+                          requiredFor95={data.powerAnalysis.requiredFor95}
+                          currentControlN={data?.statistics?.controlExperimentCount ?? 0}
+                          currentExperimentalN={data?.statistics?.experimentalExperimentCount ?? 0}
+                          effectSize={data?.effectSizes?.hedgesG?.hedgesG ?? data?.statistics?.cohensD ?? null}
+                        />
+                      )}
+
+                      {/* Box Plot */}
+                      {data?.distributionData && (
+                        <BoxPlotChart
+                          controlData={data.distributionData.control}
+                          experimentalData={data.distributionData.experimental}
+                          title="Distribution Comparison (Box Plot)"
+                        />
+                      )}
+                    </div>
+
+                    {/* Row 3: Q-Q Plot */}
+                    {data?.distributionData && (
+                      <QQPlot
+                        controlValues={data.distributionData.control?.values ?? []}
+                        experimentalValues={data.distributionData.experimental?.values ?? []}
+                        title="Q-Q Plots (Normality Assessment)"
+                      />
+                    )}
+
+                    {/* Non-Parametric Test Results */}
+                    {data?.nonParametricTest && (
+                      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                          Non-Parametric Test (Mann-Whitney U)
+                        </h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                          Distribution-free alternative to the t-test. Does not assume normality.
+                        </p>
+                        <div className="grid md:grid-cols-4 gap-4">
+                          <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                            <div className="text-xs text-gray-500 dark:text-gray-400">U Statistic</div>
+                            <div className="text-lg font-bold text-gray-900 dark:text-white">
+                              {data.nonParametricTest.U?.toFixed(2) ?? 'N/A'}
+                            </div>
+                          </div>
+                          <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                            <div className="text-xs text-gray-500 dark:text-gray-400">p-Value</div>
+                            <div className="text-lg font-bold text-gray-900 dark:text-white">
+                              {data.nonParametricTest.pValue !== null 
+                                ? (data.nonParametricTest.pValue < 0.0001 ? '< 0.0001' : data.nonParametricTest.pValue.toFixed(4))
+                                : 'N/A'}
+                            </div>
+                          </div>
+                          <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Rank-Biserial r</div>
+                            <div className="text-lg font-bold text-gray-900 dark:text-white">
+                              {data.nonParametricTest.rankBiserialR?.toFixed(3) ?? 'N/A'}
+                            </div>
+                          </div>
+                          <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Result</div>
+                            <div className={`text-lg font-bold ${
+                              data.nonParametricTest.isSignificant 
+                                ? 'text-green-600 dark:text-green-400' 
+                                : 'text-gray-600 dark:text-gray-400'
+                            }`}>
+                              {data.nonParametricTest.isSignificant ? 'Significant' : 'Not Significant'}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-3 text-sm text-gray-600 dark:text-gray-400">
+                          {data.nonParametricTest.interpretation}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Bootstrap CI */}
+                    {data?.bootstrapCI && (
+                      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                          Bootstrap Confidence Interval
+                        </h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                          Distribution-free CI using {data.bootstrapCI.nBootstrap.toLocaleString()} bootstrap resamples.
+                        </p>
+                        <div className="grid md:grid-cols-3 gap-4">
+                          <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Point Estimate</div>
+                            <div className="text-lg font-bold text-gray-900 dark:text-white">
+                              {data.bootstrapCI.pointEstimate?.toFixed(3) ?? 'N/A'}
+                            </div>
+                          </div>
+                          <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                            <div className="text-xs text-purple-600 dark:text-purple-400">
+                              {(data.bootstrapCI.confidenceLevel * 100).toFixed(0)}% CI
+                            </div>
+                            <div className="text-lg font-bold text-gray-900 dark:text-white">
+                              [{data.bootstrapCI.ciLower?.toFixed(3) ?? '?'}, {data.bootstrapCI.ciUpper?.toFixed(3) ?? '?'}]
+                            </div>
+                          </div>
+                          <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Bootstrap SE</div>
+                            <div className="text-lg font-bold text-gray-900 dark:text-white">
+                              {data.bootstrapCI.bootstrapSE?.toFixed(4) ?? 'N/A'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                    <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    <p>Run experiments in both Control and Experimental groups to see statistical rigor analysis.</p>
+                    <p className="text-sm mt-2">Need at least 1 experiment per group for basic analysis, 2+ for t-tests.</p>
+                  </div>
+                )}
+              </div>
             </section>
 
             {/* 7. Data Tables */}

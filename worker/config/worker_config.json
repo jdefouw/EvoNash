@@ -6,5 +6,5 @@
   "device": "cuda",
   "log_level": "INFO",
   "log_file": "logs/worker.log",
-  "worker_name": "Worker-1"
+  "worker_name": "Joel-3090"
 }

@@ -16,7 +16,7 @@ Welcome to the EvoNash Worker! This package contains everything you need to run 
 - **Python 3.8 or higher** (will be checked during installation)
 - **NVIDIA GPU** with CUDA support (RTX 3090 or similar recommended)
 - **NVIDIA CUDA drivers** installed (check with `nvidia-smi` command)
-- **Internet connection** to connect to the Vercel controller
+- **Internet connection** to connect to the controller server
 
 ## Installation
 
@@ -197,7 +197,7 @@ Expected output:
 
 ### Web Dashboard
 
-View experiment progress in real-time on the Vercel web dashboard.
+View experiment progress in real-time on the web dashboard at `https://sf.defouw.ca`.
 
 ## Troubleshooting
 

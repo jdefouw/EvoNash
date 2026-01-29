@@ -37,11 +37,11 @@ The experiment uses a **controlled comparative design** with two groups:
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  ┌─────────────────┐         ┌─────────────────┐               │
-│  │   Web Dashboard │◄───────►│    Supabase     │               │
-│  │   (Next.js)     │         │   (PostgreSQL)  │               │
-│  │   - Vercel      │         │   - Experiments │               │
-│  │   - Real-time   │         │   - Generations │               │
-│  │   - Analytics   │         │   - Telemetry   │               │
+│  │   Web Dashboard │◄───────►│   PostgreSQL    │               │
+│  │   (Next.js)     │         │   Database      │               │
+│  │   - nginx       │         │   - Experiments │               │
+│  │   - PM2         │         │   - Generations │               │
+│  │   - Real-time   │         │   - Telemetry   │               │
 │  └────────┬────────┘         └─────────────────┘               │
 │           │                                                     │
 │           │ HTTP API                                            │
@@ -59,9 +59,9 @@ The experiment uses a **controlled comparative design** with two groups:
 
 ### Components
 
-1. **Web Dashboard** (`/web`): Next.js application for experiment management, real-time monitoring, and data visualization
+1. **Web Dashboard** (`/web`): Next.js application for experiment management, real-time monitoring, and data visualization. Deployed on Debian server with nginx reverse proxy and PM2 process manager.
 2. **GPU Worker** (`/worker`): Python application that runs simulations on NVIDIA GPUs
-3. **Database**: Supabase (PostgreSQL) for experiment data and telemetry
+3. **Database**: PostgreSQL 16 for experiment data and telemetry (direct connection via `pg` library)
 
 ---
 
@@ -69,27 +69,36 @@ The experiment uses a **controlled comparative design** with two groups:
 
 ### Prerequisites
 
-- Node.js 18+ (for web dashboard)
+- Node.js 20+ (for web dashboard)
 - Python 3.8+ (for worker)
 - NVIDIA GPU with CUDA support (RTX 3090 recommended)
-- Supabase account (free tier works)
+- PostgreSQL 16 database
+- Debian server (for production deployment)
 
 ### 1. Set Up the Database
 
 ```bash
-# Create a Supabase project and run the schema
+# Install PostgreSQL and create database
+sudo -u postgres psql
+CREATE USER evonash WITH PASSWORD 'your_password';
+CREATE DATABASE evonash OWNER evonash;
+
+# Apply schema
 cd web/lib/supabase
-# Copy schema.sql contents to Supabase SQL Editor and execute
+psql -U evonash -d evonash -f schema_standalone.sql
 ```
 
 ### 2. Deploy the Web Dashboard
 
+For detailed deployment instructions, see [DEBIAN_SETUP.md](DEBIAN_SETUP.md).
+
 ```bash
 cd web
 npm install
-cp .env.example .env.local
-# Edit .env.local with your Supabase credentials
-npm run dev
+cp .env.example .env
+# Edit .env with your PostgreSQL connection string
+npm run build
+npm start
 ```
 
 ### 3. Run the Worker
@@ -97,7 +106,7 @@ npm run dev
 ```bash
 cd worker
 pip install -r requirements.txt
-# Edit config/worker_config.json with controller URL
+# Edit config/worker_config.json with controller URL (e.g., https://sf.defouw.ca)
 python run_worker.py
 ```
 
@@ -173,6 +182,7 @@ EvoNash/
 │   └── protocol.json             # API protocol schema
 ├── PROJECT_SPEC.md               # Technical specification
 ├── CWSF_REPORT.md               # Science fair report
+├── DEBIAN_SETUP.md              # Server deployment guide
 └── README.md                     # This file
 ```
 

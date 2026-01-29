@@ -1,6 +1,6 @@
 # EvoNash Worker Service
 
-The EvoNash Worker is a Python application that runs on your local Windows machine with GPU access. It continuously polls the Vercel-hosted Next.js controller for pending experiments, processes them on your local GPU (RTX 3090), and uploads results incrementally back to Vercel.
+The EvoNash Worker is a Python application that runs on your local Windows machine with GPU access. It continuously polls the Next.js controller (hosted on a Debian server) for pending experiments, processes them on your local GPU (RTX 3090), and uploads results incrementally back to the server.
 
 ## Setup
 
@@ -33,7 +33,7 @@ Edit `config/worker_config.json`:
 
 ```json
 {
-  "controller_url": "https://evo-nash-web.vercel.app",
+  "controller_url": "https://sf.defouw.ca",
   "poll_interval_seconds": 30,
   "max_retries": 3,
   "retry_delay_seconds": 5,
@@ -43,7 +43,7 @@ Edit `config/worker_config.json`:
 }
 ```
 
-**Important:** Update `controller_url` to your actual Vercel deployment URL.
+**Important:** Update `controller_url` to your actual server URL if using a different deployment.
 
 ### 4. Test Run (CLI Mode)
 
@@ -60,7 +60,7 @@ python run_worker.py --config config/worker_config.json
 ```
 
 The worker will:
-- Poll Vercel every 30 seconds for pending experiments
+- Poll the server every 30 seconds for pending experiments
 - Process jobs on your GPU
 - Upload generation stats after each generation
 - Continue polling for more jobs
@@ -152,7 +152,7 @@ nssm status EvoNashWorker
 ## Monitoring
 
 - **Logs:** Check `logs/worker.log` for detailed operation logs
-- **Vercel Dashboard:** View experiment progress in real-time
+- **Web Dashboard:** View experiment progress in real-time at `https://sf.defouw.ca`
 - **Service Status:** Use `nssm status EvoNashWorker` or Windows Services manager
 
 ## Troubleshooting
@@ -171,7 +171,7 @@ nssm status EvoNashWorker
 **Connection errors:**
 - Verify `controller_url` in `worker_config.json` is correct
 - Check internet connection
-- Verify Vercel deployment is accessible
+- Verify server is accessible (try opening the URL in a browser)
 
 **Service won't start:**
 - Check logs in `logs/service_stderr.log`
@@ -180,4 +180,4 @@ nssm status EvoNashWorker
 
 **No jobs available:**
 - This is normal - worker will continue polling
-- Create an experiment in the Vercel dashboard to queue a job
+- Create an experiment in the web dashboard to queue a job
