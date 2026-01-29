@@ -90,7 +90,7 @@ export default function EffectSizeCard({
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {hedgesG?.hedgesG !== null ? hedgesG.hedgesG.toFixed(3) : 'N/A'}
+                {hedgesG?.hedgesG?.toFixed(3) ?? 'N/A'}
               </div>
               <div className={`text-sm font-medium ${getEffectSizeColor(hedgesG?.interpretation ?? '')}`}>
                 {hedgesG?.interpretation ?? 'Unknown'}
