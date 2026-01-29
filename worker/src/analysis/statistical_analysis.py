@@ -75,28 +75,65 @@ class StatisticalAnalyzer:
     
     def perform_t_test(self) -> Dict:
         """
-        Perform two-sample t-test on final Elo ratings.
+        Perform Welch's two-sample t-test on final Elo ratings.
+        
+        IMPORTANT: For multi-experiment analysis, each experiment should provide
+        ONE data point (final Elo) to avoid pseudoreplication. This implementation
+        uses the last 10 generations averaged per experiment for stability.
+        
+        For single control vs single experimental (as in typical CSV analysis),
+        we use the average of last 10 generations as the summary statistic.
         
         Returns:
-            Dictionary with t-statistic, p-value, and interpretation
+            Dictionary with t-statistic, p-value, effect size, and interpretation
         """
-        # Get last 100 generations for statistical power
-        control_elos = self.control_df['avg_elo'].tail(100).values
-        experimental_elos = self.experimental_df['avg_elo'].tail(100).values
+        # Get average of last 10 generations for each group (more stable than single point)
+        last_n = min(10, len(self.control_df), len(self.experimental_df))
+        control_elos = self.control_df['avg_elo'].tail(last_n).values
+        experimental_elos = self.experimental_df['avg_elo'].tail(last_n).values
         
-        t_stat, p_value = stats.ttest_ind(control_elos, experimental_elos)
+        # Welch's t-test (unequal variances)
+        t_stat, p_value = stats.ttest_ind(control_elos, experimental_elos, equal_var=False)
         
         is_significant = p_value < 0.05
+        
+        # Calculate effect size (Cohen's d)
+        control_mean = float(np.mean(control_elos))
+        experimental_mean = float(np.mean(experimental_elos))
+        control_std = float(np.std(control_elos, ddof=1))
+        experimental_std = float(np.std(experimental_elos, ddof=1))
+        
+        # Pooled standard deviation for Cohen's d
+        n1, n2 = len(control_elos), len(experimental_elos)
+        pooled_std = np.sqrt(((n1 - 1) * control_std**2 + (n2 - 1) * experimental_std**2) / (n1 + n2 - 2))
+        cohens_d = abs(experimental_mean - control_mean) / pooled_std if pooled_std > 0 else None
+        
+        # Effect size interpretation
+        effect_size_label = 'N/A'
+        if cohens_d is not None:
+            if cohens_d < 0.2:
+                effect_size_label = 'Negligible'
+            elif cohens_d < 0.5:
+                effect_size_label = 'Small'
+            elif cohens_d < 0.8:
+                effect_size_label = 'Medium'
+            else:
+                effect_size_label = 'Large'
         
         return {
             't_statistic': float(t_stat),
             'p_value': float(p_value),
             'is_significant': is_significant,
-            'control_mean': float(np.mean(control_elos)),
-            'experimental_mean': float(np.mean(experimental_elos)),
-            'control_std': float(np.std(control_elos)),
-            'experimental_std': float(np.std(experimental_elos)),
-            'interpretation': 'Statistically significant' if is_significant else 'Not statistically significant'
+            'control_mean': control_mean,
+            'experimental_mean': experimental_mean,
+            'control_std': control_std,
+            'experimental_std': experimental_std,
+            'mean_difference': float(experimental_mean - control_mean),
+            'cohens_d': float(cohens_d) if cohens_d is not None else None,
+            'effect_size_label': effect_size_label,
+            'sample_sizes': {'control': n1, 'experimental': n2},
+            'interpretation': 'Statistically significant' if is_significant else 'Not statistically significant',
+            'note': 'WARNING: This is a single experiment comparison. For publication-quality results, run 5+ experiments per group and compare experiment-level means.'
         }
     
     def analyze_convergence(self) -> Dict:

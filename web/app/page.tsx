@@ -42,6 +42,15 @@ interface DashboardData {
     controlAvgGenerations: number
     experimentalAvgGenerations: number
     statisticalPowerLevel: StatisticalPowerLevel
+    // Enhanced statistical metrics for scientific rigor
+    degreesOfFreedom: number | null
+    cohensD: number | null
+    confidenceInterval: { lower: number; upper: number } | null
+    controlMean: number | null
+    experimentalMean: number | null
+    controlStd: number | null
+    experimentalStd: number | null
+    meanDifference: number | null
   }
 }
 
@@ -551,6 +560,15 @@ export default function ScienceFairDashboard() {
                 controlExperimentCount={data?.statistics?.controlExperimentCount ?? 0}
                 experimentalExperimentCount={data?.statistics?.experimentalExperimentCount ?? 0}
                 statisticalPowerLevel={data?.statistics?.statisticalPowerLevel ?? 'insufficient'}
+                tStatistic={data?.statistics?.tStatistic ?? null}
+                degreesOfFreedom={data?.statistics?.degreesOfFreedom ?? null}
+                cohensD={data?.statistics?.cohensD ?? null}
+                confidenceInterval={data?.statistics?.confidenceInterval ?? null}
+                controlMean={data?.statistics?.controlMean ?? null}
+                experimentalMean={data?.statistics?.experimentalMean ?? null}
+                controlStd={data?.statistics?.controlStd ?? null}
+                experimentalStd={data?.statistics?.experimentalStd ?? null}
+                meanDifference={data?.statistics?.meanDifference ?? null}
               />
             </section>
 

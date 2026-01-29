@@ -14,10 +14,20 @@ interface StatsSummaryProps {
   isSignificant: boolean
   totalGenerationsControl: number
   totalGenerationsExperimental: number
-  // New fields for statistical power
+  // Statistical power and sample size
   controlExperimentCount?: number
   experimentalExperimentCount?: number
   statisticalPowerLevel?: StatisticalPowerLevel
+  // Enhanced statistical metrics for scientific rigor
+  tStatistic?: number | null
+  degreesOfFreedom?: number | null
+  cohensD?: number | null  // Effect size
+  confidenceInterval?: { lower: number; upper: number } | null  // 95% CI
+  controlMean?: number | null
+  experimentalMean?: number | null
+  controlStd?: number | null
+  experimentalStd?: number | null
+  meanDifference?: number | null
 }
 
 export default function StatsSummary({
@@ -34,8 +44,28 @@ export default function StatsSummary({
   totalGenerationsExperimental,
   controlExperimentCount = 0,
   experimentalExperimentCount = 0,
-  statisticalPowerLevel = 'insufficient'
+  statisticalPowerLevel = 'insufficient',
+  tStatistic = null,
+  degreesOfFreedom = null,
+  cohensD = null,
+  confidenceInterval = null,
+  controlMean = null,
+  experimentalMean = null,
+  controlStd = null,
+  experimentalStd = null,
+  meanDifference = null
 }: StatsSummaryProps) {
+  // Effect size interpretation (Cohen's conventions)
+  const getEffectSizeLabel = (d: number | null): { label: string; color: string } => {
+    if (d === null) return { label: 'N/A', color: 'text-gray-500' }
+    const absD = Math.abs(d)
+    if (absD < 0.2) return { label: 'Negligible', color: 'text-gray-500' }
+    if (absD < 0.5) return { label: 'Small', color: 'text-yellow-600 dark:text-yellow-400' }
+    if (absD < 0.8) return { label: 'Medium', color: 'text-blue-600 dark:text-blue-400' }
+    return { label: 'Large', color: 'text-green-600 dark:text-green-400' }
+  }
+  
+  const effectSize = getEffectSizeLabel(cohensD)
   const hasData = totalGenerationsControl > 0 || totalGenerationsExperimental > 0
 
   const getConfidenceLabel = (level: StatisticalPowerLevel) => {
@@ -194,28 +224,92 @@ export default function StatsSummary({
                 controlValue={totalGenerationsControl}
                 experimentalValue={totalGenerationsExperimental}
               />
-              <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-900/50 md:col-span-2">
-                <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
-                  T-Test Details
+            </div>
+
+            {/* Enhanced T-Test Details - Scientifically Rigorous */}
+            <div className="mt-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-900/50">
+              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
+                Welch&apos;s Two-Sample T-Test (Experiment-Level Analysis)
+              </div>
+              
+              {/* Sample Size Warning */}
+              {(controlExperimentCount < 5 || experimentalExperimentCount < 5) && (
+                <div className="mb-3 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded text-xs text-yellow-700 dark:text-yellow-400">
+                  <strong>⚠️ Sample Size Warning:</strong> Statistical power is limited with n={controlExperimentCount} control and n={experimentalExperimentCount} experimental experiments. 
+                  Aim for n≥5 per group for reliable significance testing.
                 </div>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <div className="text-gray-500 dark:text-gray-400">p-Value</div>
-                    <div className="font-mono font-bold text-gray-900 dark:text-white">
-                      {pValue !== null ? pValue.toFixed(6) : '-'}
-                    </div>
+              )}
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
+                <div>
+                  <div className="text-gray-500 dark:text-gray-400">t-Statistic</div>
+                  <div className="font-mono font-bold text-gray-900 dark:text-white">
+                    {tStatistic !== null ? tStatistic.toFixed(4) : '-'}
                   </div>
-                  <div>
-                    <div className="text-gray-500 dark:text-gray-400">Significance Level</div>
-                    <div className="font-mono font-bold text-gray-900 dark:text-white">
-                      α = 0.05
-                    </div>
+                </div>
+                <div>
+                  <div className="text-gray-500 dark:text-gray-400">Degrees of Freedom</div>
+                  <div className="font-mono font-bold text-gray-900 dark:text-white">
+                    {degreesOfFreedom !== null ? degreesOfFreedom.toFixed(2) : '-'}
                   </div>
-                  <div>
-                    <div className="text-gray-500 dark:text-gray-400">Result</div>
-                    <div className={`font-bold ${isSignificant ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`}>
-                      {isSignificant ? 'Reject H₀' : 'Fail to Reject H₀'}
-                    </div>
+                </div>
+                <div>
+                  <div className="text-gray-500 dark:text-gray-400">p-Value (two-tailed)</div>
+                  <div className="font-mono font-bold text-gray-900 dark:text-white">
+                    {pValue !== null ? (pValue < 0.0001 ? '< 0.0001' : pValue.toFixed(4)) : '-'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-gray-500 dark:text-gray-400">Significance (α = 0.05)</div>
+                  <div className={`font-bold ${isSignificant ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                    {pValue !== null ? (isSignificant ? 'Reject H₀' : 'Fail to Reject H₀') : '-'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Effect Size and Confidence Interval */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm border-t border-gray-200 dark:border-gray-700 pt-4">
+                <div>
+                  <div className="text-gray-500 dark:text-gray-400">Cohen&apos;s d (Effect Size)</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-gray-900 dark:text-white">
+                      {cohensD !== null ? cohensD.toFixed(3) : '-'}
+                    </span>
+                    <span className={`text-xs font-medium ${effectSize.color}`}>
+                      ({effectSize.label})
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-gray-500 dark:text-gray-400">Mean Difference (Exp - Ctrl)</div>
+                  <div className="font-mono font-bold text-gray-900 dark:text-white">
+                    {meanDifference !== null ? (meanDifference > 0 ? '+' : '') + meanDifference.toFixed(2) : '-'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-gray-500 dark:text-gray-400">95% Confidence Interval</div>
+                  <div className="font-mono font-bold text-gray-900 dark:text-white">
+                    {confidenceInterval 
+                      ? `[${confidenceInterval.lower.toFixed(2)}, ${confidenceInterval.upper.toFixed(2)}]` 
+                      : '-'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Group Statistics */}
+              <div className="grid grid-cols-2 gap-4 text-sm border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                <div>
+                  <div className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">Control Group (n={controlExperimentCount})</div>
+                  <div className="text-gray-600 dark:text-gray-400">
+                    Mean: <span className="font-mono font-bold text-gray-900 dark:text-white">{controlMean?.toFixed(2) ?? '-'}</span>
+                    {' '}± <span className="font-mono">{controlStd?.toFixed(2) ?? '-'}</span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-purple-600 dark:text-purple-400 font-medium mb-1">Experimental Group (n={experimentalExperimentCount})</div>
+                  <div className="text-gray-600 dark:text-gray-400">
+                    Mean: <span className="font-mono font-bold text-gray-900 dark:text-white">{experimentalMean?.toFixed(2) ?? '-'}</span>
+                    {' '}± <span className="font-mono">{experimentalStd?.toFixed(2) ?? '-'}</span>
                   </div>
                 </div>
               </div>

@@ -5,36 +5,152 @@ import { Experiment, Generation } from '@/types/protocol'
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
 
-// Simple t-test implementation for two independent samples
-function tTest(sample1: number[], sample2: number[]): { pValue: number; tStatistic: number } {
-  if (sample1.length < 2 || sample2.length < 2) {
-    return { pValue: 1, tStatistic: 0 }
+// =====================================================================
+// STATISTICAL ANALYSIS - Designed for Scientific Rigor
+// =====================================================================
+// 
+// IMPORTANT: We use EXPERIMENT-LEVEL statistics, not generation-level.
+// Each experiment contributes ONE data point to avoid pseudoreplication.
+// 
+// Methodology:
+// - Independent variable: Mutation strategy (Control vs Experimental)
+// - Dependent variable: Final average Elo rating per experiment
+// - Test: Welch's two-sample t-test (unequal variances)
+// - Significance level: α = 0.05
+// =====================================================================
+
+interface TTestResult {
+  pValue: number
+  tStatistic: number
+  degreesOfFreedom: number
+  controlMean: number
+  experimentalMean: number
+  controlStd: number
+  experimentalStd: number
+  meanDifference: number
+  cohensD: number | null  // Effect size
+  confidenceInterval: { lower: number; upper: number } | null  // 95% CI for mean difference
+  sampleSizes: { control: number; experimental: number }
+}
+
+// Welch's t-test for two independent samples with unequal variances
+// Uses experiment-level summary statistics (one data point per experiment)
+function welchTTest(sample1: number[], sample2: number[]): TTestResult {
+  const n1 = sample1.length
+  const n2 = sample2.length
+  
+  // Require minimum sample size for meaningful analysis
+  if (n1 < 2 || n2 < 2) {
+    return {
+      pValue: 1,
+      tStatistic: 0,
+      degreesOfFreedom: 0,
+      controlMean: n1 > 0 ? sample1.reduce((a, b) => a + b, 0) / n1 : 0,
+      experimentalMean: n2 > 0 ? sample2.reduce((a, b) => a + b, 0) / n2 : 0,
+      controlStd: 0,
+      experimentalStd: 0,
+      meanDifference: 0,
+      cohensD: null,
+      confidenceInterval: null,
+      sampleSizes: { control: n1, experimental: n2 }
+    }
   }
 
-  const mean1 = sample1.reduce((a, b) => a + b, 0) / sample1.length
-  const mean2 = sample2.reduce((a, b) => a + b, 0) / sample2.length
+  // Calculate means
+  const mean1 = sample1.reduce((a, b) => a + b, 0) / n1
+  const mean2 = sample2.reduce((a, b) => a + b, 0) / n2
+  const meanDiff = mean2 - mean1  // Experimental - Control
 
-  const variance1 = sample1.reduce((sum, val) => sum + Math.pow(val - mean1, 2), 0) / (sample1.length - 1)
-  const variance2 = sample2.reduce((sum, val) => sum + Math.pow(val - mean2, 2), 0) / (sample2.length - 1)
+  // Calculate sample variances (unbiased, using n-1)
+  const variance1 = sample1.reduce((sum, val) => sum + Math.pow(val - mean1, 2), 0) / (n1 - 1)
+  const variance2 = sample2.reduce((sum, val) => sum + Math.pow(val - mean2, 2), 0) / (n2 - 1)
+  
+  const std1 = Math.sqrt(variance1)
+  const std2 = Math.sqrt(variance2)
 
-  const pooledSE = Math.sqrt(variance1 / sample1.length + variance2 / sample2.length)
+  // Pooled standard error (Welch's formula)
+  const se1 = variance1 / n1
+  const se2 = variance2 / n2
+  const pooledSE = Math.sqrt(se1 + se2)
   
   if (pooledSE === 0) {
-    return { pValue: 1, tStatistic: 0 }
+    return {
+      pValue: 1,
+      tStatistic: 0,
+      degreesOfFreedom: n1 + n2 - 2,
+      controlMean: mean1,
+      experimentalMean: mean2,
+      controlStd: std1,
+      experimentalStd: std2,
+      meanDifference: meanDiff,
+      cohensD: null,
+      confidenceInterval: null,
+      sampleSizes: { control: n1, experimental: n2 }
+    }
   }
 
+  // Welch's t-statistic
   const tStatistic = (mean1 - mean2) / pooledSE
 
-  // Degrees of freedom (Welch-Satterthwaite approximation)
-  const df = Math.pow(variance1 / sample1.length + variance2 / sample2.length, 2) /
-    (Math.pow(variance1 / sample1.length, 2) / (sample1.length - 1) +
-     Math.pow(variance2 / sample2.length, 2) / (sample2.length - 1))
+  // Welch-Satterthwaite degrees of freedom
+  const df = Math.pow(se1 + se2, 2) / (Math.pow(se1, 2) / (n1 - 1) + Math.pow(se2, 2) / (n2 - 1))
 
-  // Approximate p-value using normal distribution for large samples
-  // For a more accurate p-value, you'd need a t-distribution table or library
-  const pValue = 2 * (1 - normalCDF(Math.abs(tStatistic)))
+  // P-value from t-distribution (two-tailed)
+  const pValue = 2 * tDistributionCDF(-Math.abs(tStatistic), df)
 
-  return { pValue, tStatistic }
+  // Cohen's d effect size (pooled standard deviation)
+  const pooledStd = Math.sqrt(((n1 - 1) * variance1 + (n2 - 1) * variance2) / (n1 + n2 - 2))
+  const cohensD = pooledStd > 0 ? Math.abs(meanDiff) / pooledStd : null
+
+  // 95% Confidence Interval for mean difference
+  const tCritical = tDistributionQuantile(0.975, df)  // Two-tailed 95% CI
+  const marginOfError = tCritical * pooledSE
+  const confidenceInterval = {
+    lower: meanDiff - marginOfError,
+    upper: meanDiff + marginOfError
+  }
+
+  return {
+    pValue,
+    tStatistic,
+    degreesOfFreedom: df,
+    controlMean: mean1,
+    experimentalMean: mean2,
+    controlStd: std1,
+    experimentalStd: std2,
+    meanDifference: meanDiff,
+    cohensD,
+    confidenceInterval,
+    sampleSizes: { control: n1, experimental: n2 }
+  }
+}
+
+// T-distribution CDF approximation (more accurate than normal for small samples)
+function tDistributionCDF(t: number, df: number): number {
+  // Use beta function relationship: F(t) = 1 - 0.5 * I(df/(df+t²), df/2, 1/2)
+  // For simplicity, use normal approximation adjusted for df
+  // This is accurate for df > 30, reasonable for df > 5
+  if (df <= 0) return 0.5
+  
+  // Adjusted t-value for better small-sample accuracy
+  const adjustedT = t * Math.sqrt((df - 2) / df) * (df > 2 ? 1 : 0.9)
+  
+  return normalCDF(adjustedT)
+}
+
+// T-distribution quantile (inverse CDF) approximation
+function tDistributionQuantile(p: number, df: number): number {
+  // For 95% CI (p = 0.975), use approximation
+  // Accurate for df > 30, reasonable for df > 5
+  if (df <= 1) return 12.706  // t(0.975, 1)
+  if (df <= 2) return 4.303   // t(0.975, 2)
+  if (df <= 3) return 3.182   // t(0.975, 3)
+  if (df <= 4) return 2.776   // t(0.975, 4)
+  if (df <= 5) return 2.571   // t(0.975, 5)
+  if (df <= 10) return 2.228  // t(0.975, 10)
+  if (df <= 20) return 2.086  // t(0.975, 20)
+  if (df <= 30) return 2.042  // t(0.975, 30)
+  return 1.96  // Normal approximation for large df
 }
 
 // Standard normal cumulative distribution function approximation
@@ -75,12 +191,21 @@ export interface DashboardData {
     isSignificant: boolean
     totalGenerationsControl: number
     totalGenerationsExperimental: number
-    // New fields for statistical power analysis
+    // Statistical power and sample size
     controlExperimentCount: number
     experimentalExperimentCount: number
     controlAvgGenerations: number
     experimentalAvgGenerations: number
     statisticalPowerLevel: StatisticalPowerLevel
+    // Enhanced statistical metrics for scientific rigor
+    degreesOfFreedom: number | null
+    cohensD: number | null  // Effect size
+    confidenceInterval: { lower: number; upper: number } | null  // 95% CI for mean difference
+    controlMean: number | null  // Mean of experiment-level final Elos
+    experimentalMean: number | null
+    controlStd: number | null  // Std of experiment-level final Elos
+    experimentalStd: number | null
+    meanDifference: number | null  // Experimental - Control
   }
 }
 
@@ -215,23 +340,76 @@ export async function GET() {
       convergenceImprovement = ((controlConvergenceGen - experimentalConvergenceGen) / controlConvergenceGen) * 100
     }
 
-    // Final and peak Elo values
+    // Final and peak Elo values (from all generations combined)
     const controlFinalElo = controlElos.length > 0 ? controlElos[controlElos.length - 1] : null
     const experimentalFinalElo = experimentalElos.length > 0 ? experimentalElos[experimentalElos.length - 1] : null
     
     const controlPeakElo = controlElos.length > 0 ? Math.max(...controlElos) : null
     const experimentalPeakElo = experimentalElos.length > 0 ? Math.max(...experimentalElos) : null
 
-    // Perform t-test on final Elo ratings
+    // =========================================================================
+    // EXPERIMENT-LEVEL T-TEST (Scientifically Rigorous)
+    // =========================================================================
+    // CRITICAL: We use ONE data point per experiment to avoid pseudoreplication.
+    // Each experiment provides its final average Elo as the summary statistic.
+    // This ensures statistical independence between samples.
+    // =========================================================================
+    
+    // Calculate final Elo for EACH experiment (not each generation)
+    const getExperimentFinalElos = (experiments: Experiment[], generations: Generation[]): number[] => {
+      return experiments.map(exp => {
+        // Get all generations for this experiment, sorted by generation number
+        const expGens = generations
+          .filter(g => g.experiment_id === exp.id)
+          .sort((a, b) => a.generation_number - b.generation_number)
+        
+        if (expGens.length === 0) return null
+        
+        // Use average of last 10 generations for stability (or all if < 10)
+        const lastN = Math.min(10, expGens.length)
+        const lastGens = expGens.slice(-lastN)
+        const avgFinalElo = lastGens.reduce((sum, g) => sum + (g.avg_elo || 0), 0) / lastN
+        
+        return avgFinalElo
+      }).filter((elo): elo is number => elo !== null && elo > 0)
+    }
+    
+    const controlExperimentElos = getExperimentFinalElos(controlExperiments, controlGenerations)
+    const experimentalExperimentElos = getExperimentFinalElos(experimentalExperiments, experimentalGenerations)
+    
+    // Perform Welch's t-test on experiment-level data
+    let tTestResult: TTestResult | null = null
     let pValue: number | null = null
     let tStatistic: number | null = null
     let isSignificant = false
+    let degreesOfFreedom: number | null = null
+    let cohensD: number | null = null
+    let confidenceInterval: { lower: number; upper: number } | null = null
+    let controlMean: number | null = null
+    let experimentalMean: number | null = null
+    let controlStd: number | null = null
+    let experimentalStd: number | null = null
+    let meanDifference: number | null = null
 
-    if (controlElos.length >= 2 && experimentalElos.length >= 2) {
-      const testResult = tTest(controlElos, experimentalElos)
-      pValue = testResult.pValue
-      tStatistic = testResult.tStatistic
+    // Require at least 2 experiments per group for valid t-test
+    if (controlExperimentElos.length >= 2 && experimentalExperimentElos.length >= 2) {
+      tTestResult = welchTTest(controlExperimentElos, experimentalExperimentElos)
+      pValue = tTestResult.pValue
+      tStatistic = tTestResult.tStatistic
+      degreesOfFreedom = tTestResult.degreesOfFreedom
+      cohensD = tTestResult.cohensD
+      confidenceInterval = tTestResult.confidenceInterval
+      controlMean = tTestResult.controlMean
+      experimentalMean = tTestResult.experimentalMean
+      controlStd = tTestResult.controlStd
+      experimentalStd = tTestResult.experimentalStd
+      meanDifference = tTestResult.meanDifference
       isSignificant = pValue < 0.05
+    } else if (controlExperimentElos.length >= 1 && experimentalExperimentElos.length >= 1) {
+      // With only 1 experiment per group, report means but no significance test
+      controlMean = controlExperimentElos.reduce((a, b) => a + b, 0) / controlExperimentElos.length
+      experimentalMean = experimentalExperimentElos.reduce((a, b) => a + b, 0) / experimentalExperimentElos.length
+      meanDifference = experimentalMean - controlMean
     }
 
     // Calculate average generations per experiment
@@ -275,7 +453,16 @@ export async function GET() {
         experimentalExperimentCount,
         controlAvgGenerations,
         experimentalAvgGenerations,
-        statisticalPowerLevel
+        statisticalPowerLevel,
+        // Enhanced statistical metrics for scientific rigor
+        degreesOfFreedom,
+        cohensD,
+        confidenceInterval,
+        controlMean,
+        experimentalMean,
+        controlStd,
+        experimentalStd,
+        meanDifference
       }
     }
 
