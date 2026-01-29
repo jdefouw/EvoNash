@@ -343,8 +343,8 @@ export default function StatsSummary({
               </h5>
               <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
                 <p><strong>Metric:</strong> Entropy Variance (σ) — measures how similar all agents&apos; strategies are</p>
-                <p><strong>Control Threshold:</strong> σ &lt; 0.01 (static mutation → homogeneous population)</p>
-                <p><strong>Experimental Threshold:</strong> σ &lt; 0.025 (adaptive mutation → maintains diversity)</p>
+                <p><strong>Threshold:</strong> σ &lt; 0.01 (same for both groups for fair comparison)</p>
+                <p><strong>Stability:</strong> 20+ consecutive generations below threshold required</p>
                 <p><strong>Method:</strong> Population must first diverge (σ ≥ threshold), then converge. Prevents false positives from identical initial agents.</p>
               </div>
             </div>

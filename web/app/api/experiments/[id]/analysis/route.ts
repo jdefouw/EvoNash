@@ -43,10 +43,8 @@ export async function GET(
     // Find convergence point using improved relative threshold detection
     // This handles cases where variance never exceeds the absolute threshold but clearly converges
     //
-    // Use different base thresholds based on mutation mode:
-    // - CONTROL (STATIC mutation): 0.01 - uniform mutation leads to homogeneous population
-    // - EXPERIMENTAL (ADAPTIVE mutation): 0.025 - fitness-scaled mutation maintains more diversity
-    const absoluteThreshold = experiment.experiment_group === 'EXPERIMENTAL' ? 0.025 : 0.01
+    // Use same threshold for both groups for fair scientific comparison
+    const absoluteThreshold = 0.01
     
     // Calculate convergence using relative threshold approach
     let convergence_gen = null

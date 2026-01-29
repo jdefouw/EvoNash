@@ -80,8 +80,8 @@ export default function LiveViewLegend() {
               </span>
             </div>
             <div className="ml-7 mt-1 text-xs text-gray-500 dark:text-gray-500 space-y-1">
-              <div>• <strong>Control (Static):</strong> σ &lt; 0.01 — uniform mutation leads to homogeneous population</div>
-              <div>• <strong>Experimental (Adaptive):</strong> σ &lt; 0.025 — fitness-scaled mutation maintains more diversity</div>
+              <div>• <strong>Threshold:</strong> σ &lt; 0.01 — same for both groups for fair comparison</div>
+              <div>• <strong>Stability:</strong> 20+ consecutive generations below threshold required</div>
               <div>• <strong>Detection:</strong> Population must first diverge (σ ≥ threshold), then converge. This prevents false positives from generation 0.</div>
             </div>
           </div>
