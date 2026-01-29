@@ -1176,7 +1176,6 @@ export async function GET() {
     let convergenceIsSignificant = false
     let convergenceControlMean: number | null = null
     let convergenceExperimentalMean: number | null = null
-    let convergenceImprovement: number | null = null
     
     if (controlConvergenceGens.length >= 2 && experimentalConvergenceGens.length >= 2) {
       convergenceTTestResult = welchTTest(controlConvergenceGens, experimentalConvergenceGens)
@@ -1186,7 +1185,7 @@ export async function GET() {
       convergenceExperimentalMean = convergenceTTestResult.experimentalMean
       convergenceIsSignificant = convergencePValue < 0.05
       
-      // Calculate improvement percentage (positive = experimental converges faster)
+      // Update improvement percentage from multi-experiment data (more accurate)
       if (convergenceControlMean && convergenceExperimentalMean && convergenceControlMean > 0) {
         convergenceImprovement = ((convergenceControlMean - convergenceExperimentalMean) / convergenceControlMean) * 100
       }
