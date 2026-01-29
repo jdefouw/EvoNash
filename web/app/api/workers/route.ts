@@ -6,9 +6,10 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    // Get all workers, ordered by last heartbeat (most recent first)
+    // Get all workers, ordered by worker name (alphabetically)
+    // NULLS LAST ensures workers without names appear at the end
     const workers = await queryAll(
-      'SELECT * FROM workers ORDER BY last_heartbeat DESC'
+      'SELECT * FROM workers ORDER BY worker_name ASC NULLS LAST, last_heartbeat DESC'
     )
     
     // Debug logging - log raw worker data
