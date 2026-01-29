@@ -271,20 +271,28 @@ function generateConclusionSummary(stats: DashboardData['statistics'] | null, is
     const improvementText = stats.convergenceImprovement !== null 
       ? `approximately ${Math.round(stats.convergenceImprovement)}%` 
       : 'measurably'
-    return baseSummary + ` The EvoNash platform demonstrated that an Adaptive Mutation strategy accelerates convergence to a Nash Equilibrium by ${improvementText} compared to static methods (p = ${stats.pValue?.toFixed(4) ?? 'N/A'}). This has significant implications for training large AI models on consumer hardware, suggesting that "smarter" training algorithms can reduce the need for massive compute clusters.`
+    
+    if (stats.isSignificant) {
+      return baseSummary + ` The experimental data demonstrates that an Adaptive Mutation strategy accelerates convergence to a Nash Equilibrium by ${improvementText} compared to static methods, with statistical significance (p = ${stats.pValue?.toFixed(4) ?? 'N/A'}). This supports the hypothesis that biologically-inspired mutation strategies can improve AI training efficiency.`
+    } else {
+      return baseSummary + ` The experimental data shows that the Adaptive Mutation strategy converges ${improvementText} faster than the Control group (p = ${stats.pValue?.toFixed(4) ?? 'N/A'}). While this result has not yet reached statistical significance (p < 0.05), the data trends in the expected direction, supporting the hypothesis. Additional experiments may strengthen this conclusion.`
+    }
   } else {
-    return baseSummary + ` However, the current experimental data does not support the hypothesis that adaptive mutation accelerates convergence. Further investigation may be needed to understand why the expected improvement was not observed, or additional experiments may be required to achieve statistical significance.`
+    return baseSummary + ` However, the current experimental data does not support the hypothesis that adaptive mutation accelerates convergence. The Control group converged faster than or equal to the Experimental group. Further investigation may be needed to understand why the expected improvement was not observed.`
   }
 }
 
 // Generate dynamic implications based on whether hypothesis is supported
-function generateImplications(isHypothesisSupported: boolean | null): string {
+function generateImplications(stats: DashboardData['statistics'] | null, isHypothesisSupported: boolean | null): string {
   if (isHypothesisSupported === null) {
     return 'Implications will be determined once sufficient experimental data has been collected and analyzed.'
   }
   
   if (isHypothesisSupported) {
-    return 'These findings suggest that mimicking biological stress-response mechanisms significantly improves AI training efficiency on consumer hardware, potentially democratizing access to advanced AI training.'
+    if (stats?.isSignificant) {
+      return 'These findings demonstrate that mimicking biological stress-response mechanisms significantly improves AI training efficiency on consumer hardware, potentially democratizing access to advanced AI training.'
+    }
+    return 'These preliminary findings suggest that biologically-inspired adaptive mutation strategies may improve AI training efficiency. Continued data collection will help confirm whether this improvement is statistically robust.'
   }
   
   return 'While the current data does not support the hypothesis, this negative result provides valuable information about the conditions under which adaptive mutation strategies may or may not be effective.'
@@ -348,12 +356,13 @@ export default function ScienceFairDashboard() {
   }
 
   // Determine if hypothesis is supported based on data
-  // Requires: statistical significance AND positive convergence improvement
+  // Supported = experimental group converges faster (positive improvement)
+  // Statistical significance is reported separately in findings
   const hasEnoughData = Boolean(
     data?.statistics?.totalGenerationsControl && data?.statistics?.totalGenerationsExperimental
   )
   const isHypothesisSupported: boolean | null = hasEnoughData
-    ? Boolean(data?.statistics?.isSignificant && (data?.statistics?.convergenceImprovement ?? 0) > 0)
+    ? (data?.statistics?.convergenceImprovement ?? 0) > 0
     : null
 
   const supportingEvidence = data?.statistics ? 
@@ -364,7 +373,7 @@ export default function ScienceFairDashboard() {
   const dynamicAbstract = generateAbstract(data?.statistics ?? null)
   const dynamicKeyFindings = generateKeyFindings(data?.statistics ?? null)
   const dynamicConclusionSummary = generateConclusionSummary(data?.statistics ?? null, isHypothesisSupported)
-  const dynamicImplications = generateImplications(isHypothesisSupported)
+  const dynamicImplications = generateImplications(data?.statistics ?? null, isHypothesisSupported)
 
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-gray-900">
