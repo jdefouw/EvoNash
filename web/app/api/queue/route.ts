@@ -137,14 +137,9 @@ export async function POST(request: NextRequest) {
     // Find experiments with status PENDING or RUNNING
     // IMPORTANT: Never assign jobs from COMPLETED, FAILED, or STOPPED experiments
     const experiments = await queryAll(
-      `WITH ranked_experiments AS (
-        SELECT *,
-          ROW_NUMBER() OVER (PARTITION BY experiment_group ORDER BY created_at ASC) as group_rank
-        FROM experiments
-        WHERE status IN ('PENDING', 'RUNNING')
-      )
-      SELECT * FROM ranked_experiments
-      ORDER BY group_rank ASC, experiment_group ASC`
+      `SELECT * FROM experiments
+       WHERE status IN ('PENDING', 'RUNNING')
+       ORDER BY created_at ASC`
     )
     
     if (!experiments || experiments.length === 0) {
@@ -155,14 +150,8 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Check for both Control and Experimental experiments
-    const controlExperiments = experiments.filter((e: any) => e.experiment_group === 'CONTROL')
-    const experimentalExperiments = experiments.filter((e: any) => e.experiment_group === 'EXPERIMENTAL')
-    const hasBothGroups = controlExperiments.length > 0 && experimentalExperiments.length > 0
-    
-    // Log the interleaved experiment order
-    console.log(`[QUEUE] Interleaved experiment order (${experiments.length} experiments):`)
-    console.log(`[QUEUE]   Control: ${controlExperiments.length}, Experimental: ${experimentalExperiments.length}`)
+    // Log available experiments
+    console.log(`[QUEUE] Available experiments: ${experiments.length}`)
     experiments.slice(0, 10).forEach((exp: any, idx: number) => {
       console.log(`[QUEUE]   ${idx + 1}. ${exp.experiment_name} (${exp.experiment_group})`)
     })
@@ -170,57 +159,62 @@ export async function POST(request: NextRequest) {
       console.log(`[QUEUE]   ... and ${experiments.length - 10} more`)
     }
 
-    // INTERLEAVED WORKER DISTRIBUTION: Balance workers between CONTROL and EXPERIMENTAL
-    // Count how many workers are currently actively processing each group
-    const activeWorkersByGroup = await queryAll<{ experiment_group: string; worker_count: number }>(
-      `SELECT e.experiment_group, COUNT(DISTINCT ja.worker_id) as worker_count
-       FROM job_assignments ja
-       JOIN experiments e ON e.id = ja.experiment_id
-       WHERE ja.status IN ('assigned', 'processing')
-       AND e.status IN ('PENDING', 'RUNNING')
-       GROUP BY e.experiment_group`
-    ) || []
-    
-    const controlWorkers = activeWorkersByGroup.find((g: any) => g.experiment_group === 'CONTROL')?.worker_count || 0
-    const experimentalWorkers = activeWorkersByGroup.find((g: any) => g.experiment_group === 'EXPERIMENTAL')?.worker_count || 0
-    
-    console.log(`[QUEUE] Active workers by group: CONTROL=${controlWorkers}, EXPERIMENTAL=${experimentalWorkers}`)
-    
-    // Determine which group should get the next worker for balance
-    // If both groups have work, assign to the group with fewer active workers
-    let preferredGroup: 'CONTROL' | 'EXPERIMENTAL' | null = null
-    if (hasBothGroups) {
-      if (controlWorkers <= experimentalWorkers) {
-        preferredGroup = 'CONTROL'
-      } else {
-        preferredGroup = 'EXPERIMENTAL'
-      }
-      console.log(`[QUEUE] Preferred group for balance: ${preferredGroup} (fewer workers)`)
-    }
-    
-    // Reorder experiments to prioritize the preferred group for worker balance
+    // EXPERIMENT AFFINITY: Workers should complete their current experiment before moving to another
+    // This is the KEY fix - workers stay on the same experiment until it's done
     let experimentOrder: any[] = experiments
-    if (preferredGroup && hasBothGroups) {
-      // Put experiments from the preferred group first
-      const preferredExperiments = experiments.filter((e: any) => e.experiment_group === preferredGroup)
-      const otherExperiments = experiments.filter((e: any) => e.experiment_group !== preferredGroup)
-      experimentOrder = [...preferredExperiments, ...otherExperiments]
-      console.log(`[QUEUE] Reordered experiments: ${preferredExperiments.length} ${preferredGroup} first, then ${otherExperiments.length} others`)
-    } else if (!hasBothGroups && worker_id) {
-      // Only one group left - use affinity to efficiently complete remaining experiments
-      const lastCompletedJob = await queryOne<{ experiment_id: string }>(
-        `SELECT experiment_id FROM job_assignments 
-         WHERE worker_id = $1 AND status = 'completed' 
-         ORDER BY completed_at DESC 
+    
+    if (worker_id) {
+      // Check what experiment this worker was most recently working on
+      const lastWorkerJob = await queryOne<{ experiment_id: string; experiment_group: string }>(
+        `SELECT ja.experiment_id, e.experiment_group
+         FROM job_assignments ja
+         JOIN experiments e ON e.id = ja.experiment_id
+         WHERE ja.worker_id = $1 
+           AND ja.status = 'completed'
+           AND e.status IN ('PENDING', 'RUNNING')
+         ORDER BY ja.completed_at DESC
          LIMIT 1`,
         [worker_id]
       )
-      const lastExperimentId = lastCompletedJob?.experiment_id
-      if (lastExperimentId && experiments.some((e: any) => e.id === lastExperimentId)) {
-        const preferred = experiments.find((e: any) => e.id === lastExperimentId)
-        const rest = experiments.filter((e: any) => e.id !== lastExperimentId)
-        experimentOrder = preferred ? [preferred, ...rest] : experiments
-        console.log(`[QUEUE] Experiment affinity (single group): preferring experiment ${lastExperimentId.slice(0, 8)}… for worker ${worker_id.slice(0, 8)}…`)
+      
+      if (lastWorkerJob) {
+        // Worker was recently working on an experiment that still needs work
+        // Put that experiment FIRST so they continue with it
+        const affinityExperiment = experiments.find((e: any) => e.id === lastWorkerJob.experiment_id)
+        if (affinityExperiment) {
+          const rest = experiments.filter((e: any) => e.id !== lastWorkerJob.experiment_id)
+          experimentOrder = [affinityExperiment, ...rest]
+          console.log(`[QUEUE] Worker ${worker_id.slice(0, 8)}… has affinity for ${affinityExperiment.experiment_name}, prioritizing it`)
+        }
+      } else {
+        // Worker doesn't have recent affinity - use group balancing for initial assignment
+        // Count workers per group to balance initial assignments
+        const activeWorkersByGroup = await queryAll<{ experiment_group: string; worker_count: number }>(
+          `SELECT e.experiment_group, COUNT(DISTINCT ja.worker_id) as worker_count
+           FROM job_assignments ja
+           JOIN experiments e ON e.id = ja.experiment_id
+           WHERE ja.status IN ('assigned', 'processing')
+           AND e.status IN ('PENDING', 'RUNNING')
+           GROUP BY e.experiment_group`
+        ) || []
+        
+        const controlExperiments = experiments.filter((e: any) => e.experiment_group === 'CONTROL')
+        const experimentalExperiments = experiments.filter((e: any) => e.experiment_group === 'EXPERIMENTAL')
+        const hasBothGroups = controlExperiments.length > 0 && experimentalExperiments.length > 0
+        
+        if (hasBothGroups) {
+          const controlWorkers = activeWorkersByGroup.find((g: any) => g.experiment_group === 'CONTROL')?.worker_count || 0
+          const experimentalWorkers = activeWorkersByGroup.find((g: any) => g.experiment_group === 'EXPERIMENTAL')?.worker_count || 0
+          
+          console.log(`[QUEUE] No affinity, balancing: CONTROL=${controlWorkers} workers, EXPERIMENTAL=${experimentalWorkers} workers`)
+          
+          // Assign to group with fewer workers
+          const preferredGroup = controlWorkers <= experimentalWorkers ? 'CONTROL' : 'EXPERIMENTAL'
+          const preferredExperiments = experiments.filter((e: any) => e.experiment_group === preferredGroup)
+          const otherExperiments = experiments.filter((e: any) => e.experiment_group !== preferredGroup)
+          experimentOrder = [...preferredExperiments, ...otherExperiments]
+          console.log(`[QUEUE] Preferring ${preferredGroup} group for new worker`)
+        }
       }
     }
 
