@@ -149,8 +149,8 @@ export default function PowerAnalysisCard({
           <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900/50 rounded">
             <span className="text-xs text-gray-600 dark:text-gray-400">For 80% power:</span>
             <span className="text-sm font-medium text-gray-900 dark:text-white">
-              {requiredFor80?.nPerGroup !== null 
-                ? `n = ${requiredFor80.nPerGroup} per group`
+              {requiredFor80?.nPerGroup != null 
+                ? `n = ${requiredFor80?.nPerGroup} per group`
                 : 'Cannot calculate'}
             </span>
           </div>
@@ -159,8 +159,8 @@ export default function PowerAnalysisCard({
           <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900/50 rounded">
             <span className="text-xs text-gray-600 dark:text-gray-400">For 90% power:</span>
             <span className="text-sm font-medium text-gray-900 dark:text-white">
-              {requiredFor90?.nPerGroup !== null 
-                ? `n = ${requiredFor90.nPerGroup} per group`
+              {requiredFor90?.nPerGroup != null 
+                ? `n = ${requiredFor90?.nPerGroup} per group`
                 : 'Cannot calculate'}
             </span>
           </div>
@@ -169,15 +169,15 @@ export default function PowerAnalysisCard({
           <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900/50 rounded">
             <span className="text-xs text-gray-600 dark:text-gray-400">For 95% power:</span>
             <span className="text-sm font-medium text-gray-900 dark:text-white">
-              {requiredFor95?.nPerGroup !== null 
-                ? `n = ${requiredFor95.nPerGroup} per group`
+              {requiredFor95?.nPerGroup != null 
+                ? `n = ${requiredFor95?.nPerGroup} per group`
                 : 'Cannot calculate'}
             </span>
           </div>
         </div>
         
         {/* Progress towards goal */}
-        {requiredFor80?.nPerGroup !== null && (
+        {requiredFor80?.nPerGroup != null && (
           <div className="mt-3">
             <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
               Progress to 80% power goal:
@@ -187,14 +187,14 @@ export default function PowerAnalysisCard({
                 className="h-full bg-blue-500 transition-all"
                 style={{ 
                   width: `${Math.min(
-                    (Math.min(currentControlN, currentExperimentalN) / requiredFor80.nPerGroup) * 100, 
+                    (Math.min(currentControlN, currentExperimentalN) / (requiredFor80?.nPerGroup ?? 1)) * 100, 
                     100
                   )}%` 
                 }}
               />
             </div>
             <div className="text-xs text-gray-500 mt-1">
-              {Math.min(currentControlN, currentExperimentalN)} / {requiredFor80.nPerGroup} experiments
+              {Math.min(currentControlN, currentExperimentalN)} / {requiredFor80?.nPerGroup} experiments
             </div>
           </div>
         )}
