@@ -14,8 +14,21 @@ export async function GET(request: NextRequest) {
     const includeCount = searchParams.get('count') === 'true'
     
     // Query with limit to prevent timeout on large datasets
+    // Sort by status priority: RUNNING first, then COMPLETED, then PENDING/others
+    // Within each status group, sort by created_at descending (newest first)
     const data = await queryAll<Experiment>(
-      'SELECT * FROM experiments ORDER BY created_at DESC LIMIT $1 OFFSET $2',
+      `SELECT * FROM experiments 
+       ORDER BY 
+         CASE status 
+           WHEN 'RUNNING' THEN 0 
+           WHEN 'COMPLETED' THEN 1 
+           WHEN 'PENDING' THEN 2 
+           WHEN 'FAILED' THEN 3 
+           WHEN 'STOPPED' THEN 4 
+           ELSE 5 
+         END,
+         created_at DESC
+       LIMIT $1 OFFSET $2`,
       [limit, offset]
     )
     
