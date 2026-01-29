@@ -29,24 +29,49 @@ export async function DELETE(request: NextRequest) {
     console.log(`[DELETE-ALL] Found ${experimentCount} experiments to delete`)
     
     // Delete in order to respect foreign key constraints
-    // (or use CASCADE if set up in schema)
+    // Order: matches -> agents -> checkpoints -> jobs -> generations -> experiments
     
-    // 1. Delete checkpoints
-    const checkpointsResult = await query('DELETE FROM checkpoints RETURNING id')
-    const checkpointsDeleted = checkpointsResult.rows?.length || 0
-    console.log(`[DELETE-ALL] Deleted ${checkpointsDeleted} checkpoints`)
+    // 1. Delete matches (references agents, generations, experiments)
+    let matchesDeleted = 0
+    try {
+      const matchesResult = await query('DELETE FROM matches RETURNING id')
+      matchesDeleted = matchesResult.rows?.length || 0
+      console.log(`[DELETE-ALL] Deleted ${matchesDeleted} matches`)
+    } catch (e) {
+      console.log('[DELETE-ALL] No matches table or already empty')
+    }
     
-    // 2. Delete job assignments
+    // 2. Delete agents (references generations, experiments)
+    let agentsDeleted = 0
+    try {
+      const agentsResult = await query('DELETE FROM agents RETURNING id')
+      agentsDeleted = agentsResult.rows?.length || 0
+      console.log(`[DELETE-ALL] Deleted ${agentsDeleted} agents`)
+    } catch (e) {
+      console.log('[DELETE-ALL] No agents table or already empty')
+    }
+    
+    // 3. Delete experiment_checkpoints
+    let checkpointsDeleted = 0
+    try {
+      const checkpointsResult = await query('DELETE FROM experiment_checkpoints RETURNING id')
+      checkpointsDeleted = checkpointsResult.rows?.length || 0
+      console.log(`[DELETE-ALL] Deleted ${checkpointsDeleted} checkpoints`)
+    } catch (e) {
+      console.log('[DELETE-ALL] No experiment_checkpoints table or already empty')
+    }
+    
+    // 4. Delete job assignments
     const jobsResult = await query('DELETE FROM job_assignments RETURNING id')
     const jobsDeleted = jobsResult.rows?.length || 0
     console.log(`[DELETE-ALL] Deleted ${jobsDeleted} job assignments`)
     
-    // 3. Delete generations (this includes all generation data)
+    // 5. Delete generations (this includes all generation data)
     const generationsResult = await query('DELETE FROM generations RETURNING id')
     const generationsDeleted = generationsResult.rows?.length || 0
     console.log(`[DELETE-ALL] Deleted ${generationsDeleted} generations`)
     
-    // 4. Delete experiments
+    // 6. Delete experiments
     const experimentsResult = await query('DELETE FROM experiments RETURNING id')
     const experimentsDeleted = experimentsResult.rows?.length || 0
     console.log(`[DELETE-ALL] Deleted ${experimentsDeleted} experiments`)
@@ -61,7 +86,9 @@ export async function DELETE(request: NextRequest) {
         experiments: experimentsDeleted,
         generations: generationsDeleted,
         job_assignments: jobsDeleted,
-        checkpoints: checkpointsDeleted
+        checkpoints: checkpointsDeleted,
+        agents: agentsDeleted,
+        matches: matchesDeleted
       }
     })
   } catch (error) {
