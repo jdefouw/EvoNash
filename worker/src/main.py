@@ -132,6 +132,57 @@ def request_job(controller_url: str, timeout: int = 30) -> Optional[dict]:
         return None
 
 
+def notify_equilibrium_reached(
+    controller_url: str,
+    experiment_id: str,
+    convergence_generation: int,
+    timeout: int = 30
+) -> bool:
+    """
+    Notify the controller that Nash equilibrium has been reached.
+    
+    This will mark the experiment as COMPLETED and cancel pending job assignments.
+    
+    Args:
+        controller_url: Base URL of the controller API
+        experiment_id: Experiment ID
+        convergence_generation: The generation at which convergence was detected
+        timeout: Request timeout in seconds
+        
+    Returns:
+        True if notification was successful, False otherwise
+    """
+    try:
+        response = requests.post(
+            f"{controller_url}/api/experiments/{experiment_id}/equilibrium",
+            json={'convergence_generation': convergence_generation},
+            timeout=timeout
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            logger.info(f"✓ Equilibrium notification successful: {result.get('new_status', 'unknown')}")
+            return True
+        else:
+            logger.warning(f"⚠ Equilibrium notification failed: {response.status_code}")
+            try:
+                error_data = response.json()
+                logger.warning(f"  Error: {error_data.get('error', 'unknown')}")
+            except:
+                logger.warning(f"  Response: {response.text[:200]}")
+            return False
+            
+    except requests.exceptions.Timeout:
+        logger.warning(f"Timeout notifying equilibrium for {experiment_id}")
+        return False
+    except requests.exceptions.ConnectionError as e:
+        logger.warning(f"Connection error notifying equilibrium: {e}")
+        return False
+    except Exception as e:
+        logger.warning(f"Error notifying equilibrium: {e}")
+        return False
+
+
 def upload_generation_stats(
     controller_url: str,
     job_id: str,

@@ -23,6 +23,13 @@ from ..simulation.agent import Agent
 from ..logging.csv_logger import CSVLogger
 
 
+# Nash Equilibrium Detection Constants
+CONVERGENCE_THRESHOLD = 0.01  # Entropy variance threshold for detecting convergence
+STABILITY_WINDOW = 20  # Consecutive generations below threshold required to confirm convergence
+POST_CONVERGENCE_BUFFER = 30  # Additional generations to run after convergence for post-equilibrium data
+ENABLE_EARLY_STOPPING = True  # Set to False to disable early stopping
+
+
 class TensorBuffers:
     """
     Pre-allocated tensor buffers for reuse across simulation ticks.
@@ -176,7 +183,8 @@ class OptimizedExperimentRunner:
         generation_end: Optional[int] = None,
         checkpoint_callback: Optional[Callable[[Dict], None]] = None,
         generation_check_callback: Optional[Callable[[int], bool]] = None,
-        checkpoint_loader_callback: Optional[Callable[[int], Optional[Dict]]] = None
+        checkpoint_loader_callback: Optional[Callable[[int], Optional[Dict]]] = None,
+        equilibrium_reached_callback: Optional[Callable[[int], None]] = None
     ):
         """
         Initialize optimized experiment runner.
@@ -191,6 +199,7 @@ class OptimizedExperimentRunner:
             checkpoint_callback: Optional callback to save checkpoints
             generation_check_callback: Optional callback to check if generation already exists
             checkpoint_loader_callback: Optional callback to load checkpoints (takes gen_num, returns state dict or None)
+            equilibrium_reached_callback: Optional callback when Nash equilibrium is detected (takes convergence_generation)
         """
         self.config = config
         self.device = device if torch.cuda.is_available() and device == 'cuda' else 'cpu'
@@ -199,6 +208,7 @@ class OptimizedExperimentRunner:
         self.checkpoint_callback = checkpoint_callback
         self.generation_check_callback = generation_check_callback
         self.checkpoint_loader_callback = checkpoint_loader_callback
+        self.equilibrium_reached_callback = equilibrium_reached_callback
         self.generation_start = generation_start
         self.generation_end = generation_end if generation_end is not None else (config.max_generations - 1)
         
@@ -559,10 +569,18 @@ class OptimizedExperimentRunner:
         print(f"Generation range: {self.generation_start} to {self.generation_end} (inclusive)")
         print(f"Batch size: {num_generations} generations")
         print(f"Population size: {self.config.population_size}")
+        print(f"Early stopping: {'ENABLED' if ENABLE_EARLY_STOPPING else 'DISABLED'}")
         print(f"{'='*80}\n")
         
         stopped = False
+        early_stopped = False
         experiment_start_time = time.time()
+        
+        # Nash Equilibrium detection state
+        has_diverged = False  # Must diverge before we can detect convergence
+        stability_counter = 0  # Count consecutive generations below threshold
+        convergence_detected_gen = None  # Generation where convergence was first detected
+        equilibrium_notified = False  # Track if we've already notified the API
         
         exp_name = self.config.experiment_name
         
@@ -612,7 +630,7 @@ class OptimizedExperimentRunner:
                   f"Peak Elo: {stats.get('peak_elo', 0):7.2f} | "
                   f"Min Elo: {stats.get('min_elo', 0):7.2f}")
             
-            # Check if should stop
+            # Check if should stop (manual stop signal)
             if self.stop_check_callback:
                 try:
                     if self.stop_check_callback():
@@ -621,9 +639,54 @@ class OptimizedExperimentRunner:
                         break
                 except Exception as e:
                     print(f"Warning: Stop check callback failed: {e}")
+            
+            # Early stopping: detect Nash equilibrium convergence
+            if ENABLE_EARLY_STOPPING and not early_stopped:
+                entropy_variance = stats.get('entropy_variance', float('inf'))
+                
+                # First, check if population has diverged (required before convergence can be detected)
+                if not has_diverged and entropy_variance >= CONVERGENCE_THRESHOLD:
+                    has_diverged = True
+                    print(f"  📈 Population divergence detected (entropy_variance={entropy_variance:.6f} >= {CONVERGENCE_THRESHOLD})")
+                
+                # Only check for convergence after divergence has occurred
+                if has_diverged:
+                    if entropy_variance < CONVERGENCE_THRESHOLD:
+                        stability_counter += 1
+                        if stability_counter >= STABILITY_WINDOW and convergence_detected_gen is None:
+                            convergence_detected_gen = gen - STABILITY_WINDOW + 1
+                            print(f"\n🎯 NASH EQUILIBRIUM DETECTED at generation {convergence_detected_gen}")
+                            print(f"   Entropy variance stable below {CONVERGENCE_THRESHOLD} for {STABILITY_WINDOW} generations")
+                            print(f"   Running {POST_CONVERGENCE_BUFFER} more generations for post-convergence data...")
+                            
+                            # Notify the API that equilibrium was reached
+                            if self.equilibrium_reached_callback and not equilibrium_notified:
+                                try:
+                                    self.equilibrium_reached_callback(convergence_detected_gen)
+                                    equilibrium_notified = True
+                                    print(f"   ✓ Notified API of Nash equilibrium at generation {convergence_detected_gen}")
+                                except Exception as e:
+                                    print(f"   ⚠ Warning: Failed to notify API of equilibrium: {e}")
+                    else:
+                        # Reset counter if variance goes back above threshold
+                        if stability_counter > 0:
+                            print(f"  📉 Stability counter reset (variance {entropy_variance:.6f} >= threshold)")
+                        stability_counter = 0
+                
+                # Check if we should stop (convergence detected + buffer complete)
+                if convergence_detected_gen is not None:
+                    generations_since_convergence = gen - convergence_detected_gen
+                    if generations_since_convergence >= POST_CONVERGENCE_BUFFER:
+                        print(f"\n✅ EARLY STOPPING: Nash equilibrium confirmed")
+                        print(f"   Convergence at generation {convergence_detected_gen}")
+                        print(f"   Post-convergence buffer of {POST_CONVERGENCE_BUFFER} generations complete")
+                        early_stopped = True
+                        break
         
         if stopped:
             print("Experiment stopped by user")
+        elif early_stopped:
+            print(f"Experiment completed early (Nash equilibrium at generation {convergence_detected_gen})")
         else:
             print("Experiment completed!")
         
@@ -631,5 +694,8 @@ class OptimizedExperimentRunner:
             'final_stats': self.generation_stats_history[-1] if self.generation_stats_history else {},
             'all_stats': self.generation_stats_history,
             'csv_path': str(self.logger.get_filepath()),
-            'stopped': stopped
+            'stopped': stopped,
+            'early_stopped': early_stopped,
+            'convergence_generation': convergence_detected_gen,
+            'generations_completed': len(self.generation_stats_history)
         }

@@ -20,7 +20,7 @@ import base64
 
 from .experiments.experiment_manager import ExperimentManager, ExperimentConfig
 from .experiments.experiment_runner_optimized import OptimizedExperimentRunner
-from .main import request_job, upload_generation_stats, check_experiment_status
+from .main import request_job, upload_generation_stats, check_experiment_status, notify_equilibrium_reached
 from .logging.worker_logger import setup_worker_logger
 
 
@@ -544,9 +544,13 @@ class WorkerService:
             Callback function that returns True if experiment should stop
         """
         def stop_check_callback() -> bool:
-            """Check if experiment status is STOPPED."""
+            """Check if experiment status is STOPPED or COMPLETED (e.g., equilibrium reached by another worker)."""
             status = check_experiment_status(self.controller_url, experiment_id)
             if status == 'STOPPED':
+                self.logger.info(f"Experiment {experiment_id} status is STOPPED, stopping worker")
+                return True
+            if status == 'COMPLETED':
+                self.logger.info(f"Experiment {experiment_id} status is COMPLETED (equilibrium reached), stopping worker")
                 return True
             # If status check fails (returns None), continue execution
             # This prevents transient network errors from stopping experiments
@@ -625,6 +629,31 @@ class WorkerService:
         except Exception as e:
             self.logger.warning(f"⚠️ Exception getting last completed generation: {e}")
             return -1
+    
+    def _create_equilibrium_reached_callback(self, experiment_id: str) -> callable:
+        """
+        Create callback function to notify the API when Nash equilibrium is reached.
+        
+        Args:
+            experiment_id: Experiment ID
+            
+        Returns:
+            Callback function that notifies the API of equilibrium
+        """
+        def equilibrium_reached_callback(convergence_generation: int):
+            """Notify API that Nash equilibrium was reached."""
+            self.logger.info(f"🎯 Notifying API of Nash equilibrium at generation {convergence_generation}")
+            success = notify_equilibrium_reached(
+                self.controller_url,
+                experiment_id,
+                convergence_generation
+            )
+            if success:
+                self.logger.info(f"✓ Experiment {experiment_id} marked as COMPLETED (Nash equilibrium)")
+            else:
+                self.logger.warning(f"⚠ Failed to notify API of equilibrium, experiment may continue running")
+        
+        return equilibrium_reached_callback
     
     def _create_checkpoint_callback(self, experiment_id: str) -> callable:
         """
@@ -893,6 +922,9 @@ class WorkerService:
             # Create generation check callback to avoid duplicate work
             generation_check_callback = self._create_generation_check_callback(experiment_id)
             
+            # Create equilibrium reached callback to notify API when Nash equilibrium is detected
+            equilibrium_reached_callback = self._create_equilibrium_reached_callback(experiment_id)
+            
             # Create checkpoint loader callback for loading checkpoints when skipping generations
             def checkpoint_loader_callback(generation_number: int) -> Optional[Dict]:
                 """Load checkpoint for a specific generation number."""
@@ -920,7 +952,8 @@ class WorkerService:
                 generation_end=generation_end,
                 checkpoint_callback=checkpoint_callback,
                 generation_check_callback=generation_check_callback,
-                checkpoint_loader_callback=checkpoint_loader_callback
+                checkpoint_loader_callback=checkpoint_loader_callback,
+                equilibrium_reached_callback=equilibrium_reached_callback
             )
             
             # Load checkpoint state if available
