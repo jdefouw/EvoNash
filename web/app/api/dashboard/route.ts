@@ -906,39 +906,91 @@ export interface DashboardData {
   }
 }
 
-// Calculate statistical power level based on experiment counts and generations
-function calculatePowerLevel(
-  controlCount: number,
-  experimentalCount: number,
-  controlAvgGens: number,
-  experimentalAvgGens: number
-): StatisticalPowerLevel {
-  const minCount = Math.min(controlCount, experimentalCount)
-  const minAvgGens = Math.min(controlAvgGens, experimentalAvgGens)
+// =============================================================================
+// STATISTICAL POWER LEVEL DETERMINATION
+// =============================================================================
+// 
+// Statistical power is the probability of correctly rejecting the null hypothesis
+// when a true effect exists. It depends on:
+//   1. Sample size (n per group)
+//   2. Effect size (Cohen's d or Hedges' g)
+//   3. Significance level (α, typically 0.05)
+//   4. Variance in the data
+// 
+// Standard thresholds (Cohen, 1988; widely accepted in scientific research):
+//   - Power ≥ 80%: "Adequate" - standard threshold for publication-quality research
+//   - Power ≥ 90%: "High" - recommended for confirmatory studies
+//   - Power < 50%: "Inadequate" - high risk of Type II error (false negative)
+// 
+// This function uses the ACTUAL CALCULATED POWER when available (based on observed
+// effect size), falling back to sample-size estimates only when effect size is unknown.
+// =============================================================================
 
-  // Robust: 5+ experiments per group with 2000+ generations each
-  if (minCount >= 5 && minAvgGens >= 2000) {
-    return 'robust'
-  }
-  // Recommended: 2-3 experiments per group with 1000+ generations each
-  if (minCount >= 2 && minAvgGens >= 1000) {
-    return 'recommended'
-  }
-  // Minimum: 1+ experiment per group with 500+ generations each
-  if (minCount >= 1 && minAvgGens >= 500) {
-    return 'minimum'
-  }
-  // Insufficient: < 1 experiment per group OR < 100 generations
-  return 'insufficient'
+interface PowerLevelInput {
+  controlCount: number
+  experimentalCount: number
+  achievedPower: number | null  // From actual power calculation using observed effect size
 }
+
+function calculatePowerLevel(input: PowerLevelInput): StatisticalPowerLevel {
+  const { controlCount, experimentalCount, achievedPower } = input
+  const minCount = Math.min(controlCount, experimentalCount)
+
+  // If we have actual calculated power (requires n≥2 and observed effect size),
+  // use it directly - this is the most scientifically rigorous approach
+  if (achievedPower !== null) {
+    // Thresholds based on established statistical conventions:
+    // - 80% power is the standard "adequate" threshold (Cohen, 1988)
+    // - 90%+ is considered high power, suitable for publication
+    // - Below 50% means more likely to miss a real effect than detect it
+    if (achievedPower >= 0.80) {
+      return 'robust'      // ≥80% power: Standard threshold for adequate power
+    }
+    if (achievedPower >= 0.60) {
+      return 'recommended' // 60-79% power: Moderate, may detect large effects
+    }
+    if (achievedPower >= 0.40) {
+      return 'minimum'     // 40-59% power: Low, likely to miss real effects
+    }
+    return 'insufficient'  // <40% power: Very low, study is underpowered
+  }
+
+  // Fallback when we can't calculate actual power yet (no effect size estimate)
+  // Use sample size thresholds based on a priori power analysis for medium effect (d=0.5):
+  //   - n=64 per group needed for 80% power with d=0.5
+  //   - n=26 per group needed for 80% power with d=0.8 (large effect)
+  //   - n=3 is mathematical minimum for t-test (df > 1)
+  //
+  // These are conservative estimates assuming medium effect size.
+  // Once we have data to calculate actual effect size, we use the real power instead.
+  
+  if (minCount < 2) {
+    return 'insufficient'  // Cannot compute t-test statistics
+  }
+  if (minCount < 3) {
+    return 'insufficient'  // df ≤ 1, t-test not meaningful
+  }
+  // With n≥3 but no effect size yet, we're in minimum territory
+  // (actual power will be calculated once we have enough data for effect size)
+  if (minCount < 10) {
+    return 'minimum'       // Small sample, waiting for effect size calculation
+  }
+  if (minCount < 26) {
+    return 'recommended'   // Moderate sample, ~80% power for large effects (d=0.8)
+  }
+  return 'robust'          // Large sample, likely adequate power even for medium effects
+}
+
 
 export async function GET() {
   try {
-    // Fetch all experiments
+    // Fetch experiments - limit to prevent timeout with large datasets
+    // For statistical analysis, we use ALL experiments but limit generations
     const experiments = await queryAll<Experiment>(
       `SELECT * FROM experiments 
        WHERE status IN ('COMPLETED', 'RUNNING') 
-       ORDER BY created_at DESC`
+       ORDER BY created_at DESC
+       LIMIT 200`
     )
 
     // Separate by group
@@ -949,31 +1001,34 @@ export async function GET() {
       (exp: Experiment) => exp.experiment_group === 'EXPERIMENTAL'
     )
 
-    // Fetch generations for control experiments
-    const controlIds = controlExperiments.map((exp: Experiment) => exp.id)
+    // For chart display, limit to most recent experiments per group to prevent data overload
+    const MAX_EXPERIMENTS_FOR_CHARTS = 20
+    const controlIdsForCharts = controlExperiments.slice(0, MAX_EXPERIMENTS_FOR_CHARTS).map((exp: Experiment) => exp.id)
+    const experimentalIdsForCharts = experimentalExperiments.slice(0, MAX_EXPERIMENTS_FOR_CHARTS).map((exp: Experiment) => exp.id)
+
+    // Fetch generations only for the subset used in charts
     let controlGenerations: Generation[] = []
     
-    if (controlIds.length > 0) {
-      const placeholders = controlIds.map((_: string, i: number) => `$${i + 1}`).join(', ')
+    if (controlIdsForCharts.length > 0) {
+      const placeholders = controlIdsForCharts.map((_: string, i: number) => `$${i + 1}`).join(', ')
       controlGenerations = await queryAll<Generation>(
         `SELECT * FROM generations 
          WHERE experiment_id IN (${placeholders}) 
          ORDER BY generation_number ASC`,
-        controlIds
+        controlIdsForCharts
       ) || []
     }
 
     // Fetch generations for experimental experiments
-    const experimentalIds = experimentalExperiments.map((exp: Experiment) => exp.id)
     let experimentalGenerations: Generation[] = []
     
-    if (experimentalIds.length > 0) {
-      const placeholders = experimentalIds.map((_: string, i: number) => `$${i + 1}`).join(', ')
+    if (experimentalIdsForCharts.length > 0) {
+      const placeholders = experimentalIdsForCharts.map((_: string, i: number) => `$${i + 1}`).join(', ')
       experimentalGenerations = await queryAll<Generation>(
         `SELECT * FROM generations 
          WHERE experiment_id IN (${placeholders}) 
          ORDER BY generation_number ASC`,
-        experimentalIds
+        experimentalIdsForCharts
       ) || []
     }
 
@@ -1017,9 +1072,9 @@ export async function GET() {
       // Must have diverged (peak > minimum threshold)
       if (peakVariance <= 0.0001) return null
 
-      // Use relative threshold (10% of peak) when peak is high, absolute when peak is low
-      const relativeThreshold = peakVariance * 0.10
-      const effectiveThreshold = Math.max(absoluteThreshold, relativeThreshold)
+      // Use the fixed threshold for convergence detection
+      // This matches the documented methodology: σ < 0.01 after initial divergence
+      const effectiveThreshold = absoluteThreshold
       
       // Get data after peak
       const afterPeak = varianceData.slice(peakIndex)
@@ -1149,8 +1204,9 @@ export async function GET() {
         
         if (peakVariance <= 0.0001) return null
         
-        const relativeThreshold = peakVariance * 0.05
-        const effectiveThreshold = Math.min(CONVERGENCE_THRESHOLD, relativeThreshold)
+        // Use the fixed threshold for convergence detection
+        // This matches the documented methodology: σ < 0.01 after initial divergence
+        const effectiveThreshold = CONVERGENCE_THRESHOLD
         
         const afterPeak = varianceData.slice(peakIndex)
         
@@ -1209,16 +1265,13 @@ export async function GET() {
       ? Math.round(experimentalGenerations.length / experimentalExperimentCount)
       : 0
 
-    // Calculate statistical power level
-    const statisticalPowerLevel = calculatePowerLevel(
-      controlExperimentCount,
-      experimentalExperimentCount,
-      controlAvgGenerations,
-      experimentalAvgGenerations
-    )
-
     // =========================================================================
-    // SCIENTIFIC RIGOR - Additional Statistical Analysis
+    // SCIENTIFIC RIGOR - Statistical Analysis
+    // =========================================================================
+    // 
+    // IMPORTANT: We calculate power analysis FIRST, then use the actual achieved
+    // power to determine the statistical power level. This is the scientifically
+    // rigorous approach - using observed effect size rather than arbitrary thresholds.
     // =========================================================================
     
     // Initialize optional scientific rigor fields
@@ -1228,6 +1281,9 @@ export async function GET() {
     let powerAnalysisResult: DashboardData['powerAnalysis'] = undefined
     let bootstrapCIResult: DashboardData['bootstrapCI'] = undefined
     let distributionData: DashboardData['distributionData'] = undefined
+    
+    // Track achieved power for power level calculation
+    let achievedPowerValue: number | null = null
 
     // Only compute if we have data in both groups
     if (controlExperimentElos.length >= 1 && experimentalExperimentElos.length >= 1) {
@@ -1276,7 +1332,7 @@ export async function GET() {
         cles: clesResult
       }
       
-      // Power Analysis
+      // Power Analysis - using observed effect size (Hedges' g preferred, falls back to Cohen's d)
       const effectSizeForPower = hedgesGResult.hedgesG ?? cohensD
       const achievedPower = calculatePower(
         controlExperimentElos.length,
@@ -1294,6 +1350,9 @@ export async function GET() {
         requiredFor95
       }
       
+      // Store achieved power for power level calculation
+      achievedPowerValue = achievedPower.power
+      
       // Bootstrap CI (only if we have enough data)
       if (controlExperimentElos.length >= 2 && experimentalExperimentElos.length >= 2) {
         bootstrapCIResult = bootstrapCI(controlExperimentElos, experimentalExperimentElos, 5000)
@@ -1305,6 +1364,16 @@ export async function GET() {
         experimental: getDistributionStats(experimentalExperimentElos)
       }
     }
+
+    // Calculate statistical power level using ACTUAL achieved power when available
+    // This is the scientifically rigorous approach - the power level is based on
+    // real statistical power calculated from the observed effect size, not arbitrary
+    // sample size thresholds.
+    const statisticalPowerLevel = calculatePowerLevel({
+      controlCount: controlExperimentCount,
+      experimentalCount: experimentalExperimentCount,
+      achievedPower: achievedPowerValue
+    })
 
     const response: DashboardData = {
       controlExperiments,
@@ -1364,8 +1433,19 @@ export async function GET() {
     })
   } catch (error) {
     console.error('Dashboard API error:', error)
+    
+    // Return more detailed error information for debugging
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const isDbError = errorMessage.includes('DATABASE_URL') || 
+                      errorMessage.includes('ECONNREFUSED') ||
+                      errorMessage.includes('connection')
+    
     return NextResponse.json(
-      { error: 'Failed to fetch dashboard data' },
+      { 
+        error: 'Failed to fetch dashboard data',
+        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
+        isDbError
+      },
       { status: 500 }
     )
   }

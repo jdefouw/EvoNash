@@ -200,7 +200,7 @@ export async function deleteRows(
 }
 
 /**
- * Call a PostgreSQL function (equivalent to Supabase .rpc())
+ * Call a PostgreSQL function
  */
 export async function rpc<T = any>(
   functionName: string,

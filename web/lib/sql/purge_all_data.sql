@@ -1,5 +1,5 @@
 -- Purge all data, keep tables and structure
--- Run this in Supabase SQL Editor or psql
+-- Run this with psql: psql -U evonash -d evonash -f purge_all_data.sql
 -- WARNING: This permanently deletes all rows in all application tables.
 
 -- Truncate root tables; CASCADE clears all tables that reference them:

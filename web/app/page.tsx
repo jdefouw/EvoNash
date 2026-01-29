@@ -439,18 +439,30 @@ const NAV_SECTIONS = [
 export default function ScienceFairDashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [activeSection, setActiveSection] = useState('abstract')
 
   useEffect(() => {
     // Cache-bust so CDN/browser never serve stale data (unique URL per request)
     fetch(`/api/dashboard?_=${Date.now()}`, { cache: 'no-store' })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`API error: ${res.status}`)
+        }
+        return res.json()
+      })
       .then(dashboardData => {
+        // Validate that we got actual dashboard data, not an error response
+        if (dashboardData.error || !dashboardData.controlExperiments) {
+          throw new Error(dashboardData.error || 'Invalid response from server')
+        }
         setData(dashboardData)
+        setError(null)
         setLoading(false)
       })
       .catch(err => {
         console.error('Error fetching dashboard data:', err)
+        setError(err.message || 'Failed to load dashboard data')
         setLoading(false)
       })
   }, [])
@@ -566,6 +578,29 @@ export default function ScienceFairDashboard() {
               <p className="text-gray-600 dark:text-gray-400">Loading dashboard data...</p>
             </div>
           </div>
+        ) : error ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="text-center max-w-md">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
+                <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Failed to Load Dashboard
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">{error}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-500 mb-4">
+                This may be a database connection issue. Please check that the server is properly configured.
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
         ) : (
           <div className="space-y-8">
             {/* 1. Abstract */}
@@ -670,13 +705,14 @@ export default function ScienceFairDashboard() {
                 experimentalConvergenceGen={data?.statistics?.experimentalConvergenceGen}
               />
 
-              {/* Sample Size Guidance */}
+              {/* Sample Size Guidance - Now uses actual calculated power */}
               <SampleSizeGuidance
                 controlExperimentCount={data?.statistics?.controlExperimentCount ?? 0}
                 experimentalExperimentCount={data?.statistics?.experimentalExperimentCount ?? 0}
                 controlAvgGenerations={data?.statistics?.controlAvgGenerations ?? 0}
                 experimentalAvgGenerations={data?.statistics?.experimentalAvgGenerations ?? 0}
                 statisticalPowerLevel={data?.statistics?.statisticalPowerLevel ?? 'insufficient'}
+                achievedPower={data?.powerAnalysis?.achievedPower?.power ?? null}
               />
 
               {/* Statistical Significance */}

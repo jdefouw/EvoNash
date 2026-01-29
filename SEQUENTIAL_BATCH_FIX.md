@@ -58,7 +58,7 @@ After applying the migration, you should see:
 
 Run the migration:
 ```sql
--- Apply migration_sequential_batches.sql to your Supabase database
+-- Apply migration_sequential_batches.sql to your PostgreSQL database
 ```
 
 The migration is idempotent (safe to run multiple times).

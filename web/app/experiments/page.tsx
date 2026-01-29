@@ -5,11 +5,18 @@ import Link from 'next/link'
 import { Experiment } from '@/types/protocol'
 import WorkerList from '@/components/WorkerList'
 
+const EXPERIMENTS_PER_PAGE = 25
+
 export default function ExperimentsPage() {
   const [experiments, setExperiments] = useState<Experiment[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [showWorkers, setShowWorkers] = useState(true)
   const [deletingAll, setDeletingAll] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [hasMore, setHasMore] = useState(true)
+  const [totalLoaded, setTotalLoaded] = useState(0)
   const [workerStats, setWorkerStats] = useState<{
     active: number
     processing: number
@@ -56,26 +63,52 @@ export default function ExperimentsPage() {
     return () => clearInterval(interval)
   }, [])
 
-  useEffect(() => {
-    fetch('/api/experiments')
-      .then(res => {
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`)
-        }
-        return res.json()
-      })
-      .then(data => {
-        // Ensure data is an array
-        const experimentsArray = Array.isArray(data) ? data : []
+  const fetchExperiments = async (page: number, append: boolean = false) => {
+    const offset = (page - 1) * EXPERIMENTS_PER_PAGE
+    
+    try {
+      const res = await fetch(`/api/experiments?limit=${EXPERIMENTS_PER_PAGE}&offset=${offset}`)
+      const data = await res.json()
+      
+      // Check if the response is an error
+      if (data.error) {
+        console.error('API returned error:', data)
+        setError(`Database error: ${data.details || data.error}`)
+        if (!append) setExperiments([])
+        return
+      }
+      
+      // Ensure data is an array (could be data.experiments or data directly)
+      const experimentsArray = Array.isArray(data) ? data : (data.experiments || [])
+      
+      if (append) {
+        setExperiments(prev => [...prev, ...experimentsArray])
+      } else {
         setExperiments(experimentsArray)
-        setLoading(false)
-      })
-      .catch(err => {
-        console.error('Error fetching experiments:', err)
-        setExperiments([]) // Set empty array on error
-        setLoading(false)
-      })
+      }
+      
+      setTotalLoaded(prev => append ? prev + experimentsArray.length : experimentsArray.length)
+      setHasMore(experimentsArray.length === EXPERIMENTS_PER_PAGE)
+      setError(null)
+    } catch (err) {
+      console.error('Error fetching experiments:', err)
+      setError(`Failed to load experiments: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      if (!append) setExperiments([])
+    }
+  }
+
+  useEffect(() => {
+    setLoading(true)
+    fetchExperiments(1).finally(() => setLoading(false))
   }, [])
+
+  const loadMore = async () => {
+    setLoadingMore(true)
+    const nextPage = currentPage + 1
+    await fetchExperiments(nextPage, true)
+    setCurrentPage(nextPage)
+    setLoadingMore(false)
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -142,10 +175,22 @@ export default function ExperimentsPage() {
   }
 
   const handleDeleteAll = async () => {
+    // First, get total count from server
+    let totalCount = experiments.length
+    try {
+      const countRes = await fetch('/api/experiments?limit=1&count=true')
+      const countData = await countRes.json()
+      if (countData.total) {
+        totalCount = countData.total
+      }
+    } catch {
+      // Use local count as fallback
+    }
+    
     // First confirmation
     const firstConfirm = confirm(
       `⚠️ DELETE ALL EXPERIMENTS ⚠️\n\n` +
-      `Are you sure you want to delete ALL ${experiments.length} experiments?\n\n` +
+      `Are you sure you want to delete ALL ${totalCount} experiments?\n\n` +
       `This will permanently delete:\n` +
       `• All experiments\n` +
       `• All generation data\n` +
@@ -162,7 +207,7 @@ export default function ExperimentsPage() {
     const secondConfirm = confirm(
       `🚨 FINAL WARNING 🚨\n\n` +
       `Are you REALLY sure?\n\n` +
-      `You are about to permanently delete ALL data for ${experiments.length} experiments.\n\n` +
+      `You are about to permanently delete ALL data for ${totalCount} experiments.\n\n` +
       `There is NO way to recover this data after deletion.\n\n` +
       `Click OK to proceed with deletion, or Cancel to abort.`
     )
@@ -282,7 +327,23 @@ export default function ExperimentsPage() {
         {showWorkers && <WorkerList className="mb-8" />}
 
         <div className="grid gap-4">
-          {sortedExperiments.length === 0 ? (
+          {error ? (
+            <div className="p-12 text-center border-2 border-dashed border-red-300 dark:border-red-700 rounded-xl bg-red-50 dark:bg-red-900/20">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
+                <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <p className="text-red-600 dark:text-red-400 font-medium mb-2">Error Loading Experiments</p>
+              <p className="text-red-500 dark:text-red-400 text-sm mb-4">{error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          ) : sortedExperiments.length === 0 ? (
             <div className="p-12 text-center border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800">
               <p className="text-gray-600 dark:text-gray-400 mb-4">No experiments yet.</p>
               <Link
@@ -293,47 +354,79 @@ export default function ExperimentsPage() {
               </Link>
             </div>
           ) : (
-            sortedExperiments.map((exp) => (
-              <Link
-                key={exp.id}
-                href={`/experiments/${exp.id}`}
-                className="block p-6 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-md transition-all bg-white dark:bg-gray-800"
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                        {exp.experiment_name}
-                      </h2>
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${getGroupColor(exp.experiment_group)} bg-opacity-10`}>
-                        {exp.experiment_group}
+            <>
+              {sortedExperiments.map((exp) => (
+                <Link
+                  key={exp.id}
+                  href={`/experiments/${exp.id}`}
+                  className="block p-6 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-md transition-all bg-white dark:bg-gray-800"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                          {exp.experiment_name}
+                        </h2>
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getGroupColor(exp.experiment_group)} bg-opacity-10`}>
+                          {exp.experiment_group}
+                        </span>
+                      </div>
+                      <div className="flex gap-6 text-sm text-gray-600 dark:text-gray-400">
+                        <span>Mutation: <strong>{exp.mutation_mode === 'STATIC' ? 'Static (ε=0.05)' : 'Adaptive (starts ~5%, scales by Elo)'}</strong></span>
+                        <span>Population: <strong>{exp.population_size}</strong></span>
+                        <span>Max Generations: <strong>{exp.max_generations}</strong></span>
+                        <span>Seed: <strong>{exp.random_seed}</strong></span>
+                        <span>Created: {new Date(exp.created_at).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`px-4 py-2 rounded-lg text-white text-sm font-medium ${getStatusColor(exp.status)}`}>
+                        {exp.status}
                       </span>
-                    </div>
-                    <div className="flex gap-6 text-sm text-gray-600 dark:text-gray-400">
-                      <span>Mutation: <strong>{exp.mutation_mode === 'STATIC' ? 'Static (ε=0.05)' : 'Adaptive (starts ~5%, scales by Elo)'}</strong></span>
-                      <span>Population: <strong>{exp.population_size}</strong></span>
-                      <span>Max Generations: <strong>{exp.max_generations}</strong></span>
-                      <span>Seed: <strong>{exp.random_seed}</strong></span>
-                      <span>Created: {new Date(exp.created_at).toLocaleDateString()}</span>
+                      <button
+                        onClick={(e) => handleDelete(e, exp.id, exp.experiment_name, exp.status)}
+                        className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                        title="Delete experiment"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`px-4 py-2 rounded-lg text-white text-sm font-medium ${getStatusColor(exp.status)}`}>
-                      {exp.status}
-                    </span>
-                    <button
-                      onClick={(e) => handleDelete(e, exp.id, exp.experiment_name, exp.status)}
-                      className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                      title="Delete experiment"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </Link>
-            ))
+                </Link>
+              ))}
+              
+              {/* Pagination Controls */}
+              <div className="mt-6 flex flex-col items-center gap-4">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Showing {sortedExperiments.length} experiment{sortedExperiments.length !== 1 ? 's' : ''}
+                  {hasMore && ' (more available)'}
+                </p>
+                
+                {hasMore && (
+                  <button
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {loadingMore ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                        Load More Experiments
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>

@@ -8,15 +8,41 @@ interface SampleSizeGuidanceProps {
   controlAvgGenerations: number
   experimentalAvgGenerations: number
   statisticalPowerLevel: StatisticalPowerLevel
+  // New: actual achieved power from power analysis (if available)
+  achievedPower?: number | null
 }
 
-// Statistical power comes from NUMBER OF EXPERIMENTS, not generation count
-// Each experiment provides one data point (convergence generation)
-// Generation count only needs to be sufficient for convergence detection
-const THRESHOLDS = [
-  { level: 'minimum', experiments: 3, label: 'Minimum', description: 'Minimum for t-test (df > 1)' },
-  { level: 'recommended', experiments: 5, label: 'Recommended', description: '80% power for medium effect' },
-  { level: 'robust', experiments: 8, label: 'Robust', description: '90%+ power, publication-quality' },
+// =============================================================================
+// STATISTICAL POWER THRESHOLDS
+// =============================================================================
+// These thresholds are based on established statistical conventions (Cohen, 1988):
+// - 80% power is the standard "adequate" threshold for scientific research
+// - Power = probability of detecting a true effect when it exists
+// - Below 50% means you're more likely to miss a real effect than detect it
+// 
+// The power level shown is based on ACTUAL CALCULATED POWER using observed
+// effect size, not arbitrary sample size thresholds. This is the scientifically
+// rigorous approach.
+// =============================================================================
+const POWER_THRESHOLDS = [
+  { 
+    level: 'minimum', 
+    powerRange: '40-59%', 
+    label: 'Minimum', 
+    description: 'Low power - may miss real effects (Type II error risk)' 
+  },
+  { 
+    level: 'recommended', 
+    powerRange: '60-79%', 
+    label: 'Moderate', 
+    description: 'Moderate power - can detect large effects reliably' 
+  },
+  { 
+    level: 'robust', 
+    powerRange: '≥80%', 
+    label: 'Adequate', 
+    description: 'Standard threshold for publication-quality research (Cohen, 1988)' 
+  },
 ] as const
 
 export default function SampleSizeGuidance({
@@ -24,8 +50,14 @@ export default function SampleSizeGuidance({
   experimentalExperimentCount,
   controlAvgGenerations,
   experimentalAvgGenerations,
-  statisticalPowerLevel
+  statisticalPowerLevel,
+  achievedPower
 }: SampleSizeGuidanceProps) {
+  // Format power as percentage
+  const powerPercentage = achievedPower !== null && achievedPower !== undefined
+    ? (achievedPower * 100).toFixed(1)
+    : null
+
   const getLevelColor = (level: StatisticalPowerLevel) => {
     switch (level) {
       case 'robust':
@@ -66,13 +98,15 @@ export default function SampleSizeGuidance({
   }
 
   const getLevelLabel = (level: StatisticalPowerLevel) => {
+    // Show actual power percentage when available
+    const powerStr = powerPercentage ? ` (${powerPercentage}%)` : ''
     switch (level) {
       case 'robust':
-        return 'Robust Level Achieved'
+        return `Adequate Power${powerStr}`
       case 'recommended':
-        return 'Recommended Level Achieved'
+        return `Moderate Power${powerStr}`
       case 'minimum':
-        return 'Minimum Level Achieved'
+        return `Low Power${powerStr}`
       case 'insufficient':
         return 'Insufficient Data'
     }
@@ -81,51 +115,56 @@ export default function SampleSizeGuidance({
   const getLevelDescription = (level: StatisticalPowerLevel) => {
     switch (level) {
       case 'robust':
-        return 'Excellent statistical power. Results are highly reliable and publishable.'
+        return '≥80% power: Standard threshold for publication-quality research. High probability of detecting true effects.'
       case 'recommended':
-        return 'Good statistical power. Results demonstrate reproducibility across seeds.'
+        return '60-79% power: Moderate ability to detect effects. May miss smaller true differences.'
       case 'minimum':
-        return 'Basic statistical power. Consider running more experiments for stronger evidence.'
+        return '40-59% power: Low power - significant risk of Type II error (failing to detect real effects).'
       case 'insufficient':
-        return 'Not enough data for reliable statistical analysis. Run more experiments.'
+        return 'Cannot calculate power. Need at least 2 experiments per group with measurable effect size.'
     }
   }
 
-  // Calculate progress toward next level
-  // Statistical power is driven by NUMBER OF EXPERIMENTS, not generation count
-  const getProgressToNextLevel = () => {
-    const minCount = Math.min(controlExperimentCount, experimentalExperimentCount)
-
-    if (statisticalPowerLevel === 'robust') {
-      return { progress: 100, nextLevel: null, needed: null }
+  // Calculate progress toward 80% power (the standard threshold)
+  const getProgressToAdequatePower = () => {
+    if (achievedPower === null || achievedPower === undefined) {
+      // Can't calculate power yet - show sample size progress
+      const minCount = Math.min(controlExperimentCount, experimentalExperimentCount)
+      // Need at least 2 per group to calculate power
+      if (minCount < 2) {
+        return {
+          progress: Math.round((minCount / 2) * 100),
+          target: '2 per group',
+          description: 'Need 2+ experiments per group to calculate statistical power'
+        }
+      }
+      // Waiting for effect size calculation
+      return {
+        progress: 50,
+        target: 'effect size',
+        description: 'Calculating effect size from observed data...'
+      }
     }
 
-    let targetExperiments = 0
-    let nextLevel = ''
-
-    if (statisticalPowerLevel === 'insufficient') {
-      targetExperiments = 3
-      nextLevel = 'Minimum'
-    } else if (statisticalPowerLevel === 'minimum') {
-      targetExperiments = 5
-      nextLevel = 'Recommended'
-    } else if (statisticalPowerLevel === 'recommended') {
-      targetExperiments = 8
-      nextLevel = 'Robust'
+    // We have actual power - show progress toward 80%
+    const progress = Math.min(100, Math.round((achievedPower / 0.80) * 100))
+    
+    if (achievedPower >= 0.80) {
+      return {
+        progress: 100,
+        target: null,
+        description: 'Adequate power achieved (≥80%)'
+      }
     }
-
-    // Progress is based solely on experiment count (not generations)
-    const progress = Math.min(100, Math.round((minCount / targetExperiments) * 100))
-    const neededExps = Math.max(0, targetExperiments - minCount)
 
     return {
       progress,
-      nextLevel,
-      needed: { experiments: neededExps }
+      target: '80%',
+      description: `Current: ${(achievedPower * 100).toFixed(1)}% → Target: 80% power`
     }
   }
 
-  const progressInfo = getProgressToNextLevel()
+  const progressInfo = getProgressToAdequatePower()
 
   const isLevelAchieved = (level: string) => {
     const levelOrder = ['insufficient', 'minimum', 'recommended', 'robust']
@@ -186,44 +225,40 @@ export default function SampleSizeGuidance({
         </div>
       </div>
 
-      {/* Progress to Next Level */}
-      {progressInfo.nextLevel && (
-        <div className="mb-6">
-          <div className="flex justify-between text-sm mb-2">
-            <span className="text-gray-600 dark:text-gray-400">
-              Progress to {progressInfo.nextLevel} Level
-            </span>
-            <span className="font-medium text-gray-900 dark:text-white">
-              {progressInfo.progress}%
-            </span>
-          </div>
-          <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-            <div 
-              className={`h-full ${getLevelColor(statisticalPowerLevel)} transition-all duration-500`}
-              style={{ width: `${progressInfo.progress}%` }}
-            />
-          </div>
-          {progressInfo.needed && progressInfo.needed.experiments > 0 && (
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              Need: {progressInfo.needed.experiments} more experiment{progressInfo.needed.experiments > 1 ? 's' : ''} per group
-            </div>
-          )}
+      {/* Progress to Adequate Power (80%) */}
+      <div className="mb-6">
+        <div className="flex justify-between text-sm mb-2">
+          <span className="text-gray-600 dark:text-gray-400">
+            Progress to Adequate Power (80%)
+          </span>
+          <span className="font-medium text-gray-900 dark:text-white">
+            {progressInfo.progress}%
+          </span>
         </div>
-      )}
+        <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+          <div 
+            className={`h-full ${getLevelColor(statisticalPowerLevel)} transition-all duration-500`}
+            style={{ width: `${progressInfo.progress}%` }}
+          />
+        </div>
+        <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+          {progressInfo.description}
+        </div>
+      </div>
 
-      {/* Thresholds Table */}
+      {/* Power Level Thresholds Table */}
       <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-900/50">
             <tr>
               <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Level</th>
-              <th className="text-center py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Experiments per Group</th>
-              <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Rationale</th>
+              <th className="text-center py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Power Range</th>
+              <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Interpretation</th>
               <th className="text-center py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-            {THRESHOLDS.map((threshold) => {
+            {POWER_THRESHOLDS.map((threshold) => {
               const achieved = isLevelAchieved(threshold.level)
               return (
                 <tr key={threshold.level} className={achieved ? 'bg-green-50/50 dark:bg-green-900/10' : ''}>
@@ -231,7 +266,7 @@ export default function SampleSizeGuidance({
                     {threshold.label}
                   </td>
                   <td className="py-2 px-3 text-center text-gray-600 dark:text-gray-400">
-                    {threshold.experiments}+
+                    {threshold.powerRange}
                   </td>
                   <td className="py-2 px-3 text-xs text-gray-500 dark:text-gray-400">
                     {threshold.description}
@@ -254,22 +289,27 @@ export default function SampleSizeGuidance({
         </table>
       </div>
 
-      {/* Why This Matters */}
+      {/* Understanding Statistical Power */}
       <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
-        <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Why Experiment Count Matters More Than Generation Count
+        <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Understanding Statistical Power
         </div>
         <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-          <strong>Statistical power comes from the number of independent experiments</strong>, not from running each experiment longer.
-          Each experiment provides one data point (its convergence generation) for the t-test.
+          <strong>Statistical power</strong> is the probability of correctly detecting a true effect when one exists. 
+          The <strong>80% threshold</strong> (Cohen, 1988) is the standard for publication-quality research.
         </p>
         <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-          Experiments use early stopping: once Nash equilibrium is detected (entropy variance stable for 20+ generations), 
-          the experiment can stop. Typical convergence occurs around generation 80-150, so experiments don&apos;t need thousands of generations.
+          Power depends on: <strong>(1) sample size</strong> (number of independent experiments), 
+          <strong>(2) effect size</strong> (how different the groups are), and <strong>(3) data variance</strong>. 
+          The power shown above is calculated from your actual observed effect size, not arbitrary thresholds.
+        </p>
+        <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+          <strong>Type II Error Risk:</strong> With power below 80%, you have a significant chance of failing to detect 
+          a real effect (false negative). For example, 60% power means a 40% chance of missing a true difference.
         </p>
         <p className="text-xs text-gray-600 dark:text-gray-400">
-          <strong>Aim for 5+ experiments per group</strong> with different random seeds for reliable statistical significance.
-          8+ experiments per group provides publication-quality power (90%+).
+          <strong>Note:</strong> Each experiment provides one independent data point for the statistical test. 
+          Running experiments longer doesn&apos;t increase power—running more independent experiments with different random seeds does.
         </p>
       </div>
     </div>

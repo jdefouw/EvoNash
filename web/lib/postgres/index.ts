@@ -1,5 +1,5 @@
 // PostgreSQL client library for EvoNash
-// Replaces Supabase client with direct PostgreSQL connections
+// Direct PostgreSQL connections using native pg library
 
 export {
   query,

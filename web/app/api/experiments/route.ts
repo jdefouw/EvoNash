@@ -5,17 +5,47 @@ import { Experiment, ExperimentConfig } from '@/types/protocol'
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // Parse query params for pagination
+    const { searchParams } = new URL(request.url)
+    const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 500)
+    const offset = parseInt(searchParams.get('offset') || '0')
+    const includeCount = searchParams.get('count') === 'true'
+    
+    // Query with limit to prevent timeout on large datasets
     const data = await queryAll<Experiment>(
-      'SELECT * FROM experiments ORDER BY created_at DESC'
+      'SELECT * FROM experiments ORDER BY created_at DESC LIMIT $1 OFFSET $2',
+      [limit, offset]
     )
+    
+    // Optionally include total count (for pagination UI)
+    if (includeCount) {
+      const countResult = await query('SELECT COUNT(*) as total FROM experiments')
+      const total = parseInt(countResult.rows[0]?.total || '0', 10)
+      return NextResponse.json({
+        experiments: data || [],
+        total,
+        limit,
+        offset,
+        hasMore: offset + (data?.length || 0) < total
+      })
+    }
     
     return NextResponse.json(data || [])
   } catch (error) {
     console.error('Error fetching experiments:', error)
-    // Return empty array on error to prevent client-side issues
-    return NextResponse.json([])
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    
+    // Return error response so the client knows something went wrong
+    return NextResponse.json(
+      { 
+        error: 'Failed to fetch experiments', 
+        details: errorMessage,
+        experiments: [] 
+      },
+      { status: 500 }
+    )
   }
 }
 

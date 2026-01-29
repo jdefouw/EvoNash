@@ -1,5 +1,5 @@
 -- Migration: Add ticks_per_generation column to experiments table
--- Run this in your Supabase SQL editor to update the database schema
+-- Run this with psql: psql -U evonash -d evonash -f migration_add_ticks_per_generation.sql
 
 -- Add ticks_per_generation column if it doesn't exist
 DO $$ 

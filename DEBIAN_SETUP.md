@@ -118,7 +118,7 @@ sudo -u evonash -i
 cd /opt/evonash
 
 # Apply schema (after cloning project)
-psql -U evonash -d evonash -f web/lib/supabase/schema_standalone.sql
+psql -U evonash -d evonash -f web/lib/sql/schema_standalone.sql
 ```
 
 ---
@@ -327,7 +327,7 @@ npm run build
 ### 6.5 Apply Database Schema
 
 ```bash
-cd /opt/evonash/web/lib/supabase
+cd /opt/evonash/web/lib/sql
 psql -U evonash -d evonash -f schema_standalone.sql
 ```
 

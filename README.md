@@ -84,7 +84,7 @@ CREATE USER evonash WITH PASSWORD 'your_password';
 CREATE DATABASE evonash OWNER evonash;
 
 # Apply schema
-cd web/lib/supabase
+cd web/lib/sql
 psql -U evonash -d evonash -f schema_standalone.sql
 ```
 
@@ -167,7 +167,7 @@ EvoNash/
 │   │   └── experiments/          # Experiment pages
 │   ├── components/               # React components
 │   │   └── dashboard/            # Dashboard components
-│   ├── lib/supabase/             # Database schema & client
+│   ├── lib/sql/                  # Database schema & migrations
 │   └── types/                    # TypeScript types
 ├── worker/                       # Python GPU worker
 │   ├── config/                   # Configuration files
