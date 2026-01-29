@@ -123,10 +123,10 @@ export default function EffectSizeCard({
           </div>
 
           {/* Confidence Interval */}
-          {hedgesG?.ciLower !== null && hedgesG?.ciUpper !== null && (
+          {hedgesG?.ciLower != null && hedgesG?.ciUpper != null && (
             <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
               <div className="text-xs text-gray-600 dark:text-gray-400">
-                95% CI: [{hedgesG.ciLower.toFixed(3)}, {hedgesG.ciUpper.toFixed(3)}]
+                95% CI: [{hedgesG?.ciLower?.toFixed(3)}, {hedgesG?.ciUpper?.toFixed(3)}]
               </div>
             </div>
           )}
@@ -143,9 +143,9 @@ export default function EffectSizeCard({
               {cohensD !== null ? cohensD.toFixed(3) : 'N/A'}
             </div>
           </div>
-          {hedgesG?.correctionFactor !== null && (
+          {hedgesG?.correctionFactor != null && (
             <div className="text-xs text-gray-500 mt-1">
-              Correction factor: {hedgesG.correctionFactor.toFixed(4)}
+              Correction factor: {hedgesG?.correctionFactor?.toFixed(4)}
             </div>
           )}
         </div>
@@ -161,7 +161,7 @@ export default function EffectSizeCard({
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                {cles?.clesPercentage !== null ? `${cles.clesPercentage.toFixed(1)}%` : 'N/A'}
+                {cles?.clesPercentage != null ? `${cles?.clesPercentage?.toFixed(1)}%` : 'N/A'}
               </div>
             </div>
           </div>
@@ -172,10 +172,10 @@ export default function EffectSizeCard({
           </div>
           
           {/* Visual explanation */}
-          {cles?.clesPercentage !== null && (
+          {cles?.clesPercentage != null && (
             <div className="mt-3 p-2 bg-white dark:bg-gray-800 rounded text-xs text-gray-600 dark:text-gray-400">
               <strong>Interpretation:</strong> If you randomly select one value from each group, 
-              there is a {cles.clesPercentage.toFixed(1)}% chance the Experimental value will be higher 
+              there is a {cles?.clesPercentage?.toFixed(1)}% chance the Experimental value will be higher 
               than the Control value.
             </div>
           )}
