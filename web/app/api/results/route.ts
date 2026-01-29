@@ -9,15 +9,18 @@ const ABSOLUTE_THRESHOLD = 0.01     // Minimum floor for convergence threshold
 const RELATIVE_THRESHOLD_PERCENT = 0.10  // 10% of peak variance
 const STABILITY_WINDOW = 20         // Consecutive generations below threshold required
 const POST_CONVERGENCE_BUFFER = 30  // Additional generations after convergence before completing
+const MINIMUM_GENERATIONS = 200     // Minimum generations before early stopping can trigger
+const MINIMUM_PEAK_GENERATION = 20  // Peak variance must occur after this generation (to ensure proper divergence)
 
 /**
  * Detect Nash equilibrium based on entropy variance convergence.
  * 
  * Algorithm:
- * 1. Find peak entropy variance (skip first 5 generations for stability)
- * 2. Use relative threshold (10% of peak) when peak is high, absolute (0.01) when peak is low
- * 3. Find when variance drops below threshold for STABILITY_WINDOW consecutive generations after peak
- * 4. Require POST_CONVERGENCE_BUFFER additional generations after convergence
+ * 1. Require at least MINIMUM_GENERATIONS before early stopping is even considered
+ * 2. Find peak entropy variance (must occur after MINIMUM_PEAK_GENERATION to ensure proper divergence)
+ * 3. Use relative threshold (10% of peak) when peak is high, absolute (0.01) when peak is low
+ * 4. Find when variance drops below threshold for STABILITY_WINDOW consecutive generations after peak
+ * 5. Require POST_CONVERGENCE_BUFFER additional generations after convergence
  * 
  * @param experimentId - The experiment ID to check
  * @returns Object with equilibriumReached boolean and convergenceGeneration number
@@ -35,8 +38,9 @@ async function detectEquilibrium(experimentId: string): Promise<{
     [experimentId]
   )
   
-  // Need enough generations to detect equilibrium
-  if (!generations || generations.length < STABILITY_WINDOW + POST_CONVERGENCE_BUFFER) {
+  // CRITICAL: Require minimum generations before early stopping is allowed
+  // This prevents premature completion when experiments converge quickly
+  if (!generations || generations.length < MINIMUM_GENERATIONS) {
     return { equilibriumReached: false, convergenceGeneration: null }
   }
   
@@ -53,9 +57,17 @@ async function detectEquilibrium(experimentId: string): Promise<{
   // Find peak variance
   const peakVariance = Math.max(...varianceData.map(d => d.variance))
   const peakIndex = varianceData.findIndex(d => d.variance === peakVariance)
+  const peakGen = varianceData[peakIndex]?.gen ?? 0
   
   // Must have diverged (peak > minimum threshold)
   if (peakVariance <= 0.0001) {
+    return { equilibriumReached: false, convergenceGeneration: null }
+  }
+  
+  // Peak must occur after minimum generation to ensure proper divergence phase
+  // This prevents detecting "convergence" when variance was just low from the start
+  if (peakGen < MINIMUM_PEAK_GENERATION) {
+    console.log(`[detectEquilibrium] Peak variance at gen ${peakGen} is before minimum (${MINIMUM_PEAK_GENERATION}), skipping early detection`)
     return { equilibriumReached: false, convergenceGeneration: null }
   }
   
@@ -82,7 +94,7 @@ async function detectEquilibrium(experimentId: string): Promise<{
     const gensPastConvergence = maxGen - convergenceGen
     
     if (gensPastConvergence >= POST_CONVERGENCE_BUFFER) {
-      console.log(`[detectEquilibrium] Nash equilibrium confirmed: convergence at gen ${convergenceGen}, ${gensPastConvergence} generations past (threshold: ${effectiveThreshold.toFixed(4)}, peak: ${peakVariance.toFixed(4)})`)
+      console.log(`[detectEquilibrium] Nash equilibrium confirmed: convergence at gen ${convergenceGen}, ${gensPastConvergence} generations past (threshold: ${effectiveThreshold.toFixed(4)}, peak: ${peakVariance.toFixed(4)} at gen ${peakGen})`)
       return { equilibriumReached: true, convergenceGeneration: convergenceGen }
     }
   }
