@@ -24,8 +24,73 @@ export async function POST(request: NextRequest) {
     console.log(`[QUEUE] User-Agent: ${userAgent}`)
     console.log(`[QUEUE] ========================================`)
     
-    // If worker_id provided, check if worker can accept more jobs
+    // CRITICAL: Worker stickiness - a worker with an active job MUST stay with that job
+    // A worker should NEVER receive a new job while it has one in progress
     if (worker_id) {
+      // Check if worker has ANY active job (assigned or processing)
+      const activeJob = await queryOne<{ 
+        job_id: string; 
+        experiment_id: string; 
+        generation_start: number; 
+        generation_end: number;
+        status: string;
+      }>(
+        `SELECT ja.job_id, ja.experiment_id, ja.generation_start, ja.generation_end, ja.status,
+                e.experiment_name, e.mutation_mode, e.mutation_rate, e.mutation_base,
+                e.max_possible_elo, e.random_seed, e.population_size, e.selection_pressure,
+                e.max_generations, e.ticks_per_generation, e.network_architecture, e.experiment_group
+         FROM job_assignments ja
+         JOIN experiments e ON e.id = ja.experiment_id
+         WHERE ja.worker_id = $1 AND ja.status IN ('assigned', 'processing')
+         ORDER BY ja.assigned_at ASC
+         LIMIT 1`,
+        [worker_id]
+      )
+      
+      if (activeJob) {
+        // Worker already has an active job - return that job (recovery/continuation)
+        console.log(`[QUEUE] ⚠ Worker ${worker_id?.slice(0,8)} already has active job, returning existing assignment`)
+        console.log(`[QUEUE]   Job ID: ${activeJob.job_id}`)
+        console.log(`[QUEUE]   Status: ${activeJob.status}`)
+        console.log(`[QUEUE]   Generations: ${activeJob.generation_start}-${activeJob.generation_end}`)
+        
+        // Fetch full experiment config for the existing job
+        const experiment = await queryOne(
+          `SELECT * FROM experiments WHERE id = $1`,
+          [activeJob.experiment_id]
+        )
+        
+        if (experiment) {
+          const config: ExperimentConfig = {
+            experiment_id: experiment.id,
+            experiment_name: experiment.experiment_name,
+            mutation_mode: experiment.mutation_mode,
+            mutation_rate: experiment.mutation_rate,
+            mutation_base: experiment.mutation_base,
+            max_possible_elo: experiment.max_possible_elo,
+            random_seed: experiment.random_seed,
+            population_size: experiment.population_size,
+            selection_pressure: experiment.selection_pressure,
+            max_generations: experiment.max_generations,
+            ticks_per_generation: experiment.ticks_per_generation || 750,
+            network_architecture: experiment.network_architecture,
+            experiment_group: experiment.experiment_group
+          }
+          
+          return NextResponse.json({
+            job_id: activeJob.job_id,
+            experiment_id: activeJob.experiment_id,
+            worker_id: worker_id,
+            generation_start: activeJob.generation_start,
+            generation_end: activeJob.generation_end,
+            experiment_config: config,
+            recovery: true,
+            message: 'Worker must complete existing job before receiving new assignments'
+          })
+        }
+      }
+      
+      // Check worker capacity (should be at 0 if no active job above)
       const worker = await queryOne<{ max_parallel_jobs: number; active_jobs_count: number; status: string }>(
         'SELECT max_parallel_jobs, active_jobs_count, status FROM workers WHERE id = $1',
         [worker_id]
@@ -41,8 +106,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Find experiments with status PENDING or RUNNING
-    // Use interleaved ordering: alternate between CONTROL and EXPERIMENTAL experiments
-    // This ensures workers process both groups fairly (CONTROL 1, EXPERIMENTAL 1, CONTROL 2, EXPERIMENTAL 2, ...)
+    // IMPORTANT: Never assign jobs from COMPLETED, FAILED, or STOPPED experiments
     const experiments = await queryAll(
       `WITH ranked_experiments AS (
         SELECT *,
@@ -77,11 +141,44 @@ export async function POST(request: NextRequest) {
       console.log(`[QUEUE]   ... and ${experiments.length - 10} more`)
     }
 
-    // Experiment affinity is DISABLED when both groups have pending work
-    // This ensures proper interleaving between Control and Experimental for fair comparison
-    // Only use affinity when there's only one group left (to efficiently complete remaining experiments)
+    // INTERLEAVED WORKER DISTRIBUTION: Balance workers between CONTROL and EXPERIMENTAL
+    // Count how many workers are currently actively processing each group
+    const activeWorkersByGroup = await queryAll<{ experiment_group: string; worker_count: number }>(
+      `SELECT e.experiment_group, COUNT(DISTINCT ja.worker_id) as worker_count
+       FROM job_assignments ja
+       JOIN experiments e ON e.id = ja.experiment_id
+       WHERE ja.status IN ('assigned', 'processing')
+       AND e.status IN ('PENDING', 'RUNNING')
+       GROUP BY e.experiment_group`
+    ) || []
+    
+    const controlWorkers = activeWorkersByGroup.find((g: any) => g.experiment_group === 'CONTROL')?.worker_count || 0
+    const experimentalWorkers = activeWorkersByGroup.find((g: any) => g.experiment_group === 'EXPERIMENTAL')?.worker_count || 0
+    
+    console.log(`[QUEUE] Active workers by group: CONTROL=${controlWorkers}, EXPERIMENTAL=${experimentalWorkers}`)
+    
+    // Determine which group should get the next worker for balance
+    // If both groups have work, assign to the group with fewer active workers
+    let preferredGroup: 'CONTROL' | 'EXPERIMENTAL' | null = null
+    if (hasBothGroups) {
+      if (controlWorkers <= experimentalWorkers) {
+        preferredGroup = 'CONTROL'
+      } else {
+        preferredGroup = 'EXPERIMENTAL'
+      }
+      console.log(`[QUEUE] Preferred group for balance: ${preferredGroup} (fewer workers)`)
+    }
+    
+    // Reorder experiments to prioritize the preferred group for worker balance
     let experimentOrder: any[] = experiments
-    if (worker_id && !hasBothGroups) {
+    if (preferredGroup && hasBothGroups) {
+      // Put experiments from the preferred group first
+      const preferredExperiments = experiments.filter((e: any) => e.experiment_group === preferredGroup)
+      const otherExperiments = experiments.filter((e: any) => e.experiment_group !== preferredGroup)
+      experimentOrder = [...preferredExperiments, ...otherExperiments]
+      console.log(`[QUEUE] Reordered experiments: ${preferredExperiments.length} ${preferredGroup} first, then ${otherExperiments.length} others`)
+    } else if (!hasBothGroups && worker_id) {
+      // Only one group left - use affinity to efficiently complete remaining experiments
       const lastCompletedJob = await queryOne<{ experiment_id: string }>(
         `SELECT experiment_id FROM job_assignments 
          WHERE worker_id = $1 AND status = 'completed' 
@@ -96,8 +193,6 @@ export async function POST(request: NextRequest) {
         experimentOrder = preferred ? [preferred, ...rest] : experiments
         console.log(`[QUEUE] Experiment affinity (single group): preferring experiment ${lastExperimentId.slice(0, 8)}… for worker ${worker_id.slice(0, 8)}…`)
       }
-    } else if (hasBothGroups) {
-      console.log(`[QUEUE] Both groups have pending work - using strict interleaving (no affinity)`)
     }
 
     // Try to find an unassigned batch for each experiment (affinity order when worker_id set)
@@ -208,57 +303,18 @@ export async function POST(request: NextRequest) {
       const existingGenerationNumbers = new Set((existingGenerations || []).map((g: any) => g.generation_number))
       
       // CRITICAL: Enforce SINGLE BATCH per experiment for sequential processing
+      // Since generations depend on previous generations, only one batch can be active per experiment
       const activeBatches = assignedBatches.filter((b: any) => 
         b.status === 'assigned' || b.status === 'processing'
       )
       
-      // Check if the requesting worker has their own active batch (recovery case)
-      const ownActiveBatches = worker_id 
-        ? activeBatches.filter((b: any) => b.worker_id === worker_id)
-        : []
-      
-      // Check if there are active batches from OTHER workers
-      const otherWorkersActiveBatches = activeBatches.filter((b: any) => 
-        !worker_id || b.worker_id !== worker_id
-      )
-      
-      if (otherWorkersActiveBatches.length > 0) {
-        console.log(`[QUEUE] Experiment ${experiment.id} has active batch from other worker, skipping`)
-        console.log(`[QUEUE]   Active: ${otherWorkersActiveBatches.map((b: any) => `gen ${b.generation_start}-${b.generation_end} (worker ${b.worker_id?.slice(0,8)})`).join(', ')}`)
+      // If there are ANY active batches on this experiment, skip it
+      // (Worker stickiness is handled at the top of the function, so if we're here,
+      // any active batch belongs to another worker)
+      if (activeBatches.length > 0) {
+        console.log(`[QUEUE] Experiment ${experiment.id} has active batch, skipping`)
+        console.log(`[QUEUE]   Active: ${activeBatches.map((b: any) => `gen ${b.generation_start}-${b.generation_end} (worker ${b.worker_id?.slice(0,8)})`).join(', ')}`)
         continue
-      }
-      
-      if (ownActiveBatches.length > 0) {
-        // This worker already has an active batch - return existing job
-        const existingBatch = ownActiveBatches[0]
-        console.log(`[QUEUE] Worker ${worker_id?.slice(0,8)} already has active batch, returning existing job`)
-        console.log(`[QUEUE]   Existing job: ${existingBatch.job_id}, gen ${existingBatch.generation_start}-${existingBatch.generation_end}`)
-        
-        const config: ExperimentConfig = {
-          experiment_id: experiment.id,
-          experiment_name: experiment.experiment_name,
-          mutation_mode: experiment.mutation_mode,
-          mutation_rate: experiment.mutation_rate,
-          mutation_base: experiment.mutation_base,
-          max_possible_elo: experiment.max_possible_elo,
-          random_seed: experiment.random_seed,
-          population_size: experiment.population_size,
-          selection_pressure: experiment.selection_pressure,
-          max_generations: experiment.max_generations,
-          ticks_per_generation: experiment.ticks_per_generation || 750,
-          network_architecture: experiment.network_architecture,
-          experiment_group: experiment.experiment_group
-        }
-        
-        return NextResponse.json({
-          job_id: existingBatch.job_id,
-          experiment_id: experiment.id,
-          worker_id: worker_id,
-          generation_start: existingBatch.generation_start,
-          generation_end: existingBatch.generation_end,
-          experiment_config: config,
-          recovery: true
-        })
       }
       
       // Calculate which generations have EVER been claimed
