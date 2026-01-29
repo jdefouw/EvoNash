@@ -9,6 +9,7 @@ export default function ExperimentsPage() {
   const [experiments, setExperiments] = useState<Experiment[]>([])
   const [loading, setLoading] = useState(true)
   const [showWorkers, setShowWorkers] = useState(true)
+  const [deletingAll, setDeletingAll] = useState(false)
   const [workerStats, setWorkerStats] = useState<{
     active: number
     processing: number
@@ -115,6 +116,63 @@ export default function ExperimentsPage() {
     }
   }
 
+  const handleDeleteAll = async () => {
+    // First confirmation
+    const firstConfirm = confirm(
+      `⚠️ DELETE ALL EXPERIMENTS ⚠️\n\n` +
+      `Are you sure you want to delete ALL ${experiments.length} experiments?\n\n` +
+      `This will permanently delete:\n` +
+      `• All experiments\n` +
+      `• All generation data\n` +
+      `• All checkpoints\n` +
+      `• All job assignments\n\n` +
+      `This action CANNOT be undone!`
+    )
+    
+    if (!firstConfirm) {
+      return
+    }
+    
+    // Second confirmation
+    const secondConfirm = confirm(
+      `🚨 FINAL WARNING 🚨\n\n` +
+      `Are you REALLY sure?\n\n` +
+      `You are about to permanently delete ALL data for ${experiments.length} experiments.\n\n` +
+      `There is NO way to recover this data after deletion.\n\n` +
+      `Click OK to proceed with deletion, or Cancel to abort.`
+    )
+    
+    if (!secondConfirm) {
+      return
+    }
+    
+    setDeletingAll(true)
+    
+    try {
+      const response = await fetch('/api/experiments/delete-all', { method: 'DELETE' })
+      
+      if (response.ok) {
+        const result = await response.json()
+        setExperiments([])
+        alert(
+          `✓ Successfully deleted all experiments!\n\n` +
+          `Deleted:\n` +
+          `• ${result.details?.experiments || 0} experiments\n` +
+          `• ${result.details?.generations || 0} generations\n` +
+          `• ${result.details?.checkpoints || 0} checkpoints\n` +
+          `• ${result.details?.job_assignments || 0} job assignments`
+        )
+      } else {
+        const error = await response.json()
+        alert(`Failed to delete all experiments: ${error.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      alert(`Failed to delete all experiments: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setDeletingAll(false)
+    }
+  }
+
   if (loading) {
     return (
       <main className="min-h-screen p-8">
@@ -152,6 +210,18 @@ export default function ExperimentsPage() {
             </p>
           </div>
           <div className="flex gap-3">
+            {experiments.length > 0 && (
+              <button
+                onClick={handleDeleteAll}
+                disabled={deletingAll}
+                className="px-5 py-3 rounded-lg font-medium transition-all flex items-center gap-2 bg-red-600 text-white hover:bg-red-700 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                {deletingAll ? 'Deleting...' : 'Delete All'}
+              </button>
+            )}
             <button
               onClick={() => setShowWorkers(!showWorkers)}
               className={`px-5 py-3 rounded-lg font-medium transition-all flex items-center gap-2 ${

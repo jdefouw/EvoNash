@@ -1,0 +1,77 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { query } from '@/lib/postgres'
+
+// Force dynamic rendering since we modify the database
+export const dynamic = 'force-dynamic'
+
+/**
+ * DELETE /api/experiments/delete-all
+ * 
+ * Deletes ALL experiments and their related data.
+ * This is a destructive operation that cannot be undone.
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    console.log('[DELETE-ALL] Starting deletion of all experiments...')
+    
+    // Get count before deletion for reporting
+    const countResult = await query('SELECT COUNT(*) as count FROM experiments')
+    const experimentCount = parseInt(countResult.rows[0]?.count || '0')
+    
+    if (experimentCount === 0) {
+      return NextResponse.json({
+        success: true,
+        message: 'No experiments to delete',
+        deleted_count: 0
+      })
+    }
+    
+    console.log(`[DELETE-ALL] Found ${experimentCount} experiments to delete`)
+    
+    // Delete in order to respect foreign key constraints
+    // (or use CASCADE if set up in schema)
+    
+    // 1. Delete checkpoints
+    const checkpointsResult = await query('DELETE FROM checkpoints RETURNING id')
+    const checkpointsDeleted = checkpointsResult.rows?.length || 0
+    console.log(`[DELETE-ALL] Deleted ${checkpointsDeleted} checkpoints`)
+    
+    // 2. Delete job assignments
+    const jobsResult = await query('DELETE FROM job_assignments RETURNING id')
+    const jobsDeleted = jobsResult.rows?.length || 0
+    console.log(`[DELETE-ALL] Deleted ${jobsDeleted} job assignments`)
+    
+    // 3. Delete generations (this includes all generation data)
+    const generationsResult = await query('DELETE FROM generations RETURNING id')
+    const generationsDeleted = generationsResult.rows?.length || 0
+    console.log(`[DELETE-ALL] Deleted ${generationsDeleted} generations`)
+    
+    // 4. Delete experiments
+    const experimentsResult = await query('DELETE FROM experiments RETURNING id')
+    const experimentsDeleted = experimentsResult.rows?.length || 0
+    console.log(`[DELETE-ALL] Deleted ${experimentsDeleted} experiments`)
+    
+    console.log('[DELETE-ALL] ✓ All experiments deleted successfully')
+    
+    return NextResponse.json({
+      success: true,
+      message: 'All experiments deleted successfully',
+      deleted_count: experimentsDeleted,
+      details: {
+        experiments: experimentsDeleted,
+        generations: generationsDeleted,
+        job_assignments: jobsDeleted,
+        checkpoints: checkpointsDeleted
+      }
+    })
+  } catch (error) {
+    console.error('[DELETE-ALL] Error deleting all experiments:', error)
+    return NextResponse.json(
+      { 
+        error: 'Failed to delete all experiments',
+        details: error instanceof Error ? error.message : String(error)
+      },
+      { status: 500 }
+    )
+  }
+}
