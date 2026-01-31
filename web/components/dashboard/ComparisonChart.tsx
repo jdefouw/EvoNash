@@ -25,34 +25,57 @@ export default function ComparisonChart({
 }: ComparisonChartProps) {
   const [viewMode, setViewMode] = useState<'overlay' | 'side-by-side'>('overlay')
 
-  // Merge data for overlay view
+  // Aggregate by generation_number: average across all experiments per group per generation
   const maxGen = Math.max(
     controlGenerations.length > 0 ? Math.max(...controlGenerations.map(g => g.generation_number)) : 0,
     experimentalGenerations.length > 0 ? Math.max(...experimentalGenerations.map(g => g.generation_number)) : 0
   )
 
-  const overlayData = Array.from({ length: maxGen + 1 }, (_, i) => {
-    const controlGen = controlGenerations.find(g => g.generation_number === i)
-    const expGen = experimentalGenerations.find(g => g.generation_number === i)
+  const controlByGen = new Map<number, { avgElo: number[]; peakElo: number[]; entropy: number[]; variance: number[] }>()
+  const experimentalByGen = new Map<number, { avgElo: number[]; peakElo: number[]; entropy: number[]; variance: number[] }>()
 
+  for (const g of controlGenerations) {
+    const i = g.generation_number
+    if (!controlByGen.has(i)) controlByGen.set(i, { avgElo: [], peakElo: [], entropy: [], variance: [] })
+    const b = controlByGen.get(i)!
+    if (g.avg_elo != null) b.avgElo.push(g.avg_elo)
+    if (g.peak_elo != null) b.peakElo.push(g.peak_elo)
+    if (g.policy_entropy != null) b.entropy.push(g.policy_entropy)
+    if (g.entropy_variance != null) b.variance.push(g.entropy_variance)
+  }
+  for (const g of experimentalGenerations) {
+    const i = g.generation_number
+    if (!experimentalByGen.has(i)) experimentalByGen.set(i, { avgElo: [], peakElo: [], entropy: [], variance: [] })
+    const b = experimentalByGen.get(i)!
+    if (g.avg_elo != null) b.avgElo.push(g.avg_elo)
+    if (g.peak_elo != null) b.peakElo.push(g.peak_elo)
+    if (g.policy_entropy != null) b.entropy.push(g.policy_entropy)
+    if (g.entropy_variance != null) b.variance.push(g.entropy_variance)
+  }
+
+  const mean = (arr: number[]) => (arr.length === 0 ? null : arr.reduce((a, b) => a + b, 0) / arr.length)
+
+  const overlayData = Array.from({ length: maxGen + 1 }, (_, i) => {
+    const c = controlByGen.get(i)
+    const e = experimentalByGen.get(i)
     if (metric === 'elo') {
       return {
         generation: i,
-        controlAvgElo: controlGen?.avg_elo || null,
-        controlPeakElo: controlGen?.peak_elo || null,
-        experimentalAvgElo: expGen?.avg_elo || null,
-        experimentalPeakElo: expGen?.peak_elo || null,
+        controlAvgElo: c ? mean(c.avgElo) : null,
+        controlPeakElo: c ? mean(c.peakElo) : null,
+        experimentalAvgElo: e ? mean(e.avgElo) : null,
+        experimentalPeakElo: e ? mean(e.peakElo) : null,
       }
     } else {
       return {
         generation: i,
-        controlEntropy: controlGen?.policy_entropy || null,
-        controlVariance: controlGen?.entropy_variance || null,
-        experimentalEntropy: expGen?.policy_entropy || null,
-        experimentalVariance: expGen?.entropy_variance || null,
+        controlEntropy: c ? mean(c.entropy) : null,
+        controlVariance: c ? mean(c.variance) : null,
+        experimentalEntropy: e ? mean(e.entropy) : null,
+        experimentalVariance: e ? mean(e.variance) : null,
       }
     }
-  }).filter(d => 
+  }).filter(d =>
     (metric === 'elo' && (d.controlAvgElo !== null || d.experimentalAvgElo !== null)) ||
     (metric === 'entropy' && (d.controlEntropy !== null || d.experimentalEntropy !== null))
   )
