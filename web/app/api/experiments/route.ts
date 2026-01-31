@@ -5,6 +5,39 @@ import { Experiment, ExperimentConfig } from '@/types/protocol'
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
 
+export interface ExperimentsSummary {
+  completed: { control: number; experimental: number; total: number }
+  pending: { control: number; experimental: number; total: number }
+  running: { control: number; experimental: number; total: number }
+}
+
+async function getExperimentsSummary(): Promise<ExperimentsSummary> {
+  const rows = await queryAll<{ status: string; experiment_group: string; count: string }>(
+    `SELECT status, experiment_group, COUNT(*)::text as count
+     FROM experiments
+     WHERE status IN ('COMPLETED', 'PENDING', 'RUNNING')
+     GROUP BY status, experiment_group`
+  )
+  const summary: ExperimentsSummary = {
+    completed: { control: 0, experimental: 0, total: 0 },
+    pending: { control: 0, experimental: 0, total: 0 },
+    running: { control: 0, experimental: 0, total: 0 }
+  }
+  for (const row of rows || []) {
+    const n = parseInt(row.count || '0', 10)
+    const key = row.status.toLowerCase() as keyof ExperimentsSummary
+    if (key in summary) {
+      const bucket = summary[key]
+      if (row.experiment_group === 'CONTROL') bucket.control += n
+      else if (row.experiment_group === 'EXPERIMENTAL') bucket.experimental += n
+    }
+  }
+  summary.completed.total = summary.completed.control + summary.completed.experimental
+  summary.pending.total = summary.pending.control + summary.pending.experimental
+  summary.running.total = summary.running.control + summary.running.experimental
+  return summary
+}
+
 export async function GET(request: NextRequest) {
   try {
     // Parse query params for pagination
@@ -12,6 +45,7 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 500)
     const offset = parseInt(searchParams.get('offset') || '0')
     const includeCount = searchParams.get('count') === 'true'
+    const includeSummary = searchParams.get('summary') === 'true'
     
     // Query with limit to prevent timeout on large datasets
     // Sort by status priority: RUNNING first, then COMPLETED, then PENDING/others
@@ -32,20 +66,33 @@ export async function GET(request: NextRequest) {
       [limit, offset]
     )
     
+    // Build response
+    const response: {
+      experiments: Experiment[]
+      total?: number
+      limit?: number
+      offset?: number
+      hasMore?: boolean
+      summary?: ExperimentsSummary
+    } = { experiments: data || [] }
+    
     // Optionally include total count (for pagination UI)
     if (includeCount) {
       const countResult = await query('SELECT COUNT(*) as total FROM experiments')
       const total = parseInt(countResult.rows[0]?.total || '0', 10)
-      return NextResponse.json({
-        experiments: data || [],
-        total,
-        limit,
-        offset,
-        hasMore: offset + (data?.length || 0) < total
-      })
+      response.total = total
+      response.limit = limit
+      response.offset = offset
+      response.hasMore = offset + (data?.length || 0) < total
     }
     
-    return NextResponse.json(data || [])
+    // Optionally include summary by status and type (completed, pending, running × control, experimental)
+    if (includeSummary) {
+      response.summary = await getExperimentsSummary()
+    }
+    
+    const returnObject = response.total !== undefined || response.summary !== undefined
+    return NextResponse.json(returnObject ? response : response.experiments)
   } catch (error) {
     console.error('Error fetching experiments:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'

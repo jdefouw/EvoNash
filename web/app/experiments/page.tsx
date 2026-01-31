@@ -22,6 +22,11 @@ export default function ExperimentsPage() {
     processing: number
     total: number
   }>({ active: 0, processing: 0, total: 0 })
+  const [summary, setSummary] = useState<{
+    completed: { control: number; experimental: number; total: number }
+    pending: { control: number; experimental: number; total: number }
+    running: { control: number; experimental: number; total: number }
+  } | null>(null)
 
   // Load workers visibility preference from localStorage
   useEffect(() => {
@@ -65,9 +70,18 @@ export default function ExperimentsPage() {
 
   const fetchExperiments = async (page: number, append: boolean = false) => {
     const offset = (page - 1) * EXPERIMENTS_PER_PAGE
+    const isFirstPage = page === 1 && !append
+    const params = new URLSearchParams({
+      limit: String(EXPERIMENTS_PER_PAGE),
+      offset: String(offset)
+    })
+    if (isFirstPage) {
+      params.set('count', 'true')
+      params.set('summary', 'true')
+    }
     
     try {
-      const res = await fetch(`/api/experiments?limit=${EXPERIMENTS_PER_PAGE}&offset=${offset}`)
+      const res = await fetch(`/api/experiments?${params}`)
       const data = await res.json()
       
       // Check if the response is an error
@@ -78,7 +92,7 @@ export default function ExperimentsPage() {
         return
       }
       
-      // Ensure data is an array (could be data.experiments or data directly)
+      // Response may be array or { experiments, total, summary }
       const experimentsArray = Array.isArray(data) ? data : (data.experiments || [])
       
       if (append) {
@@ -87,8 +101,12 @@ export default function ExperimentsPage() {
         setExperiments(experimentsArray)
       }
       
+      if (isFirstPage && data.summary) {
+        setSummary(data.summary)
+      }
+      
       setTotalLoaded(prev => append ? prev + experimentsArray.length : experimentsArray.length)
-      setHasMore(experimentsArray.length === EXPERIMENTS_PER_PAGE)
+      setHasMore(data.hasMore ?? experimentsArray.length === EXPERIMENTS_PER_PAGE)
       setError(null)
     } catch (err) {
       console.error('Error fetching experiments:', err)
@@ -271,6 +289,45 @@ export default function ExperimentsPage() {
             Back to Science Fair Dashboard
           </Link>
         </div>
+
+        {/* Experiment counts by status and type */}
+        {summary && (
+          <div className="mb-6 p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Experiment counts</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Completed</span>
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-blue-600 dark:text-blue-400 font-semibold">{summary.completed.control}</span>
+                  <span className="text-gray-400 dark:text-gray-500 text-sm">Control</span>
+                  <span className="text-purple-600 dark:text-purple-400 font-semibold">{summary.completed.experimental}</span>
+                  <span className="text-gray-400 dark:text-gray-500 text-sm">Experimental</span>
+                  <span className="text-gray-600 dark:text-gray-300 font-semibold ml-1">({summary.completed.total} total)</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Pending</span>
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-blue-600 dark:text-blue-400 font-semibold">{summary.pending.control}</span>
+                  <span className="text-gray-400 dark:text-gray-500 text-sm">Control</span>
+                  <span className="text-purple-600 dark:text-purple-400 font-semibold">{summary.pending.experimental}</span>
+                  <span className="text-gray-400 dark:text-gray-500 text-sm">Experimental</span>
+                  <span className="text-gray-600 dark:text-gray-300 font-semibold ml-1">({summary.pending.total} total)</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">In progress</span>
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-blue-600 dark:text-blue-400 font-semibold">{summary.running.control}</span>
+                  <span className="text-gray-400 dark:text-gray-500 text-sm">Control</span>
+                  <span className="text-purple-600 dark:text-purple-400 font-semibold">{summary.running.experimental}</span>
+                  <span className="text-gray-400 dark:text-gray-500 text-sm">Experimental</span>
+                  <span className="text-gray-600 dark:text-gray-300 font-semibold ml-1">({summary.running.total} total)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex justify-between items-start mb-8">
           <div>

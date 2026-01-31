@@ -763,6 +763,7 @@ export default function ScienceFairDashboard() {
                         <AssumptionChecksCard
                           normalityControl={data.assumptionChecks.normalityControl}
                           normalityExperimental={data.assumptionChecks.normalityExperimental}
+                          varianceEquality={data.assumptionChecks.varianceEquality}
                           outlierControl={data.assumptionChecks.outlierControl}
                           outlierExperimental={data.assumptionChecks.outlierExperimental}
                           bothNormal={data.assumptionChecks.bothNormal}

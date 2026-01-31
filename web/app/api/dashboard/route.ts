@@ -45,12 +45,13 @@ interface TTestResult {
 // STATISTICAL UTILITY FUNCTIONS - Scientific Rigor
 // =============================================================================
 
-interface ShapiroWilkResult {
-  W: number | null
+interface NormalityTestResult {
+  statistic: number | null  // JB statistic for Jarque-Bera test
   pValue: number | null
   isNormal: boolean | null
   interpretation: string
   sampleSize: number
+  testName: string  // Name of the test used
 }
 
 interface MannWhitneyResult {
@@ -106,6 +107,14 @@ interface OutlierResult {
   outlierPercentage: number
 }
 
+interface LeveneTestResult {
+  statistic: number | null
+  pValue: number | null
+  equalVariances: boolean | null
+  interpretation: string
+  sampleSizes: { control: number; experimental: number }
+}
+
 interface DistributionStats {
   n: number
   mean: number | null
@@ -131,19 +140,39 @@ interface BootstrapCIResult {
   interpretation: string
 }
 
-// Shapiro-Wilk test approximation for normality
-// Uses D'Agostino-Pearson omnibus test as TypeScript-friendly alternative
-function shapiroWilkTest(data: number[]): ShapiroWilkResult {
+// =============================================================================
+// JARQUE-BERA NORMALITY TEST
+// =============================================================================
+// 
+// The Jarque-Bera test is a goodness-of-fit test that determines whether sample
+// data have the skewness and kurtosis matching a normal distribution.
+// 
+// Test Statistic: JB = n/6 * (S² + K²/4)
+//   where S = sample skewness, K = sample excess kurtosis
+// 
+// Distribution: Under H0 (normality), JB ~ χ²(2) asymptotically
+// 
+// P-value: P(χ²(2) > JB) = exp(-JB/2)  [exact for chi-squared with df=2]
+// 
+// Interpretation:
+//   - p ≥ 0.05: Fail to reject normality (data consistent with normal)
+//   - p < 0.05: Reject normality (data deviates from normal)
+// 
+// Note: This test is asymptotically valid. For small samples (n < 30),
+// results should be interpreted with caution.
+// =============================================================================
+function jarqueBeraTest(data: number[]): NormalityTestResult {
   const cleanData = data.filter(x => !isNaN(x) && isFinite(x))
   const n = cleanData.length
   
   if (n < 3) {
     return {
-      W: null,
+      statistic: null,
       pValue: null,
       isNormal: null,
       interpretation: 'Insufficient data (n < 3)',
-      sampleSize: n
+      sampleSize: n,
+      testName: 'Jarque-Bera'
     }
   }
   
@@ -156,47 +185,178 @@ function shapiroWilkTest(data: number[]): ShapiroWilkResult {
   const std = Math.sqrt(m2)
   if (std === 0) {
     return {
-      W: 1,
+      statistic: 0,
       pValue: 1,
       isNormal: true,
       interpretation: 'No variance in data',
-      sampleSize: n
+      sampleSize: n,
+      testName: 'Jarque-Bera'
     }
   }
   
   const skewness = m3 / Math.pow(std, 3)
   const kurtosis = m4 / Math.pow(std, 4) - 3  // Excess kurtosis
   
-  // Jarque-Bera test statistic (approximation for normality)
-  // JB = n/6 * (S^2 + K^2/4)
+  // Jarque-Bera test statistic
+  // JB = n/6 * (S² + K²/4)
   const jb = (n / 6) * (Math.pow(skewness, 2) + Math.pow(kurtosis, 2) / 4)
   
   // P-value from chi-squared distribution with 2 df
-  // Using approximation: p ≈ exp(-JB/2) for small JB
+  // For χ²(2): P(X > x) = exp(-x/2) [exact]
   const pValue = Math.exp(-jb / 2)
   const isNormal = pValue >= 0.05
   
-  // W statistic approximation (inverse relationship with JB)
-  const W = Math.max(0, 1 - jb / (n * 2))
-  
   let interpretation: string
-  if (pValue >= 0.10) {
-    interpretation = 'Strong evidence for normality'
-  } else if (pValue >= 0.05) {
-    interpretation = 'Marginal evidence for normality'
-  } else if (pValue >= 0.01) {
-    interpretation = 'Evidence against normality'
+  if (n < 30) {
+    // Add caution for small samples
+    if (pValue >= 0.10) {
+      interpretation = 'Consistent with normality (small sample - interpret with caution)'
+    } else if (pValue >= 0.05) {
+      interpretation = 'Marginally consistent with normality (small sample)'
+    } else if (pValue >= 0.01) {
+      interpretation = 'Evidence against normality'
+    } else {
+      interpretation = 'Strong evidence against normality'
+    }
   } else {
-    interpretation = 'Strong evidence against normality'
+    if (pValue >= 0.10) {
+      interpretation = 'Strong evidence for normality'
+    } else if (pValue >= 0.05) {
+      interpretation = 'Marginal evidence for normality'
+    } else if (pValue >= 0.01) {
+      interpretation = 'Evidence against normality'
+    } else {
+      interpretation = 'Strong evidence against normality'
+    }
   }
   
   return {
-    W,
+    statistic: jb,
     pValue,
     isNormal,
     interpretation,
-    sampleSize: n
+    sampleSize: n,
+    testName: 'Jarque-Bera'
   }
+}
+
+// =============================================================================
+// LEVENE'S TEST FOR EQUALITY OF VARIANCES
+// =============================================================================
+// 
+// Levene's test assesses whether the variances of two groups are equal.
+// This implementation uses the Brown-Forsythe variant (median-based) which
+// is more robust to non-normality than the mean-based version.
+// 
+// Test Statistic: W = (N - k) / (k - 1) * Σnᵢ(Z̄ᵢ - Z̄)² / ΣΣ(Zᵢⱼ - Z̄ᵢ)²
+// 
+// where Zᵢⱼ = |Xᵢⱼ - median(Xᵢ)| (Brown-Forsythe)
+//       k = number of groups (2 for two-sample test)
+//       N = total sample size
+// 
+// Distribution: Under H0, W ~ F(k-1, N-k)
+// 
+// Interpretation:
+//   - p ≥ 0.05: Fail to reject equal variances
+//   - p < 0.05: Reject equal variances (use Welch's t-test)
+// 
+// Note: Welch's t-test is robust to unequal variances, so even if Levene's
+// test is significant, the t-test results remain valid.
+// =============================================================================
+function leveneTest(group1: number[], group2: number[]): LeveneTestResult {
+  const g1 = group1.filter(x => !isNaN(x) && isFinite(x))
+  const g2 = group2.filter(x => !isNaN(x) && isFinite(x))
+  const n1 = g1.length
+  const n2 = g2.length
+  const N = n1 + n2
+  const k = 2  // Number of groups
+  
+  if (n1 < 2 || n2 < 2) {
+    return {
+      statistic: null,
+      pValue: null,
+      equalVariances: null,
+      interpretation: 'Insufficient data (n < 2 per group)',
+      sampleSizes: { control: n1, experimental: n2 }
+    }
+  }
+  
+  // Calculate median for each group (Brown-Forsythe variant)
+  const sorted1 = [...g1].sort((a, b) => a - b)
+  const sorted2 = [...g2].sort((a, b) => a - b)
+  const median1 = percentile(sorted1, 50)
+  const median2 = percentile(sorted2, 50)
+  
+  // Calculate absolute deviations from median
+  const z1 = g1.map(x => Math.abs(x - median1))
+  const z2 = g2.map(x => Math.abs(x - median2))
+  
+  // Group means of absolute deviations
+  const zBar1 = z1.reduce((a, b) => a + b, 0) / n1
+  const zBar2 = z2.reduce((a, b) => a + b, 0) / n2
+  
+  // Overall mean of absolute deviations
+  const zBar = (z1.reduce((a, b) => a + b, 0) + z2.reduce((a, b) => a + b, 0)) / N
+  
+  // Between-group sum of squares
+  const ssb = n1 * Math.pow(zBar1 - zBar, 2) + n2 * Math.pow(zBar2 - zBar, 2)
+  
+  // Within-group sum of squares
+  const ssw1 = z1.reduce((sum, z) => sum + Math.pow(z - zBar1, 2), 0)
+  const ssw2 = z2.reduce((sum, z) => sum + Math.pow(z - zBar2, 2), 0)
+  const ssw = ssw1 + ssw2
+  
+  if (ssw === 0) {
+    return {
+      statistic: 0,
+      pValue: 1,
+      equalVariances: true,
+      interpretation: 'No variance in deviations',
+      sampleSizes: { control: n1, experimental: n2 }
+    }
+  }
+  
+  // Levene's test statistic (F-statistic)
+  const dfBetween = k - 1
+  const dfWithin = N - k
+  const W = ((N - k) / (k - 1)) * (ssb / ssw)
+  
+  // P-value from F-distribution
+  const pValue = 1 - fDistributionCDF(W, dfBetween, dfWithin)
+  const equalVariances = pValue >= 0.05
+  
+  let interpretation: string
+  if (equalVariances) {
+    interpretation = 'Equal variances (homoscedasticity) - standard t-test assumptions met'
+  } else {
+    interpretation = 'Unequal variances (heteroscedasticity) - Welch\'s t-test is appropriate'
+  }
+  
+  return {
+    statistic: W,
+    pValue,
+    equalVariances,
+    interpretation,
+    sampleSizes: { control: n1, experimental: n2 }
+  }
+}
+
+// =============================================================================
+// F-DISTRIBUTION CDF
+// =============================================================================
+// 
+// The CDF of the F-distribution with df1 and df2 degrees of freedom is:
+// 
+// F(x; df1, df2) = I_y(df1/2, df2/2)
+// 
+// where y = (df1 * x) / (df1 * x + df2) and I is the regularized incomplete beta function.
+// =============================================================================
+function fDistributionCDF(x: number, df1: number, df2: number): number {
+  if (x <= 0) return 0
+  if (df1 <= 0 || df2 <= 0) return NaN
+  
+  const y = (df1 * x) / (df1 * x + df2)
+  return incompleteBeta(y, df1 / 2, df2 / 2)
 }
 
 // Mann-Whitney U test (Wilcoxon rank-sum test)
@@ -385,7 +545,85 @@ function commonLanguageEffectSize(group1: number[], group2: number[]): CLESResul
   }
 }
 
-// Statistical power calculation
+// =============================================================================
+// NON-CENTRAL T-DISTRIBUTION CDF
+// =============================================================================
+// 
+// The non-central t-distribution with df degrees of freedom and non-centrality
+// parameter δ (ncp) is used for power calculations.
+// 
+// This implementation uses a series expansion that converges well for most
+// practical values of δ and df.
+// 
+// Reference: Algorithm AS 243 - Lenth, R.V. (1989)
+// =============================================================================
+function nonCentralTCDF(t: number, df: number, ncp: number): number {
+  if (df <= 0) return NaN
+  if (ncp === 0) return tDistributionCDF(t, df)
+  
+  // Handle negative t by symmetry
+  if (t < 0) {
+    return 1 - nonCentralTCDF(-t, df, -ncp)
+  }
+  
+  // Use series expansion
+  const x = t * t / (df + t * t)
+  const maxIterations = 1000
+  const tolerance = 1e-12
+  
+  // Calculate using the weighted sum of incomplete beta functions
+  let sum = 0
+  let term: number
+  const lambda = ncp * ncp / 2
+  
+  // Poisson weight: exp(-λ) * λ^j / j!
+  let poissonWeight = Math.exp(-lambda)
+  
+  for (let j = 0; j < maxIterations; j++) {
+    // Calculate the incomplete beta term
+    // I_x((df + 1)/2 + j, 1/2) for odd terms
+    // I_x(df/2 + j, 1/2) for even terms
+    
+    const beta1 = incompleteBeta(x, (df + 1) / 2 + j, 0.5)
+    const beta2 = incompleteBeta(x, df / 2 + j, 0.5)
+    
+    // Contribution from this term
+    const contrib1 = poissonWeight * (1 - beta1) / 2
+    const contrib2 = (j > 0 ? lambda / j : 0) * poissonWeight * (1 - beta2) / 2
+    
+    term = contrib1
+    sum += term
+    
+    if (j > 0 && Math.abs(term) < tolerance * Math.abs(sum)) {
+      break
+    }
+    
+    // Update Poisson weight for next iteration
+    poissonWeight *= lambda / (j + 1)
+  }
+  
+  // Add the central part
+  const centralCDF = normalCDF(-ncp)
+  
+  // The non-central t CDF
+  return centralCDF + sum
+}
+
+// =============================================================================
+// STATISTICAL POWER CALCULATION
+// =============================================================================
+// 
+// Power = P(reject H0 | H1 is true)
+//       = P(|T| > t_crit | T ~ non-central t(df, ncp))
+// 
+// For a two-sample t-test:
+//   df = n1 + n2 - 2
+//   ncp = δ * sqrt(n1 * n2 / (n1 + n2))  where δ is the effect size
+// 
+// Power = 1 - F_nct(t_crit, df, ncp) + F_nct(-t_crit, df, ncp)
+// 
+// where F_nct is the non-central t CDF.
+// =============================================================================
 function calculatePower(n1: number, n2: number, effectSize: number | null, alpha: number = 0.05): PowerAnalysisResult {
   if (n1 < 2 || n2 < 2 || effectSize === null) {
     return {
@@ -397,15 +635,33 @@ function calculatePower(n1: number, n2: number, effectSize: number | null, alpha
     }
   }
   
-  // Non-centrality parameter
-  const ncp = Math.abs(effectSize) * Math.sqrt((n1 * n2) / (n1 + n2))
   const df = n1 + n2 - 2
   
-  // Critical z-value (normal approximation for large samples)
-  const zCrit = 1.96  // Two-tailed α = 0.05
+  // Non-centrality parameter
+  const ncp = Math.abs(effectSize) * Math.sqrt((n1 * n2) / (n1 + n2))
   
-  // Power using normal approximation
-  const power = 1 - normalCDF(zCrit - ncp) + normalCDF(-zCrit - ncp)
+  // Critical t-value for two-tailed test
+  const tCrit = tDistributionQuantile(1 - alpha / 2, df)
+  
+  // Power using non-central t-distribution
+  // Power = P(|T| > tCrit) = P(T > tCrit) + P(T < -tCrit)
+  //       = 1 - F_nct(tCrit, df, ncp) + F_nct(-tCrit, df, ncp)
+  let power: number
+  
+  // For small ncp or large df, the non-central t calculation can be unstable
+  // Use a simpler approximation in those cases
+  if (df > 100 || ncp < 0.01) {
+    // Normal approximation (accurate for large df)
+    const zCrit = normalQuantile(1 - alpha / 2)
+    power = 1 - normalCDF(zCrit - ncp) + normalCDF(-zCrit - ncp)
+  } else {
+    // Use non-central t-distribution
+    power = 1 - nonCentralTCDF(tCrit, df, ncp) + nonCentralTCDF(-tCrit, df, ncp)
+  }
+  
+  // Clamp power to [0, 1]
+  power = Math.max(0, Math.min(1, power))
+  
   const isAdequate = power >= 0.80
   
   let interpretation: string
@@ -782,32 +1038,195 @@ function welchTTest(sample1: number[], sample2: number[]): TTestResult {
   }
 }
 
-// T-distribution CDF approximation (more accurate than normal for small samples)
-function tDistributionCDF(t: number, df: number): number {
-  // Use beta function relationship: F(t) = 1 - 0.5 * I(df/(df+t²), df/2, 1/2)
-  // For simplicity, use normal approximation adjusted for df
-  // This is accurate for df > 30, reasonable for df > 5
-  if (df <= 0) return 0.5
+// =============================================================================
+// INCOMPLETE BETA FUNCTION
+// =============================================================================
+// 
+// The regularized incomplete beta function I_x(a, b) is used for computing
+// the CDF of the t-distribution, F-distribution, and beta distribution.
+// 
+// Uses the continued fraction representation for numerical stability.
+// =============================================================================
+function incompleteBeta(x: number, a: number, b: number): number {
+  if (x <= 0) return 0
+  if (x >= 1) return 1
   
-  // Adjusted t-value for better small-sample accuracy
-  const adjustedT = t * Math.sqrt((df - 2) / df) * (df > 2 ? 1 : 0.9)
+  // For numerical stability, use the symmetry relation when appropriate
+  // I_x(a,b) = 1 - I_{1-x}(b,a)
+  if (x > (a + 1) / (a + b + 2)) {
+    return 1 - incompleteBeta(1 - x, b, a)
+  }
   
-  return normalCDF(adjustedT)
+  // Calculate using continued fraction (Lentz's algorithm)
+  const lnBeta = logBeta(a, b)
+  const front = Math.exp(Math.log(x) * a + Math.log(1 - x) * b - lnBeta) / a
+  
+  // Continued fraction for I_x(a,b)
+  const maxIterations = 200
+  const epsilon = 1e-14
+  
+  let f = 1
+  let c = 1
+  let d = 0
+  
+  for (let m = 0; m <= maxIterations; m++) {
+    let numerator: number
+    
+    if (m === 0) {
+      numerator = 1
+    } else if (m % 2 === 0) {
+      const k = m / 2
+      numerator = (k * (b - k) * x) / ((a + 2 * k - 1) * (a + 2 * k))
+    } else {
+      const k = (m - 1) / 2
+      numerator = -((a + k) * (a + b + k) * x) / ((a + 2 * k) * (a + 2 * k + 1))
+    }
+    
+    d = 1 + numerator * d
+    if (Math.abs(d) < 1e-30) d = 1e-30
+    d = 1 / d
+    
+    c = 1 + numerator / c
+    if (Math.abs(c) < 1e-30) c = 1e-30
+    
+    const delta = c * d
+    f *= delta
+    
+    if (Math.abs(delta - 1) < epsilon) {
+      break
+    }
+  }
+  
+  return front * (f - 1)
 }
 
-// T-distribution quantile (inverse CDF) approximation
+// Log of beta function using log-gamma
+function logBeta(a: number, b: number): number {
+  return logGamma(a) + logGamma(b) - logGamma(a + b)
+}
+
+// Log-gamma function using Lanczos approximation
+function logGamma(z: number): number {
+  if (z < 0.5) {
+    // Reflection formula: Γ(z)Γ(1-z) = π/sin(πz)
+    return Math.log(Math.PI / Math.sin(Math.PI * z)) - logGamma(1 - z)
+  }
+  
+  z -= 1
+  
+  // Lanczos coefficients for g=7
+  const g = 7
+  const c = [
+    0.99999999999980993,
+    676.5203681218851,
+    -1259.1392167224028,
+    771.32342877765313,
+    -176.61502916214059,
+    12.507343278686905,
+    -0.13857109526572012,
+    9.9843695780195716e-6,
+    1.5056327351493116e-7
+  ]
+  
+  let x = c[0]
+  for (let i = 1; i < g + 2; i++) {
+    x += c[i] / (z + i)
+  }
+  
+  const t = z + g + 0.5
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x)
+}
+
+// =============================================================================
+// T-DISTRIBUTION CDF
+// =============================================================================
+// 
+// The CDF of Student's t-distribution with df degrees of freedom is:
+// 
+// For t ≥ 0: F(t; df) = 1 - 0.5 * I_x(df/2, 1/2)
+// For t < 0: F(t; df) = 0.5 * I_x(df/2, 1/2)
+// 
+// where x = df / (df + t²) and I_x is the regularized incomplete beta function.
+// 
+// This implementation is accurate for all degrees of freedom.
+// =============================================================================
+function tDistributionCDF(t: number, df: number): number {
+  if (df <= 0) return 0.5
+  if (!isFinite(t)) return t > 0 ? 1 : 0
+  
+  const x = df / (df + t * t)
+  const betaValue = incompleteBeta(x, df / 2, 0.5)
+  
+  if (t >= 0) {
+    return 1 - 0.5 * betaValue
+  } else {
+    return 0.5 * betaValue
+  }
+}
+
+// =============================================================================
+// T-DISTRIBUTION QUANTILE (INVERSE CDF)
+// =============================================================================
+// 
+// Computes the inverse of the t-distribution CDF using Newton-Raphson iteration.
+// 
+// Given probability p and degrees of freedom df, finds t such that:
+//   P(T ≤ t) = p  where T ~ t(df)
+// 
+// Uses the normal quantile as an initial guess, then refines with Newton-Raphson.
+// =============================================================================
 function tDistributionQuantile(p: number, df: number): number {
-  // For 95% CI (p = 0.975), use approximation
-  // Accurate for df > 30, reasonable for df > 5
-  if (df <= 1) return 12.706  // t(0.975, 1)
-  if (df <= 2) return 4.303   // t(0.975, 2)
-  if (df <= 3) return 3.182   // t(0.975, 3)
-  if (df <= 4) return 2.776   // t(0.975, 4)
-  if (df <= 5) return 2.571   // t(0.975, 5)
-  if (df <= 10) return 2.228  // t(0.975, 10)
-  if (df <= 20) return 2.086  // t(0.975, 20)
-  if (df <= 30) return 2.042  // t(0.975, 30)
-  return 1.96  // Normal approximation for large df
+  if (p <= 0) return -Infinity
+  if (p >= 1) return Infinity
+  if (p === 0.5) return 0
+  if (df <= 0) return NaN
+  
+  // Handle symmetry: if p < 0.5, compute for 1-p and negate
+  if (p < 0.5) {
+    return -tDistributionQuantile(1 - p, df)
+  }
+  
+  // Initial guess using normal quantile with correction for df
+  // Cornish-Fisher expansion for better starting point
+  const z = normalQuantile(p)
+  const g1 = (z * z * z + z) / 4
+  const g2 = (5 * Math.pow(z, 5) + 16 * Math.pow(z, 3) + 3 * z) / 96
+  const g3 = (3 * Math.pow(z, 7) + 19 * Math.pow(z, 5) + 17 * Math.pow(z, 3) - 15 * z) / 384
+  
+  let t = z + g1 / df + g2 / (df * df) + g3 / (df * df * df)
+  
+  // Newton-Raphson iteration
+  const maxIterations = 50
+  const tolerance = 1e-12
+  
+  for (let i = 0; i < maxIterations; i++) {
+    const cdf = tDistributionCDF(t, df)
+    const error = cdf - p
+    
+    if (Math.abs(error) < tolerance) {
+      break
+    }
+    
+    // PDF of t-distribution for Newton-Raphson
+    const pdf = tDistributionPDF(t, df)
+    if (pdf === 0) break
+    
+    const delta = error / pdf
+    t -= delta
+    
+    if (Math.abs(delta) < tolerance * Math.abs(t)) {
+      break
+    }
+  }
+  
+  return t
+}
+
+// T-distribution PDF for Newton-Raphson iteration
+function tDistributionPDF(t: number, df: number): number {
+  const lnCoeff = logGamma((df + 1) / 2) - logGamma(df / 2) - 0.5 * Math.log(df * Math.PI)
+  const lnPdf = lnCoeff - ((df + 1) / 2) * Math.log(1 + (t * t) / df)
+  return Math.exp(lnPdf)
 }
 
 // Standard normal cumulative distribution function approximation
@@ -874,9 +1293,10 @@ export interface DashboardData {
   }
   // Scientific Rigor - Assumption Checks
   assumptionChecks?: {
-    normalityControl: ShapiroWilkResult
-    normalityExperimental: ShapiroWilkResult
+    normalityControl: NormalityTestResult
+    normalityExperimental: NormalityTestResult
     bothNormal: boolean
+    varianceEquality: LeveneTestResult  // Levene's test for equal variances
     outlierControl: OutlierResult
     outlierExperimental: OutlierResult
     anyOutliers: boolean
@@ -1380,9 +1800,10 @@ export async function GET() {
 
     // Only compute if we have data in both groups
     if (controlExperimentElos.length >= 1 && experimentalExperimentElos.length >= 1) {
-      // Assumption Checks
-      const normalityControl = shapiroWilkTest(controlExperimentElos)
-      const normalityExperimental = shapiroWilkTest(experimentalExperimentElos)
+      // Assumption Checks - Jarque-Bera normality test and Levene's variance test
+      const normalityControl = jarqueBeraTest(controlExperimentElos)
+      const normalityExperimental = jarqueBeraTest(experimentalExperimentElos)
+      const varianceEquality = leveneTest(controlExperimentElos, experimentalExperimentElos)
       const outlierControl = detectOutliers(controlExperimentElos)
       const outlierExperimental = detectOutliers(experimentalExperimentElos)
       
@@ -1392,9 +1813,15 @@ export async function GET() {
       let recommendation: 'parametric' | 'parametric_with_caution' | 'non_parametric'
       let recommendationText: string
       
+      // Note: Welch's t-test is robust to unequal variances, so variance equality
+      // is informational rather than deterministic for test selection
       if (bothNormal && !anyOutliers) {
         recommendation = 'parametric'
-        recommendationText = 'Use parametric tests (Welch\'s t-test). Assumptions are met.'
+        if (varianceEquality.equalVariances) {
+          recommendationText = 'Use parametric tests (Welch\'s t-test). All assumptions met including equal variances.'
+        } else {
+          recommendationText = 'Use parametric tests (Welch\'s t-test). Normal data with unequal variances - Welch\'s t-test handles this.'
+        }
       } else if (bothNormal && anyOutliers) {
         recommendation = 'parametric_with_caution'
         recommendationText = 'Use parametric tests with caution. Data is normal but contains outliers.'
@@ -1407,6 +1834,7 @@ export async function GET() {
         normalityControl,
         normalityExperimental,
         bothNormal,
+        varianceEquality,
         outlierControl,
         outlierExperimental,
         anyOutliers,

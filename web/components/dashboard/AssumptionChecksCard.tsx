@@ -1,11 +1,20 @@
 'use client'
 
-interface ShapiroWilkResult {
-  W: number | null
+interface NormalityTestResult {
+  statistic: number | null  // JB statistic for Jarque-Bera test
   pValue: number | null
   isNormal: boolean | null
   interpretation: string
   sampleSize: number
+  testName: string
+}
+
+interface LeveneTestResult {
+  statistic: number | null
+  pValue: number | null
+  equalVariances: boolean | null
+  interpretation: string
+  sampleSizes: { control: number; experimental: number }
 }
 
 interface OutlierResult {
@@ -21,8 +30,9 @@ interface OutlierResult {
 }
 
 interface AssumptionChecksCardProps {
-  normalityControl: ShapiroWilkResult | null
-  normalityExperimental: ShapiroWilkResult | null
+  normalityControl: NormalityTestResult | null
+  normalityExperimental: NormalityTestResult | null
+  varianceEquality: LeveneTestResult | null
   outlierControl: OutlierResult | null
   outlierExperimental: OutlierResult | null
   bothNormal: boolean
@@ -34,6 +44,7 @@ interface AssumptionChecksCardProps {
 export default function AssumptionChecksCard({
   normalityControl,
   normalityExperimental,
+  varianceEquality,
   outlierControl,
   outlierExperimental,
   bothNormal,
@@ -97,7 +108,7 @@ export default function AssumptionChecksCard({
       {/* Normality Tests */}
       <div className="mb-4">
         <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Normality Tests (Shapiro-Wilk)
+          Normality Tests (Jarque-Bera)
         </h5>
         <div className="grid grid-cols-2 gap-3">
           {/* Control */}
@@ -109,7 +120,7 @@ export default function AssumptionChecksCard({
             {normalityControl ? (
               <>
                 <div className="text-xs text-gray-600 dark:text-gray-400">
-                  W = {normalityControl.W?.toFixed(4) ?? 'N/A'}
+                  JB = {normalityControl.statistic?.toFixed(4) ?? 'N/A'}
                 </div>
                 <div className="text-xs text-gray-600 dark:text-gray-400">
                   p = {normalityControl.pValue !== null 
@@ -134,7 +145,7 @@ export default function AssumptionChecksCard({
             {normalityExperimental ? (
               <>
                 <div className="text-xs text-gray-600 dark:text-gray-400">
-                  W = {normalityExperimental.W?.toFixed(4) ?? 'N/A'}
+                  JB = {normalityExperimental.statistic?.toFixed(4) ?? 'N/A'}
                 </div>
                 <div className="text-xs text-gray-600 dark:text-gray-400">
                   p = {normalityExperimental.pValue !== null 
@@ -151,7 +162,40 @@ export default function AssumptionChecksCard({
           </div>
         </div>
         <div className="text-xs text-gray-500 dark:text-gray-500 mt-2">
-          H₀: Data is normally distributed. Reject if p &lt; 0.05
+          H₀: Data is normally distributed (skewness=0, excess kurtosis=0). Reject if p &lt; 0.05
+        </div>
+      </div>
+
+      {/* Variance Equality Test (Levene's Test) */}
+      <div className="mb-4">
+        <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Variance Equality (Levene&apos;s Test)
+        </h5>
+        <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Homoscedasticity</span>
+            {getStatusIcon(varianceEquality?.equalVariances ?? null)}
+          </div>
+          {varianceEquality ? (
+            <>
+              <div className="text-xs text-gray-600 dark:text-gray-400">
+                W = {varianceEquality.statistic?.toFixed(4) ?? 'N/A'}
+              </div>
+              <div className="text-xs text-gray-600 dark:text-gray-400">
+                p = {varianceEquality.pValue !== null 
+                  ? (varianceEquality.pValue < 0.0001 ? '< 0.0001' : varianceEquality.pValue.toFixed(4))
+                  : 'N/A'}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                {varianceEquality.interpretation}
+              </div>
+            </>
+          ) : (
+            <div className="text-xs text-gray-500">No data</div>
+          )}
+        </div>
+        <div className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+          H₀: Groups have equal variances. Uses Brown-Forsythe variant (median-based). Note: Welch&apos;s t-test is robust to unequal variances.
         </div>
       </div>
 
@@ -222,10 +266,14 @@ export default function AssumptionChecksCard({
 
       {/* Summary */}
       <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-4 text-xs">
+        <div className="flex items-center gap-4 text-xs flex-wrap">
           <div className="flex items-center gap-1">
             {getStatusIcon(bothNormal)}
             <span className="text-gray-600 dark:text-gray-400">Both groups normal</span>
+          </div>
+          <div className="flex items-center gap-1">
+            {getStatusIcon(varianceEquality?.equalVariances ?? null)}
+            <span className="text-gray-600 dark:text-gray-400">Equal variances</span>
           </div>
           <div className="flex items-center gap-1">
             {getStatusIcon(!anyOutliers)}
