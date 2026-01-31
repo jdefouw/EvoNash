@@ -325,6 +325,11 @@ const PROJECT_CONTENT_STATIC = {
   futureWork: 'Further research could explore applying this adaptive mutation strategy to more complex environments and larger neural network architectures, as well as investigating the optimal scaling function for mutation rates.'
 }
 
+// Format p-value: scientific notation when very small (exact value), fixed decimals otherwise
+function formatPValue(p: number, decimals = 4): string {
+  return p < 0.0001 ? p.toExponential(2) : p.toFixed(decimals)
+}
+
 // Generate dynamic abstract based on actual statistics
 function generateAbstract(stats: DashboardData['statistics'] | null): string {
   const baseAbstract = `This experiment investigates the efficiency of evolutionary algorithms in high-dimensional decision spaces. Traditional Genetic Algorithms (GAs) typically utilize static mutation rates, which often results in premature convergence to local optima or inefficient random searching. This project hypothesizes that an Adaptive Mutation Strategy—where mutation magnitude is inversely proportional to an agent's fitness—will accelerate convergence to a Nash Equilibrium compared to a static control. To test this, a custom distributed computing platform ("EvoNash") was engineered to run on an NVIDIA RTX 3090, simulating a deterministic biological environment ("The Petri Dish"). Two experiment groups of 1,000 Neural Networks each are evolved over multiple generations: the Control Group (Static mutation ε=0.05) and the Experimental Group (Adaptive mutation ε ∝ 1/Fitness).`
@@ -340,11 +345,10 @@ function generateAbstract(stats: DashboardData['statistics'] | null): string {
     resultParts.push(`the Experimental group achieved stable Policy Entropy (Nash Equilibrium) ${Math.round(stats.convergenceImprovement)}% faster than the Control group`)
   }
 
-  const fmtP = (p: number) => (p < 0.0001 ? '< 0.0001' : p.toFixed(3))
   if (stats.convergencePValue != null && stats.convergenceIsSignificant) {
-    resultParts.push(`with a statistically significant difference in generations to Nash equilibrium (p = ${fmtP(stats.convergencePValue)})`)
+    resultParts.push(`with a statistically significant difference in generations to Nash equilibrium (p = ${formatPValue(stats.convergencePValue, 3)})`)
   } else if (stats.convergencePValue != null) {
-    resultParts.push(`though the difference in generations to Nash did not reach statistical significance (p = ${fmtP(stats.convergencePValue)})`)
+    resultParts.push(`though the difference in generations to Nash did not reach statistical significance (p = ${formatPValue(stats.convergencePValue, 3)})`)
   }
 
   if (resultParts.length > 0) {
@@ -374,16 +378,15 @@ function generateKeyFindings(stats: DashboardData['statistics'] | null): string[
     findings.push(`The Control group converged ${Math.abs(Math.round(stats.convergenceImprovement))}% faster than the Adaptive group, contrary to the hypothesis`)
   }
 
-  const fmtP4 = (p: number) => (p < 0.0001 ? '< 0.0001' : p.toFixed(4))
   // Finding 2: Statistical significance (generations to Nash equilibrium)
   if (stats.convergencePValue != null) {
     if (stats.convergenceIsSignificant) {
       findings.push(
-        `The Experimental group reached Nash equilibrium in significantly fewer generations (p = ${fmtP4(stats.convergencePValue)})`
+        `The Experimental group reached Nash equilibrium in significantly fewer generations (p = ${formatPValue(stats.convergencePValue)})`
       )
     } else {
       findings.push(
-        `The difference in generations to Nash did not reach statistical significance (p = ${fmtP4(stats.convergencePValue)}, threshold: p < 0.05)`
+        `The difference in generations to Nash did not reach statistical significance (p = ${formatPValue(stats.convergencePValue)}, threshold: p < 0.05)`
       )
     }
   }
@@ -420,7 +423,7 @@ function generateConclusionSummary(stats: DashboardData['statistics'] | null, is
       ? `approximately ${Math.round(stats.convergenceImprovement)}%`
       : 'measurably'
 
-    const pStr = stats.convergencePValue != null ? (stats.convergencePValue < 0.0001 ? '< 0.0001' : stats.convergencePValue.toFixed(4)) : 'N/A'
+    const pStr = stats.convergencePValue != null ? formatPValue(stats.convergencePValue) : 'N/A'
     if (stats.convergenceIsSignificant) {
       return baseSummary + ` The experimental data demonstrates that an Adaptive Mutation strategy accelerates convergence to a Nash Equilibrium by ${improvementText} compared to static methods, with statistical significance (p = ${pStr}). This supports the hypothesis that biologically-inspired mutation strategies can improve AI training efficiency.`
     } else {
@@ -528,7 +531,7 @@ export default function ScienceFairDashboard() {
     : null
 
   const pValStr = data?.statistics?.convergencePValue != null
-    ? (data.statistics.convergencePValue < 0.0001 ? '< 0.0001' : data.statistics.convergencePValue.toFixed(4))
+    ? formatPValue(data.statistics.convergencePValue)
     : 'N/A'
   const supportingEvidence = data?.statistics
     ? `The Experimental group converged ${data.statistics.convergenceImprovement?.toFixed(0) ?? '?'}% faster (Generation ${data.statistics.experimentalConvergenceGen ?? '?'} vs ${data.statistics.controlConvergenceGen ?? '?'}). T-test on generations to Nash: p = ${pValStr}`

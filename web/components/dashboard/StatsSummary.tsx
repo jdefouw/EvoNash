@@ -93,6 +93,10 @@ export default function StatsSummary({
   const effectSize = getEffectSizeLabel(convergenceCohensD ?? cohensD)
   const convergedN = controlConvergedCount ?? controlExperimentCount
   const convergedM = experimentalConvergedCount ?? experimentalExperimentCount
+
+  // Show exact p-value: scientific notation when very small, fixed otherwise
+  const formatPValue = (p: number, fixedDecimals = 4) =>
+    p < 0.0001 ? p.toExponential(2) : p.toFixed(fixedDecimals)
   const hasData = totalGenerationsControl > 0 || totalGenerationsExperimental > 0
 
   const getConfidenceLabel = (level: StatisticalPowerLevel) => {
@@ -194,14 +198,14 @@ export default function StatsSummary({
                   </h4>
                   <p className="text-white/90">
                     {convergenceIsSignificant && convergencePValue !== null
-                      ? `Generations to Nash equilibrium: statistically significant (p = ${convergencePValue < 0.0001 ? '< 0.0001' : convergencePValue.toFixed(4)} < 0.05)`
+                      ? `Generations to Nash equilibrium: statistically significant (p = ${formatPValue(convergencePValue)} < 0.05)`
                       : 'Results pending sufficient converged experiments for statistical significance'
                     }
                   </p>
                 </div>
                 <div className="text-right">
                   <div className="text-4xl font-bold">
-                    {convergencePValue !== null ? `p = ${convergencePValue < 0.0001 ? '< 0.0001' : convergencePValue.toFixed(3)}` : 'p = -'}
+                    {convergencePValue !== null ? `p = ${formatPValue(convergencePValue, 3)}` : 'p = -'}
                   </div>
                   <div className="text-sm text-white/80">
                     {convergenceIsSignificant ? 'Significant' : 'Not Significant'}
@@ -299,7 +303,7 @@ export default function StatsSummary({
                 <div>
                   <div className="text-gray-500 dark:text-gray-400">p-Value (two-tailed)</div>
                   <div className="font-mono font-bold text-gray-900 dark:text-white">
-                    {convergencePValue !== null ? (convergencePValue < 0.0001 ? '< 0.0001' : convergencePValue.toFixed(4)) : '-'}
+                    {convergencePValue !== null ? formatPValue(convergencePValue) : '-'}
                   </div>
                 </div>
                 <div>
@@ -365,7 +369,7 @@ export default function StatsSummary({
               <p className="text-sm text-blue-700 dark:text-blue-400">
                 {convergenceIsSignificant ? (
                   <>
-                    The experimental group (Adaptive Mutation) reached Nash equilibrium in significantly fewer generations than the control group (p = {convergencePValue != null ? (convergencePValue < 0.0001 ? '< 0.0001' : convergencePValue.toFixed(4)) : '—'}).
+                    The experimental group (Adaptive Mutation) reached Nash equilibrium in significantly fewer generations than the control group (p = {convergencePValue != null ? formatPValue(convergencePValue) : '—'}).
                     {convergenceImprovement !== null && convergenceImprovement > 0 && (
                       <> The adaptive strategy converged {convergenceImprovement.toFixed(0)}% faster, supporting the hypothesis that fitness-scaled mutation rates accelerate convergence to Nash equilibrium.</>
                     )}
