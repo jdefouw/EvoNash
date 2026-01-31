@@ -233,11 +233,25 @@ export default function ExperimentsPage() {
     if (!secondConfirm) {
       return
     }
+
+    const keyword = prompt(
+      'To delete all experiments, enter the confirmation keyword:'
+    )
+    if (keyword?.trim() !== 'sciencefair2026') {
+      if (keyword !== null) {
+        alert('Incorrect keyword. Deletion cancelled.')
+      }
+      return
+    }
     
     setDeletingAll(true)
     
     try {
-      const response = await fetch('/api/experiments/delete-all', { method: 'DELETE' })
+      const response = await fetch('/api/experiments/delete-all', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword: keyword.trim() })
+      })
       
       if (response.ok) {
         const result = await response.json()

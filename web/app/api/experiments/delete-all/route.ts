@@ -4,14 +4,30 @@ import { query } from '@/lib/postgres'
 // Force dynamic rendering since we modify the database
 export const dynamic = 'force-dynamic'
 
+const DELETE_ALL_KEYWORD = 'sciencefair2026'
+
 /**
  * DELETE /api/experiments/delete-all
  * 
  * Deletes ALL experiments and their related data.
+ * Requires request body: { keyword: "sciencefair2026" } to confirm.
  * This is a destructive operation that cannot be undone.
  */
 export async function DELETE(request: NextRequest) {
   try {
+    let body: { keyword?: string } = {}
+    try {
+      body = await request.json()
+    } catch {
+      // No body or invalid JSON
+    }
+    if (body.keyword !== DELETE_ALL_KEYWORD) {
+      return NextResponse.json(
+        { error: 'Invalid or missing keyword. Deletion not allowed.' },
+        { status: 403 }
+      )
+    }
+
     console.log('[DELETE-ALL] Starting deletion of all experiments...')
     
     // Get count before deletion for reporting
