@@ -340,10 +340,11 @@ function generateAbstract(stats: DashboardData['statistics'] | null): string {
     resultParts.push(`the Experimental group achieved stable Policy Entropy (Nash Equilibrium) ${Math.round(stats.convergenceImprovement)}% faster than the Control group`)
   }
 
+  const fmtP = (p: number) => (p < 0.0001 ? '< 0.0001' : p.toFixed(3))
   if (stats.convergencePValue != null && stats.convergenceIsSignificant) {
-    resultParts.push(`with a statistically significant difference in generations to Nash equilibrium (p = ${stats.convergencePValue.toFixed(3)})`)
+    resultParts.push(`with a statistically significant difference in generations to Nash equilibrium (p = ${fmtP(stats.convergencePValue)})`)
   } else if (stats.convergencePValue != null) {
-    resultParts.push(`though the difference in generations to Nash did not reach statistical significance (p = ${stats.convergencePValue.toFixed(3)})`)
+    resultParts.push(`though the difference in generations to Nash did not reach statistical significance (p = ${fmtP(stats.convergencePValue)})`)
   }
 
   if (resultParts.length > 0) {
@@ -373,15 +374,16 @@ function generateKeyFindings(stats: DashboardData['statistics'] | null): string[
     findings.push(`The Control group converged ${Math.abs(Math.round(stats.convergenceImprovement))}% faster than the Adaptive group, contrary to the hypothesis`)
   }
 
+  const fmtP4 = (p: number) => (p < 0.0001 ? '< 0.0001' : p.toFixed(4))
   // Finding 2: Statistical significance (generations to Nash equilibrium)
   if (stats.convergencePValue != null) {
     if (stats.convergenceIsSignificant) {
       findings.push(
-        `The Experimental group reached Nash equilibrium in significantly fewer generations (p = ${stats.convergencePValue.toFixed(4)})`
+        `The Experimental group reached Nash equilibrium in significantly fewer generations (p = ${fmtP4(stats.convergencePValue)})`
       )
     } else {
       findings.push(
-        `The difference in generations to Nash did not reach statistical significance (p = ${stats.convergencePValue.toFixed(4)}, threshold: p < 0.05)`
+        `The difference in generations to Nash did not reach statistical significance (p = ${fmtP4(stats.convergencePValue)}, threshold: p < 0.05)`
       )
     }
   }
@@ -418,10 +420,11 @@ function generateConclusionSummary(stats: DashboardData['statistics'] | null, is
       ? `approximately ${Math.round(stats.convergenceImprovement)}%`
       : 'measurably'
 
+    const pStr = stats.convergencePValue != null ? (stats.convergencePValue < 0.0001 ? '< 0.0001' : stats.convergencePValue.toFixed(4)) : 'N/A'
     if (stats.convergenceIsSignificant) {
-      return baseSummary + ` The experimental data demonstrates that an Adaptive Mutation strategy accelerates convergence to a Nash Equilibrium by ${improvementText} compared to static methods, with statistical significance (p = ${stats.convergencePValue?.toFixed(4) ?? 'N/A'}). This supports the hypothesis that biologically-inspired mutation strategies can improve AI training efficiency.`
+      return baseSummary + ` The experimental data demonstrates that an Adaptive Mutation strategy accelerates convergence to a Nash Equilibrium by ${improvementText} compared to static methods, with statistical significance (p = ${pStr}). This supports the hypothesis that biologically-inspired mutation strategies can improve AI training efficiency.`
     } else {
-      return baseSummary + ` The experimental data shows that the Adaptive Mutation strategy converges ${improvementText} faster than the Control group (p = ${stats.convergencePValue?.toFixed(4) ?? 'N/A'}). While this result has not yet reached statistical significance (p < 0.05), the data trends in the expected direction, supporting the hypothesis. Additional experiments may strengthen this conclusion.`
+      return baseSummary + ` The experimental data shows that the Adaptive Mutation strategy converges ${improvementText} faster than the Control group (p = ${pStr}). While this result has not yet reached statistical significance (p < 0.05), the data trends in the expected direction, supporting the hypothesis. Additional experiments may strengthen this conclusion.`
     }
   } else {
     return baseSummary + ` However, the current experimental data does not support the hypothesis that adaptive mutation accelerates convergence. The Control group converged faster than or equal to the Experimental group. Further investigation may be needed to understand why the expected improvement was not observed.`
@@ -524,9 +527,12 @@ export default function ScienceFairDashboard() {
     ? (data?.statistics?.convergenceImprovement ?? 0) > 0
     : null
 
-  const supportingEvidence = data?.statistics ?
-    `The Experimental group converged ${data.statistics.convergenceImprovement?.toFixed(0) ?? '?'}% faster (Generation ${data.statistics.experimentalConvergenceGen ?? '?'} vs ${data.statistics.controlConvergenceGen ?? '?'}). T-test on generations to Nash: p = ${data.statistics.convergencePValue?.toFixed(4) ?? 'N/A'}` :
-    undefined
+  const pValStr = data?.statistics?.convergencePValue != null
+    ? (data.statistics.convergencePValue < 0.0001 ? '< 0.0001' : data.statistics.convergencePValue.toFixed(4))
+    : 'N/A'
+  const supportingEvidence = data?.statistics
+    ? `The Experimental group converged ${data.statistics.convergenceImprovement?.toFixed(0) ?? '?'}% faster (Generation ${data.statistics.experimentalConvergenceGen ?? '?'} vs ${data.statistics.controlConvergenceGen ?? '?'}). T-test on generations to Nash: p = ${pValStr}`
+    : undefined
 
   // Generate dynamic content based on actual statistics
   const dynamicAbstract = generateAbstract(data?.statistics ?? null)

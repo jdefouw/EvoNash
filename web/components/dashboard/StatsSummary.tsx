@@ -194,14 +194,14 @@ export default function StatsSummary({
                   </h4>
                   <p className="text-white/90">
                     {convergenceIsSignificant && convergencePValue !== null
-                      ? `Generations to Nash equilibrium: statistically significant (p = ${convergencePValue.toFixed(4)} < 0.05)`
+                      ? `Generations to Nash equilibrium: statistically significant (p = ${convergencePValue < 0.0001 ? '< 0.0001' : convergencePValue.toFixed(4)} < 0.05)`
                       : 'Results pending sufficient converged experiments for statistical significance'
                     }
                   </p>
                 </div>
                 <div className="text-right">
                   <div className="text-4xl font-bold">
-                    {convergencePValue !== null ? `p = ${convergencePValue.toFixed(3)}` : 'p = -'}
+                    {convergencePValue !== null ? `p = ${convergencePValue < 0.0001 ? '< 0.0001' : convergencePValue.toFixed(3)}` : 'p = -'}
                   </div>
                   <div className="text-sm text-white/80">
                     {convergenceIsSignificant ? 'Significant' : 'Not Significant'}
@@ -222,6 +222,24 @@ export default function StatsSummary({
               </div>
               <div className="text-xs text-gray-500 dark:text-gray-400">
                 Power Level: {statisticalPowerLevel.charAt(0).toUpperCase() + statisticalPowerLevel.slice(1)}
+              </div>
+            </div>
+
+            {/* Understanding the p-value */}
+            <div className="mb-6 p-4 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
+              <h5 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+                Understanding the p-value
+              </h5>
+              <div className="text-sm text-gray-600 dark:text-gray-400 space-y-3">
+                <p>
+                  <strong className="text-gray-700 dark:text-gray-300">What is a p-value?</strong> The p-value (probability value) is the probability of seeing a difference as large as the one observed—or larger—between the two groups, <em>if in reality there were no true difference</em> (i.e., if the null hypothesis were true). A small p-value means the observed result would be very unlikely by chance alone, so we have evidence against &quot;no difference.&quot;
+                </p>
+                <p>
+                  <strong className="text-gray-700 dark:text-gray-300">How it&apos;s calculated here:</strong> We use Welch&apos;s two-sample t-test on <strong>generations to Nash equilibrium</strong>: one value per experiment (control vs experimental). The test compares the mean number of generations each group took to reach Nash. The resulting p-value answers: &quot;If adaptive mutation had no real effect, how likely would we be to see a difference this large (or larger) just from random variation?&quot;
+                </p>
+                <p>
+                  <strong className="text-gray-700 dark:text-gray-300">Why it supports the hypothesis:</strong> Our hypothesis is that the experimental group (adaptive mutation) reaches Nash equilibrium in <em>fewer</em> generations than the control. When p &lt; 0.05, we reject the null hypothesis of &quot;no difference&quot; and conclude the observed faster convergence is statistically significant—i.e., unlikely to be due to chance. A very small p-value (e.g. &lt; 0.0001) indicates strong evidence that the adaptive strategy genuinely reduces generations to Nash.
+                </p>
               </div>
             </div>
 
@@ -347,7 +365,7 @@ export default function StatsSummary({
               <p className="text-sm text-blue-700 dark:text-blue-400">
                 {convergenceIsSignificant ? (
                   <>
-                    The experimental group (Adaptive Mutation) reached Nash equilibrium in significantly fewer generations than the control group (p = {convergencePValue?.toFixed(4) ?? '—'}).
+                    The experimental group (Adaptive Mutation) reached Nash equilibrium in significantly fewer generations than the control group (p = {convergencePValue != null ? (convergencePValue < 0.0001 ? '< 0.0001' : convergencePValue.toFixed(4)) : '—'}).
                     {convergenceImprovement !== null && convergenceImprovement > 0 && (
                       <> The adaptive strategy converged {convergenceImprovement.toFixed(0)}% faster, supporting the hypothesis that fitness-scaled mutation rates accelerate convergence to Nash equilibrium.</>
                     )}
