@@ -311,7 +311,7 @@ const PROJECT_CONTENT_STATIC = {
       ],
       software: [
         'Python 3.9 with PyTorch (CUDA)',
-        'Next.js Web Dashboard',
+        'Next.js Web Experiment',
         'PostgreSQL/TimescaleDB'
       ]
     }
@@ -489,7 +489,7 @@ export default function ScienceFairDashboard() {
       })
       .catch(err => {
         console.error('Error fetching dashboard data:', err)
-        setError(err.message || 'Failed to load dashboard data')
+        setError(err.message || 'Failed to load experiment data')
         setLoading(false)
       })
   }, [])
@@ -605,7 +605,7 @@ export default function ScienceFairDashboard() {
           <div className="flex items-center justify-center py-20">
             <div className="text-center">
               <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-              <p className="text-gray-600 dark:text-gray-400">Loading dashboard data...</p>
+              <p className="text-gray-600 dark:text-gray-400">Loading experiment data...</p>
             </div>
           </div>
         ) : error ? (
@@ -617,7 +617,7 @@ export default function ScienceFairDashboard() {
                 </svg>
               </div>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Failed to Load Dashboard
+                Failed to Load Experiment
               </h3>
               <p className="text-gray-600 dark:text-gray-400 mb-4">{error}</p>
               <p className="text-sm text-gray-500 dark:text-gray-500 mb-4">

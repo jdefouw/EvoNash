@@ -411,7 +411,7 @@ export default function ExperimentDetailPage() {
               href="/"
               className="text-blue-600 dark:text-blue-400 hover:underline transition-colors"
             >
-              Dashboard
+              Experiment
             </Link>
             <span className="text-gray-400">/</span>
             <Link 

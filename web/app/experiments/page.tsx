@@ -300,7 +300,7 @@ export default function ExperimentsPage() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            Back to Science Fair Dashboard
+            Back to EvoNash Experiment
           </Link>
         </div>
 
