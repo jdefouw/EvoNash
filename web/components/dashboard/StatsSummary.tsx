@@ -10,19 +10,33 @@ interface StatsSummaryProps {
   experimentalFinalElo: number | null
   controlPeakElo: number | null
   experimentalPeakElo: number | null
-  pValue: number | null
-  isSignificant: boolean
   totalGenerationsControl: number
   totalGenerationsExperimental: number
-  // Statistical power and sample size
+  // Primary: convergence-generation t-test (hypothesis test)
+  convergencePValue: number | null
+  convergenceIsSignificant: boolean
+  convergenceTStatistic?: number | null
+  convergenceDegreesOfFreedom?: number | null
+  convergenceCohensD?: number | null
+  convergenceConfidenceInterval?: { lower: number; upper: number } | null
+  convergenceControlMean?: number | null
+  convergenceExperimentalMean?: number | null
+  convergenceControlStd?: number | null
+  convergenceExperimentalStd?: number | null
+  convergenceMeanDifference?: number | null
+  controlConvergedCount?: number
+  experimentalConvergedCount?: number
+  // Statistical power and sample size (from convergence analysis)
   controlExperimentCount?: number
   experimentalExperimentCount?: number
   statisticalPowerLevel?: StatisticalPowerLevel
-  // Enhanced statistical metrics for scientific rigor
+  // Secondary/descriptive (Elo t-test - not used for hypothesis)
+  pValue?: number | null
+  isSignificant?: boolean
   tStatistic?: number | null
   degreesOfFreedom?: number | null
-  cohensD?: number | null  // Effect size
-  confidenceInterval?: { lower: number; upper: number } | null  // 95% CI
+  cohensD?: number | null
+  confidenceInterval?: { lower: number; upper: number } | null
   controlMean?: number | null
   experimentalMean?: number | null
   controlStd?: number | null
@@ -38,8 +52,19 @@ export default function StatsSummary({
   experimentalFinalElo,
   controlPeakElo,
   experimentalPeakElo,
-  pValue,
-  isSignificant,
+  convergencePValue,
+  convergenceIsSignificant,
+  convergenceTStatistic = null,
+  convergenceDegreesOfFreedom = null,
+  convergenceCohensD = null,
+  convergenceConfidenceInterval = null,
+  convergenceControlMean = null,
+  convergenceExperimentalMean = null,
+  convergenceControlStd = null,
+  convergenceExperimentalStd = null,
+  convergenceMeanDifference = null,
+  controlConvergedCount,
+  experimentalConvergedCount,
   totalGenerationsControl,
   totalGenerationsExperimental,
   controlExperimentCount = 0,
@@ -55,7 +80,7 @@ export default function StatsSummary({
   experimentalStd = null,
   meanDifference = null
 }: StatsSummaryProps) {
-  // Effect size interpretation (Cohen's conventions)
+  // Effect size interpretation (Cohen's conventions) - use convergence for primary display
   const getEffectSizeLabel = (d: number | null): { label: string; color: string } => {
     if (d === null) return { label: 'N/A', color: 'text-gray-500' }
     const absD = Math.abs(d)
@@ -64,8 +89,10 @@ export default function StatsSummary({
     if (absD < 0.8) return { label: 'Medium', color: 'text-blue-600 dark:text-blue-400' }
     return { label: 'Large', color: 'text-green-600 dark:text-green-400' }
   }
-  
-  const effectSize = getEffectSizeLabel(cohensD)
+
+  const effectSize = getEffectSizeLabel(convergenceCohensD ?? cohensD)
+  const convergedN = controlConvergedCount ?? controlExperimentCount
+  const convergedM = experimentalConvergedCount ?? experimentalExperimentCount
   const hasData = totalGenerationsControl > 0 || totalGenerationsExperimental > 0
 
   const getConfidenceLabel = (level: StatisticalPowerLevel) => {
@@ -151,10 +178,10 @@ export default function StatsSummary({
 
         {hasData ? (
           <>
-            {/* Main Result Banner */}
+            {/* Main Result Banner - Generations to Nash equilibrium */}
             <div className={`mb-6 p-6 rounded-xl ${
-              isSignificant 
-                ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
+              convergenceIsSignificant
+                ? 'bg-gradient-to-r from-green-500 to-emerald-500'
                 : 'bg-gradient-to-r from-gray-400 to-gray-500'
             } text-white`}>
               <div className="flex items-center justify-between">
@@ -166,18 +193,18 @@ export default function StatsSummary({
                     }
                   </h4>
                   <p className="text-white/90">
-                    {isSignificant && pValue !== null
-                      ? `Results are statistically significant (p = ${pValue.toFixed(4)} < 0.05)`
-                      : 'Results pending sufficient data for statistical significance'
+                    {convergenceIsSignificant && convergencePValue !== null
+                      ? `Generations to Nash equilibrium: statistically significant (p = ${convergencePValue.toFixed(4)} < 0.05)`
+                      : 'Results pending sufficient converged experiments for statistical significance'
                     }
                   </p>
                 </div>
                 <div className="text-right">
                   <div className="text-4xl font-bold">
-                    {pValue !== null ? `p = ${pValue.toFixed(3)}` : 'p = -'}
+                    {convergencePValue !== null ? `p = ${convergencePValue.toFixed(3)}` : 'p = -'}
                   </div>
                   <div className="text-sm text-white/80">
-                    {isSignificant ? 'Significant' : 'Not Significant'}
+                    {convergenceIsSignificant ? 'Significant' : 'Not Significant'}
                   </div>
                 </div>
               </div>
@@ -190,7 +217,7 @@ export default function StatsSummary({
                   {confidence.label}
                 </div>
                 <span className="text-gray-500 dark:text-gray-400 text-sm">
-                  Based on {controlExperimentCount} control + {experimentalExperimentCount} experimental experiments
+                  Based on {convergedN} control + {convergedM} experimental experiments that reached Nash equilibrium
                 </span>
               </div>
               <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -208,13 +235,13 @@ export default function StatsSummary({
                 highlight={experimentalConvergenceGen !== null && controlConvergenceGen !== null && experimentalConvergenceGen < controlConvergenceGen}
               />
               <StatCard
-                label="Final Average Elo"
+                label="Final Average Elo (descriptive)"
                 controlValue={controlFinalElo?.toFixed(2) ?? null}
                 experimentalValue={experimentalFinalElo?.toFixed(2) ?? null}
                 comparison="higher-better"
               />
               <StatCard
-                label="Peak Elo Achieved"
+                label="Peak Elo Achieved (descriptive)"
                 controlValue={controlPeakElo?.toFixed(2) ?? null}
                 experimentalValue={experimentalPeakElo?.toFixed(2) ?? null}
                 comparison="higher-better"
@@ -226,54 +253,51 @@ export default function StatsSummary({
               />
             </div>
 
-            {/* Enhanced T-Test Details - Scientifically Rigorous */}
+            {/* Welch's t-test: Generations to Nash equilibrium (hypothesis test) */}
             <div className="mt-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-900/50">
               <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
-                Welch&apos;s Two-Sample T-Test (Experiment-Level Analysis)
+                Welch&apos;s Two-Sample T-Test: Generations to Nash Equilibrium (experiment-level)
               </div>
-              
-              {/* Sample Size Warning */}
-              {(controlExperimentCount < 5 || experimentalExperimentCount < 5) && (
+
+              {(convergedN < 5 || convergedM < 5) && (
                 <div className="mb-3 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded text-xs text-yellow-700 dark:text-yellow-400">
-                  <strong>⚠️ Sample Size Warning:</strong> Statistical power is limited with n={controlExperimentCount} control and n={experimentalExperimentCount} experimental experiments. 
-                  Aim for n≥5 per group for reliable significance testing.
+                  <strong>Sample size:</strong> n={convergedN} control and n={convergedM} experimental experiments reached Nash equilibrium. Aim for n≥5 per group for reliable significance testing.
                 </div>
               )}
-              
+
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
                 <div>
                   <div className="text-gray-500 dark:text-gray-400">t-Statistic</div>
                   <div className="font-mono font-bold text-gray-900 dark:text-white">
-                    {tStatistic !== null ? tStatistic.toFixed(4) : '-'}
+                    {convergenceTStatistic !== null ? convergenceTStatistic.toFixed(4) : '-'}
                   </div>
                 </div>
                 <div>
                   <div className="text-gray-500 dark:text-gray-400">Degrees of Freedom</div>
                   <div className="font-mono font-bold text-gray-900 dark:text-white">
-                    {degreesOfFreedom !== null ? degreesOfFreedom.toFixed(2) : '-'}
+                    {convergenceDegreesOfFreedom !== null ? convergenceDegreesOfFreedom.toFixed(2) : '-'}
                   </div>
                 </div>
                 <div>
                   <div className="text-gray-500 dark:text-gray-400">p-Value (two-tailed)</div>
                   <div className="font-mono font-bold text-gray-900 dark:text-white">
-                    {pValue !== null ? (pValue < 0.0001 ? '< 0.0001' : pValue.toFixed(4)) : '-'}
+                    {convergencePValue !== null ? (convergencePValue < 0.0001 ? '< 0.0001' : convergencePValue.toFixed(4)) : '-'}
                   </div>
                 </div>
                 <div>
                   <div className="text-gray-500 dark:text-gray-400">Significance (α = 0.05)</div>
-                  <div className={`font-bold ${isSignificant ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`}>
-                    {pValue !== null ? (isSignificant ? 'Reject H₀' : 'Fail to Reject H₀') : '-'}
+                  <div className={`font-bold ${convergenceIsSignificant ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                    {convergencePValue !== null ? (convergenceIsSignificant ? 'Reject H₀' : 'Fail to Reject H₀') : '-'}
                   </div>
                 </div>
               </div>
 
-              {/* Effect Size and Confidence Interval */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm border-t border-gray-200 dark:border-gray-700 pt-4">
                 <div>
                   <div className="text-gray-500 dark:text-gray-400">Cohen&apos;s d (Effect Size)</div>
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-bold text-gray-900 dark:text-white">
-                      {cohensD !== null ? cohensD.toFixed(3) : '-'}
+                      {convergenceCohensD !== null ? convergenceCohensD.toFixed(3) : '-'}
                     </span>
                     <span className={`text-xs font-medium ${effectSize.color}`}>
                       ({effectSize.label})
@@ -281,35 +305,35 @@ export default function StatsSummary({
                   </div>
                 </div>
                 <div>
-                  <div className="text-gray-500 dark:text-gray-400">Mean Difference (Exp - Ctrl)</div>
+                  <div className="text-gray-500 dark:text-gray-400">Mean Difference (Ctrl − Exp) generations</div>
                   <div className="font-mono font-bold text-gray-900 dark:text-white">
-                    {meanDifference !== null ? (meanDifference > 0 ? '+' : '') + meanDifference.toFixed(2) : '-'}
+                    {convergenceMeanDifference !== null ? (convergenceMeanDifference > 0 ? '+' : '') + convergenceMeanDifference.toFixed(0) : '-'}
                   </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">Positive = experimental faster</div>
                 </div>
                 <div>
                   <div className="text-gray-500 dark:text-gray-400">95% Confidence Interval</div>
                   <div className="font-mono font-bold text-gray-900 dark:text-white">
-                    {confidenceInterval 
-                      ? `[${confidenceInterval.lower.toFixed(2)}, ${confidenceInterval.upper.toFixed(2)}]` 
+                    {convergenceConfidenceInterval
+                      ? `[${convergenceConfidenceInterval.lower.toFixed(0)}, ${convergenceConfidenceInterval.upper.toFixed(0)}]`
                       : '-'}
                   </div>
                 </div>
               </div>
 
-              {/* Group Statistics */}
               <div className="grid grid-cols-2 gap-4 text-sm border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
                 <div>
-                  <div className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">Control Group (n={controlExperimentCount})</div>
+                  <div className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">Control: mean generations to Nash (n={convergedN})</div>
                   <div className="text-gray-600 dark:text-gray-400">
-                    Mean: <span className="font-mono font-bold text-gray-900 dark:text-white">{controlMean?.toFixed(2) ?? '-'}</span>
-                    {' '}± <span className="font-mono">{controlStd?.toFixed(2) ?? '-'}</span>
+                    Mean: <span className="font-mono font-bold text-gray-900 dark:text-white">{convergenceControlMean !== null ? convergenceControlMean.toFixed(0) : '-'}</span>
+                    {' '}± <span className="font-mono">{convergenceControlStd !== null ? convergenceControlStd.toFixed(0) : '-'}</span>
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs text-purple-600 dark:text-purple-400 font-medium mb-1">Experimental Group (n={experimentalExperimentCount})</div>
+                  <div className="text-xs text-purple-600 dark:text-purple-400 font-medium mb-1">Experimental: mean generations to Nash (n={convergedM})</div>
                   <div className="text-gray-600 dark:text-gray-400">
-                    Mean: <span className="font-mono font-bold text-gray-900 dark:text-white">{experimentalMean?.toFixed(2) ?? '-'}</span>
-                    {' '}± <span className="font-mono">{experimentalStd?.toFixed(2) ?? '-'}</span>
+                    Mean: <span className="font-mono font-bold text-gray-900 dark:text-white">{convergenceExperimentalMean !== null ? convergenceExperimentalMean.toFixed(0) : '-'}</span>
+                    {' '}± <span className="font-mono">{convergenceExperimentalStd !== null ? convergenceExperimentalStd.toFixed(0) : '-'}</span>
                   </div>
                 </div>
               </div>
@@ -321,16 +345,16 @@ export default function StatsSummary({
                 Interpretation
               </h4>
               <p className="text-sm text-blue-700 dark:text-blue-400">
-                {isSignificant ? (
+                {convergenceIsSignificant ? (
                   <>
-                    The experimental group (Adaptive Mutation) showed significantly better performance than the control group (Static Mutation). 
+                    The experimental group (Adaptive Mutation) reached Nash equilibrium in significantly fewer generations than the control group (p = {convergencePValue?.toFixed(4) ?? '—'}).
                     {convergenceImprovement !== null && convergenceImprovement > 0 && (
-                      <> The adaptive strategy achieved Nash Equilibrium {convergenceImprovement.toFixed(0)}% faster, supporting the hypothesis that fitness-scaled mutation rates accelerate convergence.</>
+                      <> The adaptive strategy converged {convergenceImprovement.toFixed(0)}% faster, supporting the hypothesis that fitness-scaled mutation rates accelerate convergence to Nash equilibrium.</>
                     )}
                   </>
                 ) : (
                   <>
-                    More data is needed to determine statistical significance. Continue running experiments to gather sufficient data points for analysis.
+                    More converged experiments are needed to determine statistical significance for generations to Nash equilibrium. Run additional experiments until enough reach Nash in both groups.
                   </>
                 )}
               </p>

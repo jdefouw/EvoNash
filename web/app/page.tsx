@@ -134,6 +134,21 @@ interface DashboardData {
     experimentalFinalElo: number | null
     controlPeakElo: number | null
     experimentalPeakElo: number | null
+    // Primary: convergence-generation t-test
+    convergencePValue: number | null
+    convergenceTStatistic: number | null
+    convergenceIsSignificant: boolean
+    convergenceControlMean: number | null
+    convergenceExperimentalMean: number | null
+    convergenceCohensD: number | null
+    convergenceConfidenceInterval: { lower: number; upper: number } | null
+    convergenceDegreesOfFreedom: number | null
+    convergenceControlStd: number | null
+    convergenceExperimentalStd: number | null
+    convergenceMeanDifference: number | null
+    controlConvergedCount: number
+    experimentalConvergedCount: number
+    // Secondary: Elo t-test (descriptive only)
     pValue: number | null
     tStatistic: number | null
     isSignificant: boolean
@@ -144,7 +159,6 @@ interface DashboardData {
     controlAvgGenerations: number
     experimentalAvgGenerations: number
     statisticalPowerLevel: StatisticalPowerLevel
-    // Enhanced statistical metrics for scientific rigor
     degreesOfFreedom: number | null
     cohensD: number | null
     confidenceInterval: { lower: number; upper: number } | null
@@ -325,11 +339,11 @@ function generateAbstract(stats: DashboardData['statistics'] | null): string {
   if (stats.convergenceImprovement !== null && stats.convergenceImprovement > 0) {
     resultParts.push(`the Experimental group achieved stable Policy Entropy (Nash Equilibrium) ${Math.round(stats.convergenceImprovement)}% faster than the Control group`)
   }
-  
-  if (stats.pValue !== null && stats.isSignificant) {
-    resultParts.push(`with a statistically significant difference in Elo ratings (p = ${stats.pValue.toFixed(3)})`)
-  } else if (stats.pValue !== null) {
-    resultParts.push(`though the difference in Elo ratings did not reach statistical significance (p = ${stats.pValue.toFixed(3)})`)
+
+  if (stats.convergencePValue != null && stats.convergenceIsSignificant) {
+    resultParts.push(`with a statistically significant difference in generations to Nash equilibrium (p = ${stats.convergencePValue.toFixed(3)})`)
+  } else if (stats.convergencePValue != null) {
+    resultParts.push(`though the difference in generations to Nash did not reach statistical significance (p = ${stats.convergencePValue.toFixed(3)})`)
   }
 
   if (resultParts.length > 0) {
@@ -359,18 +373,15 @@ function generateKeyFindings(stats: DashboardData['statistics'] | null): string[
     findings.push(`The Control group converged ${Math.abs(Math.round(stats.convergenceImprovement))}% faster than the Adaptive group, contrary to the hypothesis`)
   }
 
-  // Finding 2: Statistical significance (based on actual p-value)
-  if (stats.pValue !== null) {
-    if (stats.isSignificant) {
-      const peakComparison = stats.experimentalPeakElo !== null && stats.controlPeakElo !== null
-        ? (stats.experimentalPeakElo > stats.controlPeakElo ? 'higher' : 'lower')
-        : 'different'
+  // Finding 2: Statistical significance (generations to Nash equilibrium)
+  if (stats.convergencePValue != null) {
+    if (stats.convergenceIsSignificant) {
       findings.push(
-        `The Experimental group achieved a statistically significant ${peakComparison} peak Elo rating (p = ${stats.pValue.toFixed(4)})`
+        `The Experimental group reached Nash equilibrium in significantly fewer generations (p = ${stats.convergencePValue.toFixed(4)})`
       )
     } else {
       findings.push(
-        `The difference between groups did not reach statistical significance (p = ${stats.pValue.toFixed(4)}, threshold: p < 0.05)`
+        `The difference in generations to Nash did not reach statistical significance (p = ${stats.convergencePValue.toFixed(4)}, threshold: p < 0.05)`
       )
     }
   }
@@ -403,14 +414,14 @@ function generateConclusionSummary(stats: DashboardData['statistics'] | null, is
   }
 
   if (isHypothesisSupported) {
-    const improvementText = stats.convergenceImprovement !== null 
-      ? `approximately ${Math.round(stats.convergenceImprovement)}%` 
+    const improvementText = stats.convergenceImprovement !== null
+      ? `approximately ${Math.round(stats.convergenceImprovement)}%`
       : 'measurably'
-    
-    if (stats.isSignificant) {
-      return baseSummary + ` The experimental data demonstrates that an Adaptive Mutation strategy accelerates convergence to a Nash Equilibrium by ${improvementText} compared to static methods, with statistical significance (p = ${stats.pValue?.toFixed(4) ?? 'N/A'}). This supports the hypothesis that biologically-inspired mutation strategies can improve AI training efficiency.`
+
+    if (stats.convergenceIsSignificant) {
+      return baseSummary + ` The experimental data demonstrates that an Adaptive Mutation strategy accelerates convergence to a Nash Equilibrium by ${improvementText} compared to static methods, with statistical significance (p = ${stats.convergencePValue?.toFixed(4) ?? 'N/A'}). This supports the hypothesis that biologically-inspired mutation strategies can improve AI training efficiency.`
     } else {
-      return baseSummary + ` The experimental data shows that the Adaptive Mutation strategy converges ${improvementText} faster than the Control group (p = ${stats.pValue?.toFixed(4) ?? 'N/A'}). While this result has not yet reached statistical significance (p < 0.05), the data trends in the expected direction, supporting the hypothesis. Additional experiments may strengthen this conclusion.`
+      return baseSummary + ` The experimental data shows that the Adaptive Mutation strategy converges ${improvementText} faster than the Control group (p = ${stats.convergencePValue?.toFixed(4) ?? 'N/A'}). While this result has not yet reached statistical significance (p < 0.05), the data trends in the expected direction, supporting the hypothesis. Additional experiments may strengthen this conclusion.`
     }
   } else {
     return baseSummary + ` However, the current experimental data does not support the hypothesis that adaptive mutation accelerates convergence. The Control group converged faster than or equal to the Experimental group. Further investigation may be needed to understand why the expected improvement was not observed.`
@@ -424,7 +435,7 @@ function generateImplications(stats: DashboardData['statistics'] | null, isHypot
   }
   
   if (isHypothesisSupported) {
-    if (stats?.isSignificant) {
+    if (stats?.convergenceIsSignificant) {
       return 'These findings demonstrate that mimicking biological stress-response mechanisms significantly improves AI training efficiency on consumer hardware, potentially democratizing access to advanced AI training.'
     }
     return 'These preliminary findings suggest that biologically-inspired adaptive mutation strategies may improve AI training efficiency. Continued data collection will help confirm whether this improvement is statistically robust.'
@@ -513,8 +524,8 @@ export default function ScienceFairDashboard() {
     ? (data?.statistics?.convergenceImprovement ?? 0) > 0
     : null
 
-  const supportingEvidence = data?.statistics ? 
-    `The Experimental group converged ${data.statistics.convergenceImprovement?.toFixed(0) ?? '?'}% faster (Generation ${data.statistics.experimentalConvergenceGen ?? '?'} vs ${data.statistics.controlConvergenceGen ?? '?'}). T-test p-value: ${data.statistics.pValue?.toFixed(4) ?? 'N/A'}` : 
+  const supportingEvidence = data?.statistics ?
+    `The Experimental group converged ${data.statistics.convergenceImprovement?.toFixed(0) ?? '?'}% faster (Generation ${data.statistics.experimentalConvergenceGen ?? '?'} vs ${data.statistics.controlConvergenceGen ?? '?'}). T-test on generations to Nash: p = ${data.statistics.convergencePValue?.toFixed(4) ?? 'N/A'}` :
     undefined
 
   // Generate dynamic content based on actual statistics
@@ -685,9 +696,9 @@ export default function ScienceFairDashboard() {
                     </div>
                     <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4 text-center">
                       <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-                        {data.statistics.isSignificant ? 'Yes' : 'Pending'}
+                        {data.statistics.convergenceIsSignificant ? 'Yes' : 'Pending'}
                       </div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">Significant Result</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Significant Result (generations to Nash)</div>
                     </div>
                   </div>
                 )}
@@ -734,13 +745,26 @@ export default function ScienceFairDashboard() {
                 experimentalFinalElo={data?.statistics?.experimentalFinalElo ?? null}
                 controlPeakElo={data?.statistics?.controlPeakElo ?? null}
                 experimentalPeakElo={data?.statistics?.experimentalPeakElo ?? null}
-                pValue={data?.statistics?.pValue ?? null}
-                isSignificant={data?.statistics?.isSignificant ?? false}
+                convergencePValue={data?.statistics?.convergencePValue ?? null}
+                convergenceIsSignificant={data?.statistics?.convergenceIsSignificant ?? false}
+                convergenceTStatistic={data?.statistics?.convergenceTStatistic ?? null}
+                convergenceDegreesOfFreedom={data?.statistics?.convergenceDegreesOfFreedom ?? null}
+                convergenceCohensD={data?.statistics?.convergenceCohensD ?? null}
+                convergenceConfidenceInterval={data?.statistics?.convergenceConfidenceInterval ?? null}
+                convergenceControlMean={data?.statistics?.convergenceControlMean ?? null}
+                convergenceExperimentalMean={data?.statistics?.convergenceExperimentalMean ?? null}
+                convergenceControlStd={data?.statistics?.convergenceControlStd ?? null}
+                convergenceExperimentalStd={data?.statistics?.convergenceExperimentalStd ?? null}
+                convergenceMeanDifference={data?.statistics?.convergenceMeanDifference ?? null}
+                controlConvergedCount={data?.statistics?.controlConvergedCount}
+                experimentalConvergedCount={data?.statistics?.experimentalConvergedCount}
                 totalGenerationsControl={data?.statistics?.totalGenerationsControl ?? 0}
                 totalGenerationsExperimental={data?.statistics?.totalGenerationsExperimental ?? 0}
                 controlExperimentCount={data?.statistics?.controlExperimentCount ?? 0}
                 experimentalExperimentCount={data?.statistics?.experimentalExperimentCount ?? 0}
                 statisticalPowerLevel={data?.statistics?.statisticalPowerLevel ?? 'insufficient'}
+                pValue={data?.statistics?.pValue ?? null}
+                isSignificant={data?.statistics?.isSignificant ?? false}
                 tStatistic={data?.statistics?.tStatistic ?? null}
                 degreesOfFreedom={data?.statistics?.degreesOfFreedom ?? null}
                 cohensD={data?.statistics?.cohensD ?? null}
@@ -788,7 +812,7 @@ export default function ScienceFairDashboard() {
                         <EffectSizeCard
                           hedgesG={data.effectSizes.hedgesG}
                           cles={data.effectSizes.cles}
-                          cohensD={data?.statistics?.cohensD ?? null}
+                          cohensD={data?.statistics?.convergenceCohensD ?? data?.statistics?.cohensD ?? null}
                         />
                       )}
                     </div>
@@ -802,9 +826,9 @@ export default function ScienceFairDashboard() {
                           requiredFor80={data.powerAnalysis.requiredFor80}
                           requiredFor90={data.powerAnalysis.requiredFor90}
                           requiredFor95={data.powerAnalysis.requiredFor95}
-                          currentControlN={data?.statistics?.controlExperimentCount ?? 0}
-                          currentExperimentalN={data?.statistics?.experimentalExperimentCount ?? 0}
-                          effectSize={data?.effectSizes?.hedgesG?.hedgesG ?? data?.statistics?.cohensD ?? null}
+                          currentControlN={data?.statistics?.controlConvergedCount ?? data?.statistics?.controlExperimentCount ?? 0}
+                          currentExperimentalN={data?.statistics?.experimentalConvergedCount ?? data?.statistics?.experimentalExperimentCount ?? 0}
+                          effectSize={data?.effectSizes?.hedgesG?.hedgesG ?? data?.statistics?.convergenceCohensD ?? data?.statistics?.cohensD ?? null}
                         />
                       )}
 
@@ -813,7 +837,7 @@ export default function ScienceFairDashboard() {
                         <BoxPlotChart
                           controlData={data.distributionData.control}
                           experimentalData={data.distributionData.experimental}
-                          title="Distribution Comparison (Box Plot)"
+                          title="Distribution Comparison (Box Plot) — Generations to Nash"
                         />
                       )}
                     </div>
@@ -823,18 +847,18 @@ export default function ScienceFairDashboard() {
                       <QQPlot
                         controlValues={data.distributionData.control?.values ?? []}
                         experimentalValues={data.distributionData.experimental?.values ?? []}
-                        title="Q-Q Plots (Normality Assessment)"
+                        title="Q-Q Plots (Normality Assessment) — Generations to Nash"
                       />
                     )}
 
                     {/* Non-Parametric Test Results */}
                     {data?.nonParametricTest && (
                       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
                           Non-Parametric Test (Mann-Whitney U)
                         </h4>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-                          Distribution-free alternative to the t-test. Does not assume normality.
+                          Generations to Nash equilibrium. Distribution-free alternative to the t-test; does not assume normality.
                         </p>
                         <div className="grid md:grid-cols-4 gap-4">
                           <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">

@@ -751,16 +751,125 @@ class StatisticalAnalyzer:
         
         return None
     
+    def perform_convergence_t_test(
+        self,
+        control_convergence_gens: Optional[List[float]] = None,
+        experimental_convergence_gens: Optional[List[float]] = None
+    ) -> Dict:
+        """
+        Perform Welch's two-sample t-test on generations to Nash equilibrium (PRIMARY hypothesis test).
+        
+        The hypothesis is: experimental (adaptive mutation) reaches Nash equilibrium in fewer
+        generations than control (static mutation). This test uses one data point per experiment:
+        the generation at which Nash equilibrium was reached.
+        
+        Args:
+            control_convergence_gens: List of convergence generations (one per control experiment).
+            experimental_convergence_gens: List of convergence generations (one per experimental experiment).
+        
+        If both lists are provided with at least 2 values each, runs Welch's t-test.
+        If not provided, computes single convergence gen from self.control_df / self.experimental_df
+        (single-experiment mode; no significance test possible).
+        
+        Returns:
+            Dictionary with t-statistic, p-value, effect size, and interpretation.
+            mean_difference is Control - Experimental (positive = experimental faster).
+        """
+        if control_convergence_gens is None or experimental_convergence_gens is None:
+            control_convergence_gens = []
+            experimental_convergence_gens = []
+        c_gens = np.array(control_convergence_gens, dtype=float)
+        e_gens = np.array(experimental_convergence_gens, dtype=float)
+        c_gens = c_gens[~np.isnan(c_gens)]
+        e_gens = e_gens[~np.isnan(e_gens)]
+
+        if len(c_gens) < 2 or len(e_gens) < 2:
+            # Single-experiment or insufficient data: compute from dfs if available
+            if len(c_gens) == 0 and hasattr(self, 'control_df') and self.control_df is not None:
+                c_gen = self.calculate_convergence_generation(
+                    self.control_df,
+                    threshold=self.CONVERGENCE_THRESHOLD,
+                    stability_window=self.STABILITY_WINDOW
+                )
+                if c_gen is not None:
+                    c_gens = np.array([float(c_gen)])
+            if len(e_gens) == 0 and hasattr(self, 'experimental_df') and self.experimental_df is not None:
+                e_gen = self.calculate_convergence_generation(
+                    self.experimental_df,
+                    threshold=self.CONVERGENCE_THRESHOLD,
+                    stability_window=self.STABILITY_WINDOW
+                )
+                if e_gen is not None:
+                    e_gens = np.array([float(e_gen)])
+
+        n1, n2 = len(c_gens), len(e_gens)
+        if n1 < 2 or n2 < 2:
+            c_mean = float(np.mean(c_gens)) if n1 > 0 else None
+            e_mean = float(np.mean(e_gens)) if n2 > 0 else None
+            mean_diff = (c_mean - e_mean) if (c_mean is not None and e_mean is not None) else None
+            return {
+                't_statistic': None,
+                'p_value': None,
+                'is_significant': False,
+                'control_mean': c_mean,
+                'experimental_mean': e_mean,
+                'control_std': None,
+                'experimental_std': None,
+                'mean_difference': mean_diff,
+                'cohens_d': None,
+                'effect_size_label': 'N/A',
+                'sample_sizes': {'control': n1, 'experimental': n2},
+                'interpretation': 'Insufficient converged experiments for significance test (need n≥2 per group).',
+                'note': 'Primary hypothesis test: generations to Nash equilibrium. Run 5+ experiments per group for publication-quality results.'
+            }
+
+        t_stat, p_value = stats.ttest_ind(c_gens, e_gens, equal_var=False)
+        is_significant = p_value < 0.05
+
+        control_mean = float(np.mean(c_gens))
+        experimental_mean = float(np.mean(e_gens))
+        control_std = float(np.std(c_gens, ddof=1))
+        experimental_std = float(np.std(e_gens, ddof=1))
+        pooled_std = np.sqrt(((n1 - 1) * control_std**2 + (n2 - 1) * experimental_std**2) / (n1 + n2 - 2))
+        mean_diff = control_mean - experimental_mean  # positive = experimental faster
+        cohens_d = abs(mean_diff) / pooled_std if pooled_std > 0 else None
+
+        effect_size_label = 'N/A'
+        if cohens_d is not None:
+            if cohens_d < 0.2:
+                effect_size_label = 'Negligible'
+            elif cohens_d < 0.5:
+                effect_size_label = 'Small'
+            elif cohens_d < 0.8:
+                effect_size_label = 'Medium'
+            else:
+                effect_size_label = 'Large'
+
+        return {
+            't_statistic': float(t_stat),
+            'p_value': float(p_value),
+            'is_significant': is_significant,
+            'control_mean': control_mean,
+            'experimental_mean': experimental_mean,
+            'control_std': control_std,
+            'experimental_std': experimental_std,
+            'mean_difference': float(mean_diff),
+            'cohens_d': float(cohens_d) if cohens_d is not None else None,
+            'effect_size_label': effect_size_label,
+            'sample_sizes': {'control': n1, 'experimental': n2},
+            'interpretation': 'Statistically significant' if is_significant else 'Not statistically significant',
+            'note': 'Primary hypothesis test: generations to Nash equilibrium. Lower generations = faster convergence.'
+        }
+
     def perform_t_test(self) -> Dict:
         """
-        Perform Welch's two-sample t-test on final Elo ratings.
+        Perform Welch's two-sample t-test on final Elo ratings (SECONDARY / exploratory).
         
-        IMPORTANT: For multi-experiment analysis, each experiment should provide
-        ONE data point (final Elo) to avoid pseudoreplication. This implementation
-        uses the last 10 generations averaged per experiment for stability.
+        The primary hypothesis test is generations to Nash equilibrium; use
+        perform_convergence_t_test() for that. This Elo-based test is descriptive only.
         
-        For single control vs single experimental (as in typical CSV analysis),
-        we use the average of last 10 generations as the summary statistic.
+        For single control vs single experimental (typical CSV analysis), uses the
+        average of last 10 generations as the summary statistic.
         
         Returns:
             Dictionary with t-statistic, p-value, effect size, and interpretation
@@ -769,23 +878,23 @@ class StatisticalAnalyzer:
         last_n = min(10, len(self.control_df), len(self.experimental_df))
         control_elos = self.control_df['avg_elo'].tail(last_n).values
         experimental_elos = self.experimental_df['avg_elo'].tail(last_n).values
-        
+
         # Welch's t-test (unequal variances)
         t_stat, p_value = stats.ttest_ind(control_elos, experimental_elos, equal_var=False)
-        
+
         is_significant = p_value < 0.05
-        
+
         # Calculate effect size (Cohen's d)
         control_mean = float(np.mean(control_elos))
         experimental_mean = float(np.mean(experimental_elos))
         control_std = float(np.std(control_elos, ddof=1))
         experimental_std = float(np.std(experimental_elos, ddof=1))
-        
+
         # Pooled standard deviation for Cohen's d
         n1, n2 = len(control_elos), len(experimental_elos)
         pooled_std = np.sqrt(((n1 - 1) * control_std**2 + (n2 - 1) * experimental_std**2) / (n1 + n2 - 2))
         cohens_d = abs(experimental_mean - control_mean) / pooled_std if pooled_std > 0 else None
-        
+
         # Effect size interpretation
         effect_size_label = 'N/A'
         if cohens_d is not None:
@@ -797,7 +906,7 @@ class StatisticalAnalyzer:
                 effect_size_label = 'Medium'
             else:
                 effect_size_label = 'Large'
-        
+
         return {
             't_statistic': float(t_stat),
             'p_value': float(p_value),
@@ -811,7 +920,7 @@ class StatisticalAnalyzer:
             'effect_size_label': effect_size_label,
             'sample_sizes': {'control': n1, 'experimental': n2},
             'interpretation': 'Statistically significant' if is_significant else 'Not statistically significant',
-            'note': 'WARNING: This is a single experiment comparison. For publication-quality results, run 5+ experiments per group and compare experiment-level means.'
+            'note': 'Secondary/exploratory: Elo ratings. For hypothesis testing use perform_convergence_t_test() (generations to Nash).'
         }
     
     def analyze_convergence(self) -> Dict:

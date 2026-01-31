@@ -73,9 +73,12 @@ export default function EffectSizeCard({
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-      <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+      <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
         Effect Size Analysis
       </h4>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+        Generations to Nash equilibrium (hypothesis outcome)
+      </p>
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
         Practical significance measures - how meaningful is the difference?
       </p>

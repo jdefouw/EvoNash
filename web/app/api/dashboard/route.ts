@@ -11,10 +11,11 @@ export const dynamic = 'force-dynamic'
 // 
 // IMPORTANT: We use EXPERIMENT-LEVEL statistics, not generation-level.
 // Each experiment contributes ONE data point to avoid pseudoreplication.
+// Analysis is restricted to experiments that reached Nash equilibrium.
 // 
 // Methodology:
 // - Independent variable: Mutation strategy (Control vs Experimental)
-// - Dependent variable: Final average Elo rating per experiment
+// - Dependent variable: Generations to Nash equilibrium (per experiment)
 // - Test: Welch's two-sample t-test (unequal variances)
 // - Non-parametric alternative: Mann-Whitney U test
 // - Significance level: α = 0.05
@@ -1258,38 +1259,46 @@ export interface DashboardData {
     controlConvergenceGen: number | null
     experimentalConvergenceGen: number | null
     convergenceImprovement: number | null  // Percentage improvement in convergence speed
+    // Descriptive only (not used for hypothesis testing)
     controlFinalElo: number | null
     experimentalFinalElo: number | null
     controlPeakElo: number | null
     experimentalPeakElo: number | null
-    // Primary t-test on Final Elo (secondary metric)
+    // Primary: Convergence generation t-test (hypothesis test)
+    convergencePValue: number | null
+    convergenceTStatistic: number | null
+    convergenceIsSignificant: boolean
+    convergenceControlMean: number | null
+    convergenceExperimentalMean: number | null
+    convergenceCohensD: number | null
+    convergenceConfidenceInterval: { lower: number; upper: number } | null
+    convergenceDegreesOfFreedom: number | null
+    convergenceControlStd: number | null
+    convergenceExperimentalStd: number | null
+    convergenceMeanDifference: number | null  // Control − Experimental (positive = experimental faster)
+    // Secondary: Elo t-test (descriptive only)
     pValue: number | null
     tStatistic: number | null
     isSignificant: boolean
-    // Convergence generation t-test (PRIMARY hypothesis test)
-    convergencePValue?: number | null
-    convergenceTStatistic?: number | null
-    convergenceIsSignificant?: boolean
-    convergenceControlMean?: number | null  // Mean convergence generation for control
-    convergenceExperimentalMean?: number | null  // Mean convergence generation for experimental
+    degreesOfFreedom: number | null
+    cohensD: number | null
+    confidenceInterval: { lower: number; upper: number } | null
+    controlMean: number | null
+    experimentalMean: number | null
+    controlStd: number | null
+    experimentalStd: number | null
+    meanDifference: number | null
     // Experiment counts and generations
     totalGenerationsControl: number
     totalGenerationsExperimental: number
-    // Statistical power and sample size
     controlExperimentCount: number
     experimentalExperimentCount: number
     controlAvgGenerations: number
     experimentalAvgGenerations: number
     statisticalPowerLevel: StatisticalPowerLevel
-    // Enhanced statistical metrics for scientific rigor
-    degreesOfFreedom: number | null
-    cohensD: number | null  // Effect size
-    confidenceInterval: { lower: number; upper: number } | null  // 95% CI for mean difference
-    controlMean: number | null  // Mean of experiment-level final Elos
-    experimentalMean: number | null
-    controlStd: number | null  // Std of experiment-level final Elos
-    experimentalStd: number | null
-    meanDifference: number | null  // Experimental - Control
+    // Convergence sample sizes (experiments that reached Nash, used for primary analysis)
+    controlConvergedCount: number
+    experimentalConvergedCount: number
   }
   // Scientific Rigor - Assumption Checks
   assumptionChecks?: {
@@ -1743,15 +1752,29 @@ export async function GET() {
     let convergenceIsSignificant = false
     let convergenceControlMean: number | null = null
     let convergenceExperimentalMean: number | null = null
-    
+    let convergenceCohensD: number | null = null
+    let convergenceConfidenceInterval: { lower: number; upper: number } | null = null
+    let convergenceDegreesOfFreedom: number | null = null
+    let convergenceControlStd: number | null = null
+    let convergenceExperimentalStd: number | null = null
+    // Control − Experimental (positive = experimental reached Nash in fewer generations)
+    let convergenceMeanDifference: number | null = null
+
     if (controlConvergenceGens.length >= 2 && experimentalConvergenceGens.length >= 2) {
       convergenceTTestResult = welchTTest(controlConvergenceGens, experimentalConvergenceGens)
       convergencePValue = convergenceTTestResult.pValue
       convergenceTStatistic = convergenceTTestResult.tStatistic
       convergenceControlMean = convergenceTTestResult.controlMean
       convergenceExperimentalMean = convergenceTTestResult.experimentalMean
+      convergenceCohensD = convergenceTTestResult.cohensD
+      convergenceConfidenceInterval = convergenceTTestResult.confidenceInterval
+      convergenceDegreesOfFreedom = convergenceTTestResult.degreesOfFreedom
+      convergenceControlStd = convergenceTTestResult.controlStd
+      convergenceExperimentalStd = convergenceTTestResult.experimentalStd
+      // TTestResult.meanDifference is Experimental − Control; we want Control − Experimental
+      convergenceMeanDifference = -convergenceTTestResult.meanDifference
       convergenceIsSignificant = convergencePValue < 0.05
-      
+
       // Update improvement percentage from multi-experiment data (more accurate)
       if (convergenceControlMean && convergenceExperimentalMean && convergenceControlMean > 0) {
         convergenceImprovement = ((convergenceControlMean - convergenceExperimentalMean) / convergenceControlMean) * 100
@@ -1760,6 +1783,7 @@ export async function GET() {
       // With only 1 experiment per group, report means but no significance test
       convergenceControlMean = controlConvergenceGens.reduce((a, b) => a + b, 0) / controlConvergenceGens.length
       convergenceExperimentalMean = experimentalConvergenceGens.reduce((a, b) => a + b, 0) / experimentalConvergenceGens.length
+      convergenceMeanDifference = convergenceControlMean - convergenceExperimentalMean
       if (convergenceControlMean > 0) {
         convergenceImprovement = ((convergenceControlMean - convergenceExperimentalMean) / convergenceControlMean) * 100
       }
@@ -1779,14 +1803,12 @@ export async function GET() {
       : 0
 
     // =========================================================================
-    // SCIENTIFIC RIGOR - Statistical Analysis
+    // SCIENTIFIC RIGOR - On convergence generations (primary hypothesis outcome)
     // =========================================================================
-    // 
-    // IMPORTANT: We calculate power analysis FIRST, then use the actual achieved
-    // power to determine the statistical power level. This is the scientifically
-    // rigorous approach - using observed effect size rather than arbitrary thresholds.
+    // Assumption checks, effect sizes, power, and distributions apply to
+    // generations to Nash equilibrium. Only experiments that converged are included.
     // =========================================================================
-    
+
     // Initialize optional scientific rigor fields
     let assumptionChecks: DashboardData['assumptionChecks'] = undefined
     let nonParametricTest: DashboardData['nonParametricTest'] = undefined
@@ -1794,27 +1816,25 @@ export async function GET() {
     let powerAnalysisResult: DashboardData['powerAnalysis'] = undefined
     let bootstrapCIResult: DashboardData['bootstrapCI'] = undefined
     let distributionData: DashboardData['distributionData'] = undefined
-    
-    // Track achieved power for power level calculation
+
+    // Track achieved power for power level (from convergence analysis)
     let achievedPowerValue: number | null = null
 
-    // Only compute if we have data in both groups
-    if (controlExperimentElos.length >= 1 && experimentalExperimentElos.length >= 1) {
-      // Assumption Checks - Jarque-Bera normality test and Levene's variance test
-      const normalityControl = jarqueBeraTest(controlExperimentElos)
-      const normalityExperimental = jarqueBeraTest(experimentalExperimentElos)
-      const varianceEquality = leveneTest(controlExperimentElos, experimentalExperimentElos)
-      const outlierControl = detectOutliers(controlExperimentElos)
-      const outlierExperimental = detectOutliers(experimentalExperimentElos)
-      
+    // Only compute rigor when we have at least 2 converged experiments per group
+    if (controlConvergenceGens.length >= 2 && experimentalConvergenceGens.length >= 2) {
+      // Assumption Checks - on generations to Nash
+      const normalityControl = jarqueBeraTest(controlConvergenceGens)
+      const normalityExperimental = jarqueBeraTest(experimentalConvergenceGens)
+      const varianceEquality = leveneTest(controlConvergenceGens, experimentalConvergenceGens)
+      const outlierControl = detectOutliers(controlConvergenceGens)
+      const outlierExperimental = detectOutliers(experimentalConvergenceGens)
+
       const bothNormal = (normalityControl.isNormal ?? false) && (normalityExperimental.isNormal ?? false)
       const anyOutliers = outlierControl.outlierCount > 0 || outlierExperimental.outlierCount > 0
-      
+
       let recommendation: 'parametric' | 'parametric_with_caution' | 'non_parametric'
       let recommendationText: string
-      
-      // Note: Welch's t-test is robust to unequal variances, so variance equality
-      // is informational rather than deterministic for test selection
+
       if (bothNormal && !anyOutliers) {
         recommendation = 'parametric'
         if (varianceEquality.equalVariances) {
@@ -1829,7 +1849,7 @@ export async function GET() {
         recommendation = 'non_parametric'
         recommendationText = 'Consider non-parametric tests (Mann-Whitney U). Normality assumption may be violated.'
       }
-      
+
       assumptionChecks = {
         normalityControl,
         normalityExperimental,
@@ -1841,58 +1861,47 @@ export async function GET() {
         recommendation,
         recommendationText
       }
-      
-      // Non-parametric Test (Mann-Whitney U)
-      nonParametricTest = mannWhitneyUTest(controlExperimentElos, experimentalExperimentElos)
-      
-      // Enhanced Effect Sizes
-      const hedgesGResult = hedgesG(controlExperimentElos, experimentalExperimentElos)
-      const clesResult = commonLanguageEffectSize(controlExperimentElos, experimentalExperimentElos)
+
+      nonParametricTest = mannWhitneyUTest(controlConvergenceGens, experimentalConvergenceGens)
+
+      const hedgesGResult = hedgesG(controlConvergenceGens, experimentalConvergenceGens)
+      const clesResult = commonLanguageEffectSize(controlConvergenceGens, experimentalConvergenceGens)
       effectSizes = {
         hedgesG: hedgesGResult,
         cles: clesResult
       }
-      
-      // Power Analysis - using observed effect size (Hedges' g preferred, falls back to Cohen's d)
-      const effectSizeForPower = hedgesGResult.hedgesG ?? cohensD
+
+      const effectSizeForPower = hedgesGResult.hedgesG ?? convergenceCohensD
       const achievedPower = calculatePower(
-        controlExperimentElos.length,
-        experimentalExperimentElos.length,
+        controlConvergenceGens.length,
+        experimentalConvergenceGens.length,
         effectSizeForPower
       )
       const requiredFor80 = requiredSampleSize(effectSizeForPower, 0.80)
       const requiredFor90 = requiredSampleSize(effectSizeForPower, 0.90)
       const requiredFor95 = requiredSampleSize(effectSizeForPower, 0.95)
-      
+
       powerAnalysisResult = {
         achievedPower,
         requiredFor80,
         requiredFor90,
         requiredFor95
       }
-      
-      // Store achieved power for power level calculation
+
       achievedPowerValue = achievedPower.power
-      
-      // Bootstrap CI (only if we have enough data)
-      if (controlExperimentElos.length >= 2 && experimentalExperimentElos.length >= 2) {
-        bootstrapCIResult = bootstrapCI(controlExperimentElos, experimentalExperimentElos, 5000)
-      }
-      
-      // Distribution Data (for visualizations)
+
+      bootstrapCIResult = bootstrapCI(controlConvergenceGens, experimentalConvergenceGens, 5000)
+
       distributionData = {
-        control: getDistributionStats(controlExperimentElos),
-        experimental: getDistributionStats(experimentalExperimentElos)
+        control: getDistributionStats(controlConvergenceGens),
+        experimental: getDistributionStats(experimentalConvergenceGens)
       }
     }
 
-    // Calculate statistical power level using ACTUAL achieved power when available
-    // This is the scientifically rigorous approach - the power level is based on
-    // real statistical power calculated from the observed effect size, not arbitrary
-    // sample size thresholds.
+    // Power level from convergence analysis (converged-experiment counts)
     const statisticalPowerLevel = calculatePowerLevel({
-      controlCount: controlExperimentCount,
-      experimentalCount: experimentalExperimentCount,
+      controlCount: controlConvergenceGens.length,
+      experimentalCount: experimentalConvergenceGens.length,
       achievedPower: achievedPowerValue
     })
 
@@ -1904,30 +1913,27 @@ export async function GET() {
       statistics: {
         controlConvergenceGen,
         experimentalConvergenceGen,
-        convergenceImprovement,  // From multi-experiment convergence t-test
+        convergenceImprovement,
         controlFinalElo,
         experimentalFinalElo,
         controlPeakElo,
         experimentalPeakElo,
-        // Primary t-test: Final Elo (secondary metric)
-        pValue,
-        tStatistic,
-        isSignificant,
-        // Convergence t-test: Primary hypothesis test
+        // Primary: convergence generation t-test (hypothesis test)
         convergencePValue,
         convergenceTStatistic,
         convergenceIsSignificant,
         convergenceControlMean,
         convergenceExperimentalMean,
-        // Experiment counts (based on ALL completed experiments, not chart subset)
-        totalGenerationsControl: allControlGenerations.length,
-        totalGenerationsExperimental: allExperimentalGenerations.length,
-        controlExperimentCount,
-        experimentalExperimentCount,
-        controlAvgGenerations,
-        experimentalAvgGenerations,
-        statisticalPowerLevel,
-        // Enhanced statistical metrics for scientific rigor
+        convergenceCohensD,
+        convergenceConfidenceInterval,
+        convergenceDegreesOfFreedom,
+        convergenceControlStd,
+        convergenceExperimentalStd,
+        convergenceMeanDifference,
+        // Secondary: Elo t-test (descriptive only)
+        pValue,
+        tStatistic,
+        isSignificant,
         degreesOfFreedom,
         cohensD,
         confidenceInterval,
@@ -1935,7 +1941,16 @@ export async function GET() {
         experimentalMean,
         controlStd,
         experimentalStd,
-        meanDifference
+        meanDifference,
+        totalGenerationsControl: allControlGenerations.length,
+        totalGenerationsExperimental: allExperimentalGenerations.length,
+        controlExperimentCount,
+        experimentalExperimentCount,
+        controlAvgGenerations,
+        experimentalAvgGenerations,
+        statisticalPowerLevel,
+        controlConvergedCount: controlConvergenceGens.length,
+        experimentalConvergedCount: experimentalConvergenceGens.length
       },
       // Scientific Rigor additions
       assumptionChecks,

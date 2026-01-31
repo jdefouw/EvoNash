@@ -10,6 +10,8 @@ interface Statistics {
   experimentalFinalElo: number | null
   controlPeakElo: number | null
   experimentalPeakElo: number | null
+  convergencePValue: number | null
+  convergenceIsSignificant: boolean
   pValue: number | null
   tStatistic: number | null
   isSignificant: boolean
@@ -55,20 +57,20 @@ export default function ScientificAbstract({
     )
   }
   
-  // Highlight p-values that appear in the text (these are dynamically generated from actual data)
-  if (statistics && statistics.pValue != null) {
+  // Highlight p-values (generations to Nash equilibrium - primary hypothesis test)
+  if (statistics && statistics.convergencePValue != null) {
     highlightedAbstract = highlightedAbstract.replace(
       /p = ([\d.]+)/g,
-      statistics.isSignificant 
+      statistics.convergenceIsSignificant
         ? '<strong class="text-green-600 dark:text-green-400">p = $1</strong>'
         : '<span class="text-amber-600 dark:text-amber-400">p = $1</span>'
     )
   }
-  
-  // Highlight "statistically significant" only if data actually is significant
-  if (statistics?.isSignificant) {
+
+  // Highlight "statistically significant" only if convergence test is significant
+  if (statistics?.convergenceIsSignificant) {
     highlightedAbstract = highlightedAbstract.replace(
-      /statistically significant/g, 
+      /statistically significant/g,
       '<strong class="text-green-600 dark:text-green-400">statistically significant</strong>'
     )
   }
