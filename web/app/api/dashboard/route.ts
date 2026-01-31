@@ -984,24 +984,93 @@ function calculatePowerLevel(input: PowerLevelInput): StatisticalPowerLevel {
 
 export async function GET() {
   try {
-    // Fetch experiments - limit to prevent timeout with large datasets
-    // For statistical analysis, we use ALL experiments but limit generations
-    const experiments = await queryAll<Experiment>(
+    // =========================================================================
+    // DATA FETCHING STRATEGY:
+    // 1. Statistics: Use ALL completed experiments for statistical accuracy
+    // 2. Charts: Use subset (20 per group) for UI performance
+    // =========================================================================
+
+    // Fetch ALL completed experiments for statistics (no limit)
+    const allCompletedExperiments = await queryAll<Experiment>(
       `SELECT * FROM experiments 
-       WHERE status IN ('COMPLETED', 'RUNNING') 
-       ORDER BY created_at DESC
-       LIMIT 200`
+       WHERE status = 'COMPLETED' 
+       ORDER BY created_at DESC`
     )
 
-    // Separate by group
-    const controlExperiments = (experiments || []).filter(
+    // Also fetch running experiments for display purposes
+    const runningExperiments = await queryAll<Experiment>(
+      `SELECT * FROM experiments 
+       WHERE status = 'RUNNING' 
+       ORDER BY created_at DESC`
+    )
+
+    // Separate completed experiments by group (for statistics)
+    const allControlExperiments = (allCompletedExperiments || []).filter(
       (exp: Experiment) => exp.experiment_group === 'CONTROL'
     )
-    const experimentalExperiments = (experiments || []).filter(
+    const allExperimentalExperiments = (allCompletedExperiments || []).filter(
       (exp: Experiment) => exp.experiment_group === 'EXPERIMENTAL'
     )
 
-    // For chart display, limit to most recent experiments per group to prevent data overload
+    // Combine for display (completed + running)
+    const allExperiments = [...(allCompletedExperiments || []), ...(runningExperiments || [])]
+    const controlExperiments = allExperiments.filter(
+      (exp: Experiment) => exp.experiment_group === 'CONTROL'
+    )
+    const experimentalExperiments = allExperiments.filter(
+      (exp: Experiment) => exp.experiment_group === 'EXPERIMENTAL'
+    )
+
+    // =========================================================================
+    // STATISTICS DATA: Aggregate final Elo for ALL completed experiments
+    // Uses SQL aggregation to efficiently calculate avg of last 10 generations
+    // =========================================================================
+    
+    interface ExperimentFinalElo {
+      experiment_id: string
+      experiment_group: string
+      final_elo: number
+    }
+    
+    const experimentFinalElos = await queryAll<ExperimentFinalElo>(
+      `WITH ranked_generations AS (
+        SELECT 
+          g.experiment_id,
+          e.experiment_group,
+          g.avg_elo,
+          g.generation_number,
+          ROW_NUMBER() OVER (
+            PARTITION BY g.experiment_id 
+            ORDER BY g.generation_number DESC
+          ) as rn,
+          COUNT(*) OVER (PARTITION BY g.experiment_id) as total_gens
+        FROM generations g
+        JOIN experiments e ON g.experiment_id = e.id
+        WHERE e.status = 'COMPLETED'
+          AND g.avg_elo IS NOT NULL
+      )
+      SELECT 
+        experiment_id,
+        experiment_group,
+        AVG(avg_elo) as final_elo
+      FROM ranked_generations
+      WHERE rn <= LEAST(10, total_gens)
+      GROUP BY experiment_id, experiment_group
+      HAVING AVG(avg_elo) > 0`
+    ) || []
+
+    // Separate final Elos by group for statistical calculations
+    const allControlFinalElos = experimentFinalElos
+      .filter(e => e.experiment_group === 'CONTROL')
+      .map(e => e.final_elo)
+    const allExperimentalFinalElos = experimentFinalElos
+      .filter(e => e.experiment_group === 'EXPERIMENTAL')
+      .map(e => e.final_elo)
+
+    // =========================================================================
+    // CHART DATA: Fetch generations for subset of experiments (for visualization)
+    // =========================================================================
+    
     const MAX_EXPERIMENTS_FOR_CHARTS = 20
     const controlIdsForCharts = controlExperiments.slice(0, MAX_EXPERIMENTS_FOR_CHARTS).map((exp: Experiment) => exp.id)
     const experimentalIdsForCharts = experimentalExperiments.slice(0, MAX_EXPERIMENTS_FOR_CHARTS).map((exp: Experiment) => exp.id)
@@ -1029,6 +1098,39 @@ export async function GET() {
          WHERE experiment_id IN (${placeholders}) 
          ORDER BY generation_number ASC`,
         experimentalIdsForCharts
+      ) || []
+    }
+
+    // =========================================================================
+    // CONVERGENCE DATA: Fetch ALL generations for ALL completed experiments
+    // This is needed to calculate convergence generation for each experiment
+    // =========================================================================
+    
+    const allControlIds = allControlExperiments.map((exp: Experiment) => exp.id)
+    const allExperimentalIds = allExperimentalExperiments.map((exp: Experiment) => exp.id)
+    
+    let allControlGenerations: Generation[] = []
+    let allExperimentalGenerations: Generation[] = []
+    
+    // Fetch all generations for control experiments (for convergence stats)
+    if (allControlIds.length > 0) {
+      const placeholders = allControlIds.map((_: string, i: number) => `$${i + 1}`).join(', ')
+      allControlGenerations = await queryAll<Generation>(
+        `SELECT * FROM generations 
+         WHERE experiment_id IN (${placeholders}) 
+         ORDER BY experiment_id, generation_number ASC`,
+        allControlIds
+      ) || []
+    }
+    
+    // Fetch all generations for experimental experiments (for convergence stats)
+    if (allExperimentalIds.length > 0) {
+      const placeholders = allExperimentalIds.map((_: string, i: number) => `$${i + 1}`).join(', ')
+      allExperimentalGenerations = await queryAll<Generation>(
+        `SELECT * FROM generations 
+         WHERE experiment_id IN (${placeholders}) 
+         ORDER BY experiment_id, generation_number ASC`,
+        allExperimentalIds
       ) || []
     }
 
@@ -1112,29 +1214,14 @@ export async function GET() {
     // CRITICAL: We use ONE data point per experiment to avoid pseudoreplication.
     // Each experiment provides its final average Elo as the summary statistic.
     // This ensures statistical independence between samples.
+    // 
+    // IMPORTANT: We use ALL completed experiments for statistical analysis,
+    // not just the subset used for chart visualization.
     // =========================================================================
     
-    // Calculate final Elo for EACH experiment (not each generation)
-    const getExperimentFinalElos = (experiments: Experiment[], generations: Generation[]): number[] => {
-      return experiments.map(exp => {
-        // Get all generations for this experiment, sorted by generation number
-        const expGens = generations
-          .filter(g => g.experiment_id === exp.id)
-          .sort((a, b) => a.generation_number - b.generation_number)
-        
-        if (expGens.length === 0) return null
-        
-        // Use average of last 10 generations for stability (or all if < 10)
-        const lastN = Math.min(10, expGens.length)
-        const lastGens = expGens.slice(-lastN)
-        const avgFinalElo = lastGens.reduce((sum, g) => sum + (g.avg_elo || 0), 0) / lastN
-        
-        return avgFinalElo
-      }).filter((elo): elo is number => elo !== null && elo > 0)
-    }
-    
-    const controlExperimentElos = getExperimentFinalElos(controlExperiments, controlGenerations)
-    const experimentalExperimentElos = getExperimentFinalElos(experimentalExperiments, experimentalGenerations)
+    // Use pre-calculated final Elos from SQL aggregation (ALL completed experiments)
+    const controlExperimentElos = allControlFinalElos
+    const experimentalExperimentElos = allExperimentalFinalElos
     
     // Perform Welch's t-test on experiment-level data
     let tTestResult: TTestResult | null = null
@@ -1177,6 +1264,9 @@ export async function GET() {
     // This directly tests the hypothesis: "Does adaptive mutation reach Nash
     // equilibrium in fewer generations than static mutation?"
     // Each experiment provides ONE data point: its convergence generation.
+    // 
+    // IMPORTANT: We use ALL completed experiments for statistical analysis,
+    // not just the subset used for chart visualization.
     // =========================================================================
     
     // Get convergence generation for each experiment
@@ -1222,8 +1312,9 @@ export async function GET() {
       }).filter((gen): gen is number => gen !== null)
     }
     
-    const controlConvergenceGens = getExperimentConvergenceGens(controlExperiments, controlGenerations)
-    const experimentalConvergenceGens = getExperimentConvergenceGens(experimentalExperiments, experimentalGenerations)
+    // Use ALL completed experiments for convergence statistics (not just chart subset)
+    const controlConvergenceGens = getExperimentConvergenceGens(allControlExperiments, allControlGenerations)
+    const experimentalConvergenceGens = getExperimentConvergenceGens(allExperimentalExperiments, allExperimentalGenerations)
     
     // T-test on convergence generations (PRIMARY hypothesis test)
     let convergenceTTestResult: TTestResult | null = null
@@ -1254,15 +1345,17 @@ export async function GET() {
       }
     }
 
-    // Calculate average generations per experiment
-    const controlExperimentCount = controlExperiments.length
-    const experimentalExperimentCount = experimentalExperiments.length
+    // Calculate statistics based on ALL completed experiments (not chart subset)
+    // These counts reflect the actual sample sizes used in statistical tests
+    const controlExperimentCount = allControlExperiments.length
+    const experimentalExperimentCount = allExperimentalExperiments.length
     
+    // Calculate average generations from ALL completed experiments
     const controlAvgGenerations = controlExperimentCount > 0
-      ? Math.round(controlGenerations.length / controlExperimentCount)
+      ? Math.round(allControlGenerations.length / controlExperimentCount)
       : 0
     const experimentalAvgGenerations = experimentalExperimentCount > 0
-      ? Math.round(experimentalGenerations.length / experimentalExperimentCount)
+      ? Math.round(allExperimentalGenerations.length / experimentalExperimentCount)
       : 0
 
     // =========================================================================
@@ -1398,9 +1491,9 @@ export async function GET() {
         convergenceIsSignificant,
         convergenceControlMean,
         convergenceExperimentalMean,
-        // Experiment counts
-        totalGenerationsControl: controlGenerations.length,
-        totalGenerationsExperimental: experimentalGenerations.length,
+        // Experiment counts (based on ALL completed experiments, not chart subset)
+        totalGenerationsControl: allControlGenerations.length,
+        totalGenerationsExperimental: allExperimentalGenerations.length,
         controlExperimentCount,
         experimentalExperimentCount,
         controlAvgGenerations,
