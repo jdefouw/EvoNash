@@ -26,12 +26,21 @@ import WorkerList from '@/components/WorkerList'
 type StatisticalPowerLevel = 'insufficient' | 'minimum' | 'recommended' | 'robust'
 
 // Scientific Rigor Types
-interface ShapiroWilkResult {
-  W: number | null
+interface NormalityTestResult {
+  statistic: number | null
   pValue: number | null
   isNormal: boolean | null
   interpretation: string
   sampleSize: number
+  testName: string
+}
+
+interface LeveneTestResult {
+  statistic: number | null
+  pValue: number | null
+  equalVariances: boolean | null
+  interpretation: string
+  sampleSizes: { control: number; experimental: number }
 }
 
 interface OutlierResult {
@@ -147,8 +156,9 @@ interface DashboardData {
   }
   // Scientific Rigor - Assumption Checks
   assumptionChecks?: {
-    normalityControl: ShapiroWilkResult
-    normalityExperimental: ShapiroWilkResult
+    normalityControl: NormalityTestResult
+    normalityExperimental: NormalityTestResult
+    varianceEquality: LeveneTestResult
     bothNormal: boolean
     outlierControl: OutlierResult
     outlierExperimental: OutlierResult
