@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts'
+import type { TooltipProps } from 'recharts'
 import { Generation } from '@/types/protocol'
 
 interface ComparisonChartProps {
@@ -83,10 +84,12 @@ export default function ComparisonChart({
   const chartTitle = title || (metric === 'elo' ? 'Convergence Velocity: Elo Rating Comparison' : 'Entropy Collapse: Policy Entropy Comparison')
 
   // Custom tooltip: show generation and values explicitly from DB (generations.avg_elo at this generation)
-  const renderTooltipContent = (props: { active?: boolean; payload?: Array<{ payload: Record<string, unknown> }>; label?: string }) => {
+  const renderTooltipContent = (props: TooltipProps<number, string>) => {
     const { active, payload, label } = props
     if (!active || !payload?.length) return null
-    const p = payload[0].payload as Record<string, unknown>
+    const raw = payload[0]?.payload
+    if (raw == null) return null
+    const p = raw as Record<string, unknown>
     const gen = (p.generation as number) ?? label
     return (
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg p-3 text-sm">
