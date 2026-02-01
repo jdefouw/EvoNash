@@ -12,6 +12,7 @@ const sectionIds = {
   whyTheyAct: 'why-they-act',
   methodology: 'methodology',
   gameTheoryNash: 'game-theory-nash',
+  nashDetectionTechnical: 'nash-detection-technical',
   gpuWorkers: 'gpu-workers',
   measuring: 'what-we-measure',
   aiFuture: 'ai-future',
@@ -28,6 +29,7 @@ const tocItems: { id: string; label: string }[] = [
   { id: sectionIds.whyTheyAct, label: 'Why do they act the way they do?' },
   { id: sectionIds.methodology, label: 'How do we conduct the experiment?' },
   { id: sectionIds.gameTheoryNash, label: 'Game theory and Nash equilibrium' },
+  { id: sectionIds.nashDetectionTechnical, label: 'How we detect Nash equilibrium (technical)' },
   { id: sectionIds.gpuWorkers, label: 'Why do we need GPU workers?' },
   { id: sectionIds.measuring, label: 'What are we measuring?' },
   { id: sectionIds.aiFuture, label: 'Why is this relevant for the future of AI?' },
@@ -364,9 +366,13 @@ export default function OverviewPage() {
                 (e.g. shoot) can be used again. <strong>Metabolism</strong> — The organism losing
                 a little energy every tick (like burning calories). <strong>Foraging</strong> —
                 Getting energy by eating food pellets. <strong>Predation</strong> — Getting energy
-                by shooting another organism and stealing their energy. <strong>Policy
+                by shooting another organism and stealing their energy.                 <strong>Policy
                 entropy</strong> — A number that measures how &quot;mixed&quot; or
-                &quot;certain&quot; the population&apos;s decisions are. <strong>Convergence</strong> —
+                &quot;certain&quot; one organism&apos;s decisions are (averaged over the population
+                we get mean policy entropy). <strong>Entropy variance</strong> — How much
+                organisms differ from each other in that &quot;mixed vs certain&quot; measure;
+                when it is low and stable, the population has settled on a similar mix of
+                strategies (we use this to detect Nash equilibrium). <strong>Convergence</strong> —
                 The population settling into a stable mix of strategies (Nash equilibrium). <strong>Fitness</strong> —
                 How well an organism did; we use Elo as our fitness measure. <strong>Weights</strong> —
                 The numbers inside the neural network that get evolved. <strong>Mutation</strong> —
@@ -540,8 +546,11 @@ export default function OverviewPage() {
             Nash-like equilibrium when the mix of strategies stops changing from generation to
             generation: the kinds of behavior have settled into a stable balance. At that point, no
             organism would do better by behaving differently, given how the rest of the population
-            is behaving. We detect this by watching policy entropy: when it stays low and stable
-            for many generations in a row, we treat that as having reached Nash equilibrium.
+            is behaving. We detect this by watching <strong>entropy variance</strong>—how much
+            the organisms differ from each other in how &quot;mixed&quot; or &quot;certain&quot;
+            their decisions are. When everyone is behaving similarly, that difference drops and
+            stays low; when it stays low for many generations in a row, we treat that as having
+            reached Nash equilibrium.
           </p>
           <p>
             <strong>Why Nash equilibrium is the key metric:</strong> Our hypothesis is that
@@ -552,6 +561,33 @@ export default function OverviewPage() {
             Nash equilibrium is not just a fancy name for &quot;they settled down&quot;—it is the
             specific, stable outcome from game theory that we use to define &quot;settled,&quot; and
             the generation at which we reach it is the main number we use to test our hypothesis.
+          </p>
+        </SectionCard>
+
+        {/* Section 8b: Nash equilibrium detection (technical / experiment methodology) */}
+        <SectionCard
+          id={sectionIds.nashDetectionTechnical}
+          title="How we detect Nash equilibrium (technical)"
+        >
+          <p>
+            <strong>Detection criterion.</strong> Nash equilibrium is detected using
+            <strong> entropy variance</strong> across the population, not mean policy entropy.
+            For each generation we compute a scalar <strong>policy entropy</strong> per agent
+            (expected entropy of the action distribution over a fixed set of sample inputs).
+            The <strong>entropy variance</strong> is the variance of those per-agent entropies
+            across the population.
+          </p>
+          <p>
+            <strong>Why variance rather than mean entropy.</strong> Mean policy entropy
+            indicates how mixed or deterministic the average policy is, but it does not
+            measure population-level homogeneity. At equilibrium we require that the
+            strategy mix has stabilized—i.e., that agents no longer differ substantially
+            in behavior. That corresponds to low <em>variance</em> of policy entropy across
+            agents: when all agents have similar entropies, the population has converged
+            to a homogeneous strategy mix. We therefore define convergence as the
+            generation at which entropy variance falls below a threshold and remains
+            below it for a fixed stability window (after an initial phase of
+            divergence), with a post-convergence buffer to confirm stability.
           </p>
         </SectionCard>
 
@@ -589,11 +625,12 @@ export default function OverviewPage() {
               <strong>Convergence velocity</strong> (&quot;when did they reach Nash
               equilibrium?&quot;) — We record the generation number at which the population&apos;s
               behavior becomes stable: the variety of strategies (who forages, who attacks) stops
-              changing much from generation to generation. We check this using policy entropy (a
-              way to measure how &quot;mixed&quot; or &quot;certain&quot; the population&apos;s
-              decisions are). When it stays low and stable for many generations, we say we have
-              reached a Nash-like equilibrium. So convergence velocity = how many generations it
-              took to get there. Faster convergence = fewer generations.
+              changing much from generation to generation. We check this using <strong>entropy
+              variance</strong>—how much the organisms differ from each other in how mixed or
+              certain their decisions are. When that difference is small and stays small for many
+              generations, everyone is behaving similarly and we say we have reached a Nash-like
+              equilibrium. So convergence velocity = how many generations it took to get there.
+              Faster convergence = fewer generations.
             </li>
             <li>
               <strong>Peak fitness</strong> (&quot;how good did they get?&quot;) — We record the
@@ -602,11 +639,12 @@ export default function OverviewPage() {
               performed in the petri dish.
             </li>
             <li>
-              <strong>Policy entropy</strong> (&quot;how predictable are their decisions?&quot;) —
-              This number tells us whether the population is still experimenting (high entropy,
-              many different behaviors) or has settled on a stable mix (low entropy). We use it
-              both to detect when we have reached equilibrium and to describe how the population
-              behaved.
+              <strong>Policy entropy</strong> (&quot;how predictable are one organism&apos;s
+              decisions?&quot;) — This number tells us whether an organism is still experimenting
+              (high entropy) or has settled on a stable style (low entropy). We look at the
+              <strong> variance</strong> of that number across all organisms to detect
+              equilibrium: when the variance is low, everyone is similar; when it stays low for
+              many generations, we have reached Nash equilibrium.
             </li>
           </ul>
           <p>

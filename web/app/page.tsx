@@ -296,7 +296,8 @@ const PROJECT_CONTENT_STATIC = {
         title: 'Statistical Analysis',
         description: 'Raw telemetry exported to CSV for analysis. Two-sample t-test performed to determine significance.',
         details: [
-          'Nash Equilibrium detected when entropy variance drops below σ < 0.01 AFTER initial divergence',
+          'Nash Equilibrium detected when entropy variance (not mean policy entropy) drops below σ < 0.01 AFTER initial divergence',
+          'Entropy variance = Var(H_i) across agents; equilibrium requires population homogeneity (low variance), not low mean entropy',
           'Same threshold applied to both groups for fair scientific comparison',
           'Requires 20+ consecutive stable generations to confirm convergence',
           'Compare convergence speed and peak Elo ratings with p < 0.05 significance threshold'
