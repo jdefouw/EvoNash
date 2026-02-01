@@ -1496,6 +1496,26 @@ export async function GET() {
       .filter(e => e.experiment_group === 'EXPERIMENTAL')
       .map(e => e.final_elo)
 
+    // Per-experiment peak Elo (for descriptive cards; comparable across groups)
+    interface ExperimentPeakElo {
+      experiment_id: string
+      experiment_group: string
+      peak_elo: number
+    }
+    const experimentPeakElos = await queryAll<ExperimentPeakElo>(
+      `SELECT g.experiment_id, e.experiment_group, MAX(g.peak_elo) as peak_elo
+       FROM generations g
+       JOIN experiments e ON g.experiment_id = e.id
+       WHERE e.status = 'COMPLETED' AND g.peak_elo IS NOT NULL
+       GROUP BY g.experiment_id, e.experiment_group`
+    ) || []
+    const allControlPeakElos = experimentPeakElos
+      .filter(e => e.experiment_group === 'CONTROL')
+      .map(e => e.peak_elo)
+    const allExperimentalPeakElos = experimentPeakElos
+      .filter(e => e.experiment_group === 'EXPERIMENTAL')
+      .map(e => e.peak_elo)
+
     // =========================================================================
     // CHART DATA: Two separate queries with experiment_group filter in SQL.
     // Control and experimental cannot share data — each query filters in DB.
@@ -1570,15 +1590,6 @@ export async function GET() {
       ) || []
     }
 
-    // Calculate statistics
-    const controlElos = controlGenerations
-      .map((g: Generation) => g.avg_elo)
-      .filter((e): e is number => e !== null && e !== undefined)
-    
-    const experimentalElos = experimentalGenerations
-      .map((g: Generation) => g.avg_elo)
-      .filter((e): e is number => e !== null && e !== undefined)
-
     // Find convergence points using improved detection with stability window
     // 
     // Logic:
@@ -1637,12 +1648,14 @@ export async function GET() {
       convergenceImprovement = ((controlConvergenceGen - experimentalConvergenceGen) / controlConvergenceGen) * 100
     }
 
-    // Final and peak Elo values (from all generations combined)
-    const controlFinalElo = controlElos.length > 0 ? controlElos[controlElos.length - 1] : null
-    const experimentalFinalElo = experimentalElos.length > 0 ? experimentalElos[experimentalElos.length - 1] : null
-    
-    const controlPeakElo = controlElos.length > 0 ? Math.max(...controlElos) : null
-    const experimentalPeakElo = experimentalElos.length > 0 ? Math.max(...experimentalElos) : null
+    // Final and peak Elo (descriptive): use per-experiment aggregates so values are
+    // comparable across groups (experimental often has fewer generations per run).
+    // Mean of each experiment's final/peak avoids skew from chart subset or gen index.
+    const mean = (arr: number[]) => (arr.length === 0 ? null : arr.reduce((a, b) => a + b, 0) / arr.length)
+    const controlFinalElo = mean(allControlFinalElos)
+    const experimentalFinalElo = mean(allExperimentalFinalElos)
+    const controlPeakElo = mean(allControlPeakElos)
+    const experimentalPeakElo = mean(allExperimentalPeakElos)
 
     // =========================================================================
     // EXPERIMENT-LEVEL T-TEST (Scientifically Rigorous)
