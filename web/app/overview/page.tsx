@@ -73,6 +73,136 @@ export default function OverviewPage() {
           </p>
         </header>
 
+        {/* Comprehensive opening: project summary for science fair (grade 9) */}
+        <section className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl p-6 md:p-8 shadow-sm">
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white mb-6 pb-2 border-b border-gray-200 dark:border-gray-600">
+            About This Project: The Science Fair Experiment at a Glance
+          </h2>
+          <div className="text-gray-700 dark:text-gray-300 leading-relaxed space-y-6 text-base md:text-lg">
+            <p>
+              <strong>EvoNash</strong> is a science fair project that asks a simple question: if we
+              let digital &quot;organisms&quot; with tiny artificial brains evolve in a mini world,
+              does it help to change their &quot;genes&quot; more when they are doing poorly and
+              less when they are doing well? Or is it better to always change them by the same
+              amount, like flipping a coin the same way every time? This project builds a real
+              experiment—a computer platform that runs on a powerful graphics card—to answer that
+              question. Below we explain every part of the experiment in simple terms.
+            </p>
+
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Abstract (What We Did in One Paragraph)
+              </h3>
+              <p>
+                This experiment tests whether <strong>adaptive mutation</strong>—changing an
+                organism&apos;s &quot;genes&quot; (the numbers inside its brain) more when the
+                parent did poorly and less when the parent did well—helps a population of 1,000
+                digital organisms reach a <strong>stable outcome</strong> (called a Nash
+                equilibrium) faster than a <strong>control group</strong> that always uses the same
+                amount of random change (static mutation). We put the organisms in a simple 2D
+                world (a &quot;petri dish&quot;) where they can move, eat food, and shoot at each
+                other to steal energy. Their brains are small neural networks that we do not
+                program; we only evolve them by keeping the best performers and randomly mutating
+                their weights. We run two groups side by side, measure how many generations it
+                takes each group to &quot;settle down,&quot; and use statistics to see if the
+                adaptive group really got there faster. The results tell us whether this kind of
+                smart mutation could help future AI and evolutionary algorithms.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                The Problem (Why We Did This)
+              </h3>
+              <p>
+                In many real-world and computer experiments, we use <strong>evolution</strong> to
+                improve things: we keep the best performers, copy them with small random changes
+                (mutations), and repeat. But how much should we change them? If we change too much
+                every time, good solutions get destroyed and we search almost at random. If we
+                change too little, we might get stuck in a &quot;local&quot; good outcome and never
+                find a better one. Most classic methods use a <strong>fixed</strong> amount of
+                mutation—the same for everyone, every time. This project asks: what if we
+                <strong> adapt</strong> the amount of mutation to how well the parent did?
+                Struggling organisms get more random changes (a chance to try something new);
+                successful ones get fewer changes (we keep what works). We wanted to test whether
+                that idea actually speeds up how fast a population finds a stable, balanced outcome
+                (a Nash equilibrium) in a simple but real experiment.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                The Hypothesis (What We Think Will Happen)
+              </h3>
+              <p>
+                Our <strong>hypothesis</strong> is: if we use adaptive mutation—where the amount
+                of random change is <strong>inversely proportional</strong> to the parent&apos;s
+                fitness (so low-performing parents produce more heavily mutated offspring, and
+                high-performing parents produce less mutated offspring)—then the population will
+                reach a Nash equilibrium (a stable mix of strategies where no one benefits by
+                changing alone) in <strong>fewer generations</strong> than a control group that
+                uses a fixed mutation rate. In other words, we predict that &quot;smarter&quot;
+                mutation will help the population settle down faster.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Methodology (How We Run the Experiment)
+              </h3>
+              <p>
+                We run <strong>two groups</strong> of experiments. Everything is the same in both
+                groups except one thing: <strong>how much we mutate</strong> the offspring. In the
+                <strong> control group</strong>, we always add the same small random amount of
+                change to the brain weights (static mutation). In the <strong>experimental
+                group</strong>, we add more change when the parent had a low rating (Elo) and less
+                change when the parent had a high rating (adaptive mutation). For each group we:
+              </p>
+              <ul className="list-disc pl-6 space-y-2 mt-2">
+                <li>Start with 1,000 random neural-network &quot;brains&quot; in the same petri dish world.</li>
+                <li>Let them live for many &quot;ticks&quot; (moments)—moving, eating food, and sometimes shooting each other—and track who has the most energy.</li>
+                <li>At the end of each generation, we pick the top 20% by rating (Elo), copy their brains to create offspring, and mutate those copies (more or less depending on the group).</li>
+                <li>We repeat for many generations until the population&apos;s behavior <strong>stabilizes</strong>—meaning the mix of strategies stops changing much (we call that reaching Nash equilibrium).</li>
+                <li>We record <strong>when</strong> that happened (which generation) and <strong>how well</strong> the population did (peak rating).</li>
+              </ul>
+              <p className="mt-2">
+                Then we <strong>compare</strong> the two groups using statistics: did the
+                adaptive-mutation group reach Nash equilibrium in fewer generations? If yes, that
+                supports our hypothesis.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Variables (What We Change, What We Measure, What We Keep the Same)
+              </h3>
+              <p>
+                In any good experiment we control what we change and what we measure. Here:
+              </p>
+              <ul className="list-disc pl-6 space-y-2 mt-2">
+                <li><strong>What we change (independent variable):</strong> The mutation strategy—fixed (control) vs adaptive (experimental).</li>
+                <li><strong>What we measure (dependent variables):</strong> (1) How many generations it took to reach Nash equilibrium (our main outcome), and (2) how high the population&apos;s rating got (peak fitness).</li>
+                <li><strong>What we keep the same (constants):</strong> Population size (1,000), the rules of the petri dish (physics, food, shooting), how we select parents (top 20%), and the shape of the neural network (24 inputs, 64 hidden neurons, 4 outputs). Keeping these the same lets us fairly compare the two mutation strategies.</li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Why This Matters
+              </h3>
+              <p>
+                This project combines <strong>evolution</strong> (trial and error over
+                generations), <strong>game theory</strong> (Nash equilibrium—when no one benefits
+                by changing strategy alone), and <strong>neural networks</strong> (small artificial
+                brains). Understanding whether adaptive mutation speeds up convergence can help
+                future AI and evolutionary algorithms—for example, in robotics, multi-agent
+                systems, or automated design. The rest of this page explains each part of the
+                experiment in more detail, so you can understand exactly what we did and why.
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* Table of contents */}
         <nav
           aria-label="Table of contents"
