@@ -82,6 +82,41 @@ export default function ComparisonChart({
 
   const chartTitle = title || (metric === 'elo' ? 'Convergence Velocity: Elo Rating Comparison' : 'Entropy Collapse: Policy Entropy Comparison')
 
+  // Custom tooltip: show generation and values explicitly from DB (generations.avg_elo at this generation)
+  const renderTooltipContent = (props: { active?: boolean; payload?: Array<{ payload: Record<string, unknown> }>; label?: string }) => {
+    const { active, payload, label } = props
+    if (!active || !payload?.length) return null
+    const p = payload[0].payload as Record<string, unknown>
+    const gen = (p.generation as number) ?? label
+    return (
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg p-3 text-sm">
+        <div className="font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-600 pb-1 mb-2">
+          Generation: {gen}
+        </div>
+        <div className="space-y-1 text-gray-700 dark:text-gray-300">
+          {metric === 'elo' ? (
+            <>
+              <div>Control Avg Elo: {(p.controlAvgElo as number) != null ? Number(p.controlAvgElo).toFixed(4) : '—'}</div>
+              <div>Experimental Avg Elo: {(p.experimentalAvgElo as number) != null ? Number(p.experimentalAvgElo).toFixed(4) : '—'}</div>
+              <div>Control Peak Elo: {(p.controlPeakElo as number) != null ? Number(p.controlPeakElo).toFixed(4) : '—'}</div>
+              <div>Experimental Peak Elo: {(p.experimentalPeakElo as number) != null ? Number(p.experimentalPeakElo).toFixed(4) : '—'}</div>
+            </>
+          ) : (
+            <>
+              <div>Control Entropy: {(p.controlEntropy as number) != null ? Number(p.controlEntropy).toFixed(4) : '—'}</div>
+              <div>Experimental Entropy: {(p.experimentalEntropy as number) != null ? Number(p.experimentalEntropy).toFixed(4) : '—'}</div>
+              <div>Control Variance: {(p.controlVariance as number) != null ? Number(p.controlVariance).toFixed(4) : '—'}</div>
+              <div>Experimental Variance: {(p.experimentalVariance as number) != null ? Number(p.experimentalVariance).toFixed(4) : '—'}</div>
+            </>
+          )}
+        </div>
+        <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600 text-xs text-gray-500 dark:text-gray-400">
+          Values from database (generations table at this generation)
+        </div>
+      </div>
+    )
+  }
+
   const renderOverlayChart = () => (
     <ResponsiveContainer width="100%" height={400}>
       <LineChart data={overlayData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
@@ -105,10 +140,7 @@ export default function ComparisonChart({
             border: '1px solid #e5e7eb',
             borderRadius: '8px'
           }}
-          formatter={(value: number, name: string) => [
-            value?.toFixed(4),
-            name.replace('control', 'Control ').replace('experimental', 'Experimental ').replace('Avg', 'Average ').replace('Peak', 'Peak ')
-          ]}
+          content={renderTooltipContent}
         />
         <Legend />
         

@@ -1498,13 +1498,16 @@ export async function GET() {
 
     // =========================================================================
     // CHART DATA: Fetch generations for subset of experiments (for visualization)
+    // Chart ELO/entropy values are from generations.avg_elo, generations.peak_elo,
+    // etc. at each generation_number — one row per (experiment_id, generation_number).
+    // Control and experimental series use disjoint experiment_id sets (CONTROL vs EXPERIMENTAL).
     // =========================================================================
     
     const MAX_EXPERIMENTS_FOR_CHARTS = 20
     const controlIdsForCharts = controlExperiments.slice(0, MAX_EXPERIMENTS_FOR_CHARTS).map((exp: Experiment) => exp.id)
     const experimentalIdsForCharts = experimentalExperiments.slice(0, MAX_EXPERIMENTS_FOR_CHARTS).map((exp: Experiment) => exp.id)
 
-    // Fetch generations only for the subset used in charts
+    // Fetch generations only for the subset used in charts (values at each generation from DB)
     let controlGenerations: Generation[] = []
     
     if (controlIdsForCharts.length > 0) {
@@ -1517,10 +1520,14 @@ export async function GET() {
       ) || []
     }
 
-    // Fetch generations for experimental experiments
+    // Fetch generations for experimental experiments (disjoint from control)
     let experimentalGenerations: Generation[] = []
     
     if (experimentalIdsForCharts.length > 0) {
+      const overlap = controlIdsForCharts.filter((id: string) => experimentalIdsForCharts.includes(id))
+      if (overlap.length > 0) {
+        console.warn('[dashboard] Chart data: control and experimental ID lists overlapped (bug?)', overlap)
+      }
       const placeholders = experimentalIdsForCharts.map((_: string, i: number) => `$${i + 1}`).join(', ')
       experimentalGenerations = await queryAll<Generation>(
         `SELECT * FROM generations 
