@@ -32,11 +32,26 @@ export default function ComparisonChart({
     experimentalGenerations.length > 0 ? Math.max(...experimentalGenerations.map(g => g.generation_number)) : 0
   )
 
-  const controlByGen = new Map<number, { avgElo: number[]; peakElo: number[]; entropy: number[]; variance: number[] }>()
-  const experimentalByGen = new Map<number, { avgElo: number[]; peakElo: number[]; entropy: number[]; variance: number[] }>()
+  // Ensure control and experimental are disjoint (no experiment in both)
+  const controlExpIds = new Set(controlGenerations.map((g) => g.experiment_id))
+  const experimentalExpIds = new Set(experimentalGenerations.map((g) => g.experiment_id))
+  const overlappingExpIds = [...controlExpIds].filter((id) => experimentalExpIds.has(id))
+  if (overlappingExpIds.length > 0) {
+    console.error('[ComparisonChart] Bug: same experiment(s) in both control and experimental', overlappingExpIds)
+  }
+
+  // Aggregate by (generation_number, experiment_id): one value per experiment per generation so control/experimental cannot share data
+  type GenBucket = { avgElo: number[]; peakElo: number[]; entropy: number[]; variance: number[] }
+  const controlByGen = new Map<number, GenBucket>()
+  const experimentalByGen = new Map<number, GenBucket>()
+  const seenControl = new Map<number, Set<string>>() // gen -> Set(experiment_id)
+  const seenExperimental = new Map<number, Set<string>>()
 
   for (const g of controlGenerations) {
     const i = g.generation_number
+    if (!seenControl.has(i)) seenControl.set(i, new Set())
+    if (seenControl.get(i)!.has(g.experiment_id)) continue // skip duplicate (same experiment, same gen)
+    seenControl.get(i)!.add(g.experiment_id)
     if (!controlByGen.has(i)) controlByGen.set(i, { avgElo: [], peakElo: [], entropy: [], variance: [] })
     const b = controlByGen.get(i)!
     if (g.avg_elo != null) b.avgElo.push(g.avg_elo)
@@ -46,6 +61,9 @@ export default function ComparisonChart({
   }
   for (const g of experimentalGenerations) {
     const i = g.generation_number
+    if (!seenExperimental.has(i)) seenExperimental.set(i, new Set())
+    if (seenExperimental.get(i)!.has(g.experiment_id)) continue
+    seenExperimental.get(i)!.add(g.experiment_id)
     if (!experimentalByGen.has(i)) experimentalByGen.set(i, { avgElo: [], peakElo: [], entropy: [], variance: [] })
     const b = experimentalByGen.get(i)!
     if (g.avg_elo != null) b.avgElo.push(g.avg_elo)

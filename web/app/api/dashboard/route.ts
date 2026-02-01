@@ -1497,44 +1497,46 @@ export async function GET() {
       .map(e => e.final_elo)
 
     // =========================================================================
-    // CHART DATA: Fetch generations for subset of experiments (for visualization)
-    // Chart ELO/entropy values are from generations.avg_elo, generations.peak_elo,
-    // etc. at each generation_number — one row per (experiment_id, generation_number).
-    // Control and experimental series use disjoint experiment_id sets (CONTROL vs EXPERIMENTAL).
+    // CHART DATA: Fetch generations in ONE query with JOIN to experiments.
+    // Split by experiment_group from DB so control vs experimental cannot be mixed.
+    // Chart ELO/entropy = generations.avg_elo etc. at each generation_number.
     // =========================================================================
     
     const MAX_EXPERIMENTS_FOR_CHARTS = 20
     const controlIdsForCharts = controlExperiments.slice(0, MAX_EXPERIMENTS_FOR_CHARTS).map((exp: Experiment) => exp.id)
     const experimentalIdsForCharts = experimentalExperiments.slice(0, MAX_EXPERIMENTS_FOR_CHARTS).map((exp: Experiment) => exp.id)
+    const allChartExperimentIds = [...controlIdsForCharts, ...experimentalIdsForCharts]
 
-    // Fetch generations only for the subset used in charts (values at each generation from DB)
+    type GenerationWithGroup = Generation & { experiment_group: string }
     let controlGenerations: Generation[] = []
-    
-    if (controlIdsForCharts.length > 0) {
-      const placeholders = controlIdsForCharts.map((_: string, i: number) => `$${i + 1}`).join(', ')
-      controlGenerations = await queryAll<Generation>(
-        `SELECT * FROM generations 
-         WHERE experiment_id IN (${placeholders}) 
-         ORDER BY generation_number ASC`,
-        controlIdsForCharts
-      ) || []
-    }
-
-    // Fetch generations for experimental experiments (disjoint from control)
     let experimentalGenerations: Generation[] = []
-    
-    if (experimentalIdsForCharts.length > 0) {
-      const overlap = controlIdsForCharts.filter((id: string) => experimentalIdsForCharts.includes(id))
-      if (overlap.length > 0) {
-        console.warn('[dashboard] Chart data: control and experimental ID lists overlapped (bug?)', overlap)
-      }
-      const placeholders = experimentalIdsForCharts.map((_: string, i: number) => `$${i + 1}`).join(', ')
-      experimentalGenerations = await queryAll<Generation>(
-        `SELECT * FROM generations 
-         WHERE experiment_id IN (${placeholders}) 
-         ORDER BY generation_number ASC`,
-        experimentalIdsForCharts
+
+    if (allChartExperimentIds.length > 0) {
+      const placeholders = allChartExperimentIds.map((_: string, i: number) => `$${i + 1}`).join(', ')
+      const rows = await queryAll<GenerationWithGroup>(
+        `SELECT g.id, g.experiment_id, g.generation_number, g.created_at, g.population_size,
+                g.avg_fitness, g.avg_elo, g.peak_elo, g.min_elo, g.std_elo,
+                g.policy_entropy, g.entropy_variance, g.win_rate_variance, g.population_diversity,
+                g.mutation_rate, g.min_fitness, g.max_fitness, g.std_fitness,
+                e.experiment_group
+         FROM generations g
+         JOIN experiments e ON g.experiment_id = e.id
+         WHERE g.experiment_id IN (${placeholders})
+         ORDER BY g.generation_number ASC`,
+        allChartExperimentIds
       ) || []
+      // Split by experiment_group from DB (case-insensitive) — single source of truth so control/experimental cannot be same data
+      const group = (r: GenerationWithGroup) => String(r.experiment_group ?? '').toUpperCase()
+      const controlRows = rows.filter((r) => group(r) === 'CONTROL')
+      const experimentalRows = rows.filter((r) => group(r) === 'EXPERIMENTAL')
+      const controlIds = new Set(controlRows.map((r) => r.experiment_id))
+      const experimentalIds = new Set(experimentalRows.map((r) => r.experiment_id))
+      const overlap = [...controlIds].filter((id) => experimentalIds.has(id))
+      if (overlap.length > 0) {
+        console.warn('[dashboard] Chart data: same experiment(s) in both CONTROL and EXPERIMENTAL (DB group mismatch?)', overlap)
+      }
+      controlGenerations = controlRows.map(({ experiment_group: _g, ...g }) => g as Generation)
+      experimentalGenerations = experimentalRows.map(({ experiment_group: _g, ...g }) => g as Generation)
     }
 
     // =========================================================================
