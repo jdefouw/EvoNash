@@ -8,10 +8,32 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 class ExperimentUploader:
-    def __init__(self, controller_url="http://localhost:3000"):
-        self.controller_url = controller_url.rstrip("/")
-        # Try to read worker_id from data/machine_id.txt if it exists
+    def __init__(self, controller_url=None):
         self.worker_id = None
+        
+        # 1. Try to load config from standard location
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "config", "worker_config.json")
+        loaded_url = None
+        
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                    loaded_url = config.get('controller_url')
+                    if loaded_url:
+                        print(f"[Uploader] Loaded controller URL from config: {loaded_url}")
+            except Exception as e:
+                print(f"[Uploader] Failed to load config: {e}")
+
+        # 2. Use argument or default
+        if controller_url:
+            self.controller_url = controller_url.rstrip("/")
+        elif loaded_url:
+            self.controller_url = loaded_url.rstrip("/")
+        else:
+            print("[Uploader] Warning: using default localhost URL")
+            self.controller_url = "http://localhost:3000"
+
         self._load_worker_id()
 
     def _load_worker_id(self):
