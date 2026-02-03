@@ -27,10 +27,10 @@ from ..logging.csv_logger import CSVLogger
 # NOTE: Worker-side early stopping is DISABLED. Nash equilibrium detection is now handled
 # by the web app, which signals completion via job_complete in the /api/results response.
 # These constants are kept for reference but are no longer used for early stopping.
-CONVERGENCE_THRESHOLD = 0.01  # Entropy variance threshold for detecting convergence
+CONVERGENCE_THRESHOLD = 0.001  # TIGHTENED for 'True Nash' detection (was 0.01)
 STABILITY_WINDOW = 20  # Consecutive generations below threshold required to confirm convergence
 POST_CONVERGENCE_BUFFER = 30  # Additional generations to run after convergence for post-equilibrium data
-ENABLE_EARLY_STOPPING = False  # DISABLED: Web app now handles equilibrium detection and job completion
+ENABLE_EARLY_STOPPING = True  # ENABLED for automated batch experiments (Web app can override if needed)
 
 
 class TensorBuffers:
@@ -574,7 +574,7 @@ class OptimizedExperimentRunner:
         num_generations = self.generation_end - self.generation_start + 1
         
         print(f"\n{'='*80}")
-        print(f"🚀 STARTING OPTIMIZED GPU EXPERIMENT EXECUTION")
+        print(f"[*] STARTING OPTIMIZED GPU EXPERIMENT EXECUTION")
         print(f"{'='*80}")
         print(f"Experiment: {self.config.experiment_name}")
         print(f"Device: {self.device}")
@@ -601,10 +601,10 @@ class OptimizedExperimentRunner:
             progress_pct = (batch_progress / num_generations) * 100
             elapsed_total = time.time() - experiment_start_time
             
-            print(f"\n{'─'*80}")
+            print(f"\n{'-'*80}")
             print(f"[{exp_name}] Generation {gen} (Batch: {batch_progress}/{num_generations}, {progress_pct:.1f}%)")
             print(f"Total elapsed time: {elapsed_total:.1f}s")
-            print(f"{'─'*80}")
+            print(f"{'-'*80}")
             
             # Check if generation already exists before processing
             if self.generation_check_callback:
@@ -637,7 +637,7 @@ class OptimizedExperimentRunner:
             stats = self.run_generation()
             gen_elapsed = time.time() - gen_start
             
-            print(f"\n✓ [{exp_name}] Generation {gen} Complete (took {gen_elapsed:.2f}s)")
+            print(f"\n[+] [{exp_name}] Generation {gen} Complete (took {gen_elapsed:.2f}s)")
             print(f"  Avg Elo: {stats.get('avg_elo', 0):7.2f} | "
                   f"Peak Elo: {stats.get('peak_elo', 0):7.2f} | "
                   f"Min Elo: {stats.get('min_elo', 0):7.2f}")
