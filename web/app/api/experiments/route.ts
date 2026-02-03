@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { queryAll, insertOne, query } from '@/lib/postgres'
+import crypto from 'crypto'
+import { queryAll, insertOne, insertMany, query } from '@/lib/postgres'
 import { Experiment, ExperimentConfig } from '@/types/protocol'
 
 // Force dynamic rendering since we query the database
@@ -131,7 +132,11 @@ export async function POST(request: NextRequest) {
       max_possible_elo,
       selection_pressure,
       network_architecture,
-      bulk_count
+      bulk_count,
+      bulk_seed_mode,
+      bulk_seed_count,
+      bulk_per_seed_count,
+      bulk_seed_first
     } = body
     
     // Validate required fields
@@ -149,6 +154,103 @@ export async function POST(request: NextRequest) {
     
     // Validate bulk_count if provided
     const validatedBulkCount = bulk_count ? Math.max(1, Math.min(100, parseInt(bulk_count) || 1)) : 1
+    
+    // ============================================================
+    // BULK SEED COHORT MODE: paired CONTROL + EXPERIMENTAL per seed
+    // ============================================================
+    if (bulk_seed_mode) {
+      const seedCount = Math.max(1, Math.min(100, parseInt(bulk_seed_count) || 1))
+      const perSeedCount = Math.max(1, Math.min(1000, parseInt(bulk_per_seed_count) || 1))
+      const firstSeed = Number.isFinite(parseInt(bulk_seed_first)) ? parseInt(bulk_seed_first) : 42
+      const totalToCreate = seedCount * perSeedCount * 2
+      
+      if (totalToCreate > 5000) {
+        return NextResponse.json(
+          { error: 'Bulk seed cohort too large', details: `Requested ${totalToCreate} experiments (max 5000)` },
+          { status: 400 }
+        )
+      }
+      
+      // Build seed list: first seed fixed, remaining random unique
+      const seeds: number[] = [firstSeed]
+      while (seeds.length < seedCount) {
+        const candidate = crypto.randomInt(1, 2_000_000_000)
+        if (!seeds.includes(candidate)) seeds.push(candidate)
+      }
+      
+      const baseConfig = {
+        population_size: population_size || 1000,
+        max_generations: max_generations || 1500,
+        ticks_per_generation: ticks_per_generation || 750,
+        mutation_rate: mutation_rate || null,
+        mutation_base: mutation_base || null,
+        max_possible_elo: max_possible_elo || 2000.0,
+        selection_pressure: selection_pressure || 0.2,
+        network_architecture: JSON.stringify(network_architecture || {
+          input_size: 24,
+          hidden_layers: [64],
+          output_size: 4
+        }),
+        status: 'PENDING'
+      }
+      
+      const created: Experiment[] = []
+      const configs: ExperimentConfig[] = []
+      
+      // Insert in chunks to avoid oversized queries
+      const rows: Record<string, any>[] = []
+      for (const seed of seeds) {
+        for (let i = 1; i <= perSeedCount; i++) {
+          rows.push({
+            experiment_name: `${experiment_name} Seed ${seed} Control ${i}`,
+            experiment_group: 'CONTROL',
+            mutation_mode: 'STATIC',
+            random_seed: seed,
+            ...baseConfig
+          })
+          rows.push({
+            experiment_name: `${experiment_name} Seed ${seed} Experimental ${i}`,
+            experiment_group: 'EXPERIMENTAL',
+            mutation_mode: 'ADAPTIVE',
+            random_seed: seed,
+            ...baseConfig
+          })
+        }
+      }
+      
+      const CHUNK_SIZE = 200
+      for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+        const chunk = rows.slice(i, i + CHUNK_SIZE)
+        const inserted = await insertMany<Experiment>('experiments', chunk)
+        created.push(...inserted)
+        configs.push(
+          ...inserted.map((data) => ({
+            experiment_id: data.id,
+            experiment_name: data.experiment_name,
+            mutation_mode: data.mutation_mode,
+            mutation_rate: data.mutation_rate,
+            mutation_base: data.mutation_base,
+            max_possible_elo: data.max_possible_elo,
+            random_seed: data.random_seed,
+            population_size: data.population_size,
+            selection_pressure: data.selection_pressure,
+            max_generations: data.max_generations,
+            ticks_per_generation: data.ticks_per_generation || 750,
+            network_architecture: data.network_architecture,
+            experiment_group: data.experiment_group
+          }))
+        )
+      }
+      
+      return NextResponse.json({
+        experiments: created,
+        configs,
+        count: created.length,
+        seed_count: seedCount,
+        per_seed_count: perSeedCount,
+        seeds
+      })
+    }
     
     // Handle bulk creation
     if (validatedBulkCount > 1) {

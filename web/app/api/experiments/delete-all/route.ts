@@ -15,13 +15,17 @@ const DELETE_ALL_KEYWORD = 'sciencefair2026'
  */
 export async function DELETE(request: NextRequest) {
   try {
+    const url = new URL(request.url)
+    const keywordFromQuery = url.searchParams.get('keyword') || undefined
+    const keywordFromHeader = request.headers.get('x-delete-keyword') || undefined
     let body: { keyword?: string } = {}
     try {
       body = await request.json()
     } catch {
       // No body or invalid JSON
     }
-    if (body.keyword !== DELETE_ALL_KEYWORD) {
+    const keyword = body.keyword || keywordFromQuery || keywordFromHeader
+    if (keyword !== DELETE_ALL_KEYWORD) {
       return NextResponse.json(
         { error: 'Invalid or missing keyword. Deletion not allowed.' },
         { status: 403 }

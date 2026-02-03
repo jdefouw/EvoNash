@@ -864,11 +864,20 @@ export default function ScienceFairDashboard() {
                     {/* Non-Parametric Test Results */}
                     {data?.nonParametricTest && (
                       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                           Non-Parametric Test (Mann-Whitney U)
                         </h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-                          Generations to Nash equilibrium. Distribution-free alternative to the t-test; does not assume normality.
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                          <strong>What it is:</strong> The Mann-Whitney U test compares the distributions of &quot;Generations to Nash equilibrium&quot; between the Control and Experimental groups without assuming normality. It is a distribution-free alternative to the independent-samples t-test and is based on ranks rather than raw values.
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                          <strong>Why we run it:</strong> We run this test because generations-to-convergence may be skewed or non-normal (e.g., a few runs take much longer). When normality is in doubt, a non-parametric test keeps our conclusion valid and avoids false positives or false negatives from violated assumptions.
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                          <strong>What the results mean:</strong> The <em>U</em> statistic is the test value; the <em>p</em>-value is the probability of seeing a difference this large (or larger) by chance if the two groups were identical. A <em>p</em> &lt; 0.05 indicates a statistically significant difference. <em>Rank-biserial r</em> is an effect size (0 = no difference; closer to ±1 = stronger difference in one direction). &quot;Significant&quot; means we reject the null hypothesis of no difference between the two groups.
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                          <strong>Why it matters for scientific rigor:</strong> Using a non-parametric test when data may not be normal strengthens the experiment: our inference does not depend on an assumption we cannot fully verify. If both the t-test and Mann-Whitney U agree, that reinforces the finding; if they disagree, the Mann-Whitney result is the more trustworthy for this outcome.
                         </p>
                         <div className="grid md:grid-cols-4 gap-4">
                           <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
@@ -911,11 +920,20 @@ export default function ScienceFairDashboard() {
                     {/* Bootstrap CI */}
                     {data?.bootstrapCI && (
                       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                           Bootstrap Confidence Interval
                         </h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-                          Distribution-free CI using {data.bootstrapCI.nBootstrap.toLocaleString()} bootstrap resamples.
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                          <strong>What it is:</strong> A bootstrap confidence interval estimates the uncertainty of the difference in &quot;Generations to Nash equilibrium&quot; (Experimental − Control) by resampling the observed experiments with replacement {data.bootstrapCI.nBootstrap.toLocaleString()} times. It is distribution-free: it does not assume normality or any particular shape for the data.
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                          <strong>Why we run it:</strong> The t-test and Mann-Whitney U tell us whether a difference exists; the bootstrap CI tells us how large that difference is and how precisely we have estimated it. That supports both the statistical conclusion and the practical interpretation (e.g., &quot;about 1–2 fewer generations on average&quot;).
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                          <strong>What the results mean:</strong> The <em>point estimate</em> is our best estimate of the true difference (negative = Experimental converges in fewer generations on average). The <em>95% CI</em> is the range of plausible values for that difference; if it excludes zero, the difference is statistically significant. The <em>Bootstrap SE</em> measures the variability of the point estimate across resamples and reflects the precision of our estimate.
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                          <strong>Why it matters for scientific rigor:</strong> Reporting a bootstrap CI moves beyond a simple yes/no significance result: it quantifies the size and uncertainty of the effect. Because it does not rely on normality, it remains valid even when the data are skewed or have outliers, making our conclusions more robust and defensible.
                         </p>
                         <div className="grid md:grid-cols-3 gap-4">
                           <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">

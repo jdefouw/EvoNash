@@ -346,29 +346,35 @@ class ExperimentRunner:
             'avg_energy': avg_energy
         }
     
-    def _run_elo_matches(self, num_matches: int = 100):
+    def _run_elo_matches(self, num_matches: Optional[int] = None):
         """
-        Run Elo rating matches between agents.
+        Run Elo rating matches between agents with balanced pairing.
         
         Args:
-            num_matches: Number of matches to run
+            num_matches: Optional target number of matches. If None, uses max(500, N).
         """
         agents = self.ga.population
+        num_agents = len(agents)
+        if num_agents < 2:
+            return
         
-        for _ in range(num_matches):
-            # Select two random agents
-            idx_a, idx_b = np.random.choice(len(agents), size=2, replace=False)
-            agent_a = agents[idx_a]
-            agent_b = agents[idx_b]
-            
-            # Simulate match (simplified: compare fitness)
-            # In full implementation, would run actual Petri Dish match
-            score_a = 1.0 if agent_a.fitness_score > agent_b.fitness_score else 0.0
-            if agent_a.fitness_score == agent_b.fitness_score:
-                score_a = 0.5
-            
-            # Update Elo ratings
-            self.ga.update_elo(agent_a, agent_b, score_a)
+        target_matches = num_matches if num_matches is not None else max(500, num_agents)
+        matches_per_round = num_agents // 2
+        rounds = max(1, int(np.ceil(target_matches / matches_per_round)))
+        
+        for _ in range(rounds):
+            indices = np.random.permutation(num_agents)
+            for i in range(0, num_agents - 1, 2):
+                agent_a = agents[indices[i]]
+                agent_b = agents[indices[i + 1]]
+                
+                # Simulate match (simplified: compare fitness)
+                score_a = 1.0 if agent_a.fitness_score > agent_b.fitness_score else 0.0
+                if agent_a.fitness_score == agent_b.fitness_score:
+                    score_a = 0.5
+                
+                # Update Elo ratings
+                self.ga.update_elo(agent_a, agent_b, score_a)
     
     def run_generation(self) -> Dict:
         """
@@ -388,7 +394,7 @@ class ExperimentRunner:
         # Run Elo matches
         print(f"[{exp_name}] [GEN {self.current_generation}] Step 2/3: Running Elo matches...")
         elo_start = time.time()
-        self._run_elo_matches(num_matches=100)
+        self._run_elo_matches()
         elo_time = time.time() - elo_start
         print(f"  [ELO] Elo matches complete in {elo_time:.2f}s")
         

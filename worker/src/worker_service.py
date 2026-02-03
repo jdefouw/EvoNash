@@ -841,78 +841,15 @@ class WorkerService:
             # Create ExperimentConfig from job
             config = ExperimentManager.load_from_dict(experiment_config)
             
-            # EFFICIENT RECOVERY: Single API call to get last completed generation
-            # Instead of checking generations one-by-one (O(n) calls), we query the max in O(1)
-            self.logger.info(f"🔍 Checking for existing progress (efficient single-query recovery)...")
+            # Single-shot mode: do not resume or skip. If data already exists, stop.
+            self.logger.info("🔍 Single-shot mode: checking for existing progress...")
             last_completed = self._get_last_completed_generation(experiment_id)
-            
-            # VALIDATION: Check if batch is completely obsolete (all generations already done)
-            # This can happen if the queue assigned an old batch that was completed by another worker
-            if generation_end <= last_completed:
-                self.logger.warning(f"⚠️ OBSOLETE BATCH DETECTED: Batch {generation_start}-{generation_end} is entirely before last completed ({last_completed})")
-                self.logger.warning(f"   This batch has already been completed. Releasing job without processing.")
-                # Release the job so it doesn't block the queue
-                self._release_job(job_id, "batch_obsolete")
+            if last_completed >= 0:
+                self.logger.warning(f"⚠ Existing generations found (last completed: {last_completed}).")
+                self.logger.warning("   Single-shot mode requires a fresh experiment. Release job without processing.")
+                if job_id:
+                    self._release_job(job_id, "single_shot_existing_data")
                 return
-            
-            # Calculate actual_start efficiently based on last completed generation
-            if last_completed >= generation_start:
-                # Resume from one after last completed (capped at generation_end + 1)
-                actual_start = min(last_completed + 1, generation_end + 1)
-                skipped_count = actual_start - generation_start
-                self.logger.info(f"✓ Recovery: Found {skipped_count} completed generations (last: {last_completed})")
-                self.logger.info(f"  → Resuming from generation {actual_start}")
-            else:
-                # No completed generations in this range, start from beginning
-                actual_start = generation_start
-                if last_completed == -1:
-                    self.logger.info(f"✓ No prior progress found, starting from generation {generation_start}")
-                else:
-                    self.logger.info(f"✓ Last completed ({last_completed}) is before batch range, starting from {generation_start}")
-            
-            # Load checkpoint if starting from a non-zero generation
-            checkpoint_state = None
-            if actual_start > 0:
-                # Try to load checkpoint from the generation before actual_start
-                checkpoint_gen = actual_start - 1
-                try:
-                    self.logger.info(f"📥 Attempting to load checkpoint for generation {checkpoint_gen}...")
-                    checkpoint_response = requests.get(
-                        f"{self.controller_url}/api/experiments/{experiment_id}/checkpoint",
-                        params={'generation': str(checkpoint_gen)},
-                        timeout=30
-                    )
-                    
-                    if checkpoint_response.status_code == 200:
-                        checkpoint_data = checkpoint_response.json()
-                        checkpoint_state = checkpoint_data.get('population_state')
-                        self.logger.info(f"✓ Checkpoint loaded for generation {checkpoint_data.get('generation_number')}")
-                    elif checkpoint_response.status_code == 404:
-                        # If specific checkpoint not found, try loading the latest available checkpoint
-                        self.logger.info(f"📥 Checkpoint for gen {checkpoint_gen} not found, trying latest checkpoint...")
-                        try:
-                            checkpoint_response = requests.get(
-                                f"{self.controller_url}/api/experiments/{experiment_id}/checkpoint",
-                                timeout=30  # No generation param = get latest
-                            )
-                            if checkpoint_response.status_code == 200:
-                                checkpoint_data = checkpoint_response.json()
-                                checkpoint_state = checkpoint_data.get('population_state')
-                                loaded_gen = checkpoint_data.get('generation_number')
-                                self.logger.info(f"✓ Latest checkpoint loaded (from generation {loaded_gen})")
-                            else:
-                                self.logger.warning(f"⚠ No checkpoint found, starting fresh")
-                        except Exception as e2:
-                            self.logger.warning(f"⚠ Error loading latest checkpoint: {e2}, starting fresh")
-                    else:
-                        self.logger.warning(f"⚠ Failed to load checkpoint: {checkpoint_response.status_code}")
-                except Exception as e:
-                    self.logger.warning(f"⚠ Error loading checkpoint: {e}, starting fresh")
-            
-            # Update generation_start to skip existing generations
-            if actual_start > generation_start:
-                self.logger.info(f"📝 Adjusting generation_start from {generation_start} to {actual_start} to skip existing generations")
-                generation_start = actual_start
             
             self.logger.info("=" * 80)
             self.logger.info("📋 EXPERIMENT CONFIGURATION")
@@ -942,30 +879,10 @@ class WorkerService:
             # Create checkpoint callback
             checkpoint_callback = self._create_checkpoint_callback(experiment_id)
             
-            # Create generation check callback to avoid duplicate work
-            generation_check_callback = self._create_generation_check_callback(experiment_id)
-            
             # NOTE: equilibrium_reached_callback is no longer used - Nash equilibrium detection
             # is now handled by the web app, which signals completion via job_complete in the
             # /api/results response. The worker stops via the stop_check_callback when it
             # receives the job_complete signal or when the experiment status is COMPLETED.
-            
-            # Create checkpoint loader callback for loading checkpoints when skipping generations
-            def checkpoint_loader_callback(generation_number: int) -> Optional[Dict]:
-                """Load checkpoint for a specific generation number."""
-                try:
-                    checkpoint_response = requests.get(
-                        f"{self.controller_url}/api/experiments/{experiment_id}/checkpoint",
-                        params={'generation': str(generation_number)},
-                        timeout=30
-                    )
-                    if checkpoint_response.status_code == 200:
-                        checkpoint_data = checkpoint_response.json()
-                        return checkpoint_data.get('population_state')
-                    return None
-                except Exception as e:
-                    self.logger.warning(f"⚠️  Error loading checkpoint for generation {generation_number}: {e}")
-                    return None
             
             # Initialize and run experiment batch
             runner = OptimizedExperimentRunner(
@@ -976,19 +893,10 @@ class WorkerService:
                 generation_start=generation_start,
                 generation_end=generation_end,
                 checkpoint_callback=checkpoint_callback,
-                generation_check_callback=generation_check_callback,
-                checkpoint_loader_callback=checkpoint_loader_callback,
+                generation_check_callback=None,
+                checkpoint_loader_callback=None,
                 equilibrium_reached_callback=None  # Disabled: web app handles equilibrium detection
             )
-            
-            # Load checkpoint state if available
-            if checkpoint_state:
-                try:
-                    runner.ga.load_population_state(checkpoint_state)
-                    self.logger.info(f"✓ Population state restored from checkpoint")
-                except Exception as e:
-                    self.logger.error(f"✗ Failed to load population state: {e}")
-                    self.logger.warning("⚠ Continuing with fresh population (may cause inconsistency)")
             
             self.logger.info("=" * 80)
             self.logger.info("🔄 Starting batch execution...")

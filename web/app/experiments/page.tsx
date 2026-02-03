@@ -247,9 +247,9 @@ export default function ExperimentsPage() {
     setDeletingAll(true)
     
     try {
-      const response = await fetch('/api/experiments/delete-all', {
+      const response = await fetch(`/api/experiments/delete-all?keyword=${encodeURIComponent(keyword.trim())}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-delete-keyword': keyword.trim() },
         body: JSON.stringify({ keyword: keyword.trim() })
       })
       

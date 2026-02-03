@@ -173,6 +173,26 @@ export default function OverviewPage() {
                 supports our hypothesis.
               </p>
             </div>
+            
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Why We Use the Same Seed (Fair Start)
+              </h3>
+              <p>
+                To be fair, we start the control and experimental groups with the <strong>same
+                random seed</strong>. A seed is like a recipe that decides the starting
+                conditions. Using the same seed means both groups begin with the same kind of
+                brains and the same world setup. The <strong>only</strong> thing that is different
+                is the mutation strategy. That way, if one group reaches a stable result faster,
+                we know it happened because of the mutation strategy—not because it got a luckier
+                start.
+              </p>
+              <p>
+                We don&apos;t rely on just one seed. We repeat the experiment with many different
+                seeds. This gives us enough data to be confident that the result isn&apos;t just a
+                coincidence.
+              </p>
+            </div>
 
             <div>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
@@ -619,6 +639,12 @@ export default function OverviewPage() {
             it takes to reach Nash equilibrium (convergence velocity). The other metrics (peak
             fitness, policy entropy) support the analysis, but convergence to Nash is the key
             outcome we compare between the two groups.
+          </p>
+          <p>
+            Important detail: <strong>Elo</strong> tells us how well organisms did, while
+            <strong>entropy variance</strong> tells us how similar their decision-making styles are.
+            Two groups could have similar Elo but still behave differently. That is why we track
+            both performance <em>and</em> behavior.
           </p>
           <ul className="list-disc pl-6 space-y-3">
             <li>

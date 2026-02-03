@@ -179,6 +179,12 @@ export default function StatsSummary({
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
           Comparison of key metrics between Control and Experimental groups
         </p>
+        <p className="text-xs text-gray-600 dark:text-gray-400 mb-6">
+          Paired-seed design: each random seed generates a matched Control and Experimental run to
+          isolate the mutation strategy as the only independent variable. Convergence is inferred
+          from entropy variance stability (behavioral convergence), which is distinct from Elo
+          dispersion (fitness dispersion). Both are reported for scientific context.
+        </p>
 
         {hasData ? (
           <>

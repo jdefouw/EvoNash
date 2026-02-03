@@ -5,8 +5,7 @@ import { ExperimentConfig } from '@/types/protocol'
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
 
-// Default batch size: 10 generations per batch
-const DEFAULT_BATCH_SIZE = 10
+// Single-shot mode: assign full experiment in one job
 
 export async function POST(request: NextRequest) {
   try {
@@ -340,138 +339,89 @@ export async function POST(request: NextRequest) {
         continue
       }
       
-      // Calculate which generations have EVER been claimed
-      const activeOrPendingRanges = allJobAssignments
-        .filter((r: any) => r.status === 'assigned' || r.status === 'processing')
-        .map((b: any) => ({
-          start: b.generation_start,
-          end: b.generation_end,
-          status: b.status,
-          job_id: b.job_id
-        }))
+      // If any generations already exist, do not reassign in single-shot mode.
+      if (existingGenerationNumbers.size > 0) {
+        console.log(`[QUEUE] Experiment ${experiment.id} has existing generations; single-shot mode requires manual reset to rerun`)
+        continue
+      }
       
-      // EFFICIENT BATCH ASSIGNMENT: Start from last completed generation
-      const batchSize = DEFAULT_BATCH_SIZE
+      const generationStart = 0
+      const generationEnd = experiment.max_generations - 1
       
-      // Query the highest completed generation number
-      const lastGeneration = await queryOne<{ generation_number: number }>(
-        `SELECT generation_number FROM generations 
-         WHERE experiment_id = $1 
-         ORDER BY generation_number DESC 
-         LIMIT 1`,
-        [experiment.id]
-      )
+      const job_id = crypto.randomUUID()
+      let assignedWorkerId = worker_id
       
-      const lastCompletedGen = lastGeneration?.generation_number ?? -1
-      
-      // Start from the next generation after last completed, aligned to batch boundary
-      let generationStart = lastCompletedGen + 1
-      generationStart = Math.floor(generationStart / batchSize) * batchSize
-      
-      console.log(`[QUEUE] Experiment ${experiment.id}: last completed gen=${lastCompletedGen}, starting search at gen=${generationStart}`)
-      
-      let foundBatch = false
-      
-      while (generationStart < experiment.max_generations) {
-        const generationEnd = Math.min(generationStart + batchSize - 1, experiment.max_generations - 1)
-        
-        // Check if this range overlaps with any ACTIVE assignment
-        const isActivelyAssigned = activeOrPendingRanges.some((range: any) => 
-          !(generationEnd < range.start || generationStart > range.end)
+      if (!assignedWorkerId) {
+        // Find an available worker
+        const availableWorkers = await queryAll(
+          `SELECT id, max_parallel_jobs, active_jobs_count, status 
+           FROM workers 
+           WHERE status IN ('idle', 'processing') 
+           ORDER BY active_jobs_count ASC`
         )
         
-        // Check if all generations in this range already exist
-        const allGenerationsExist = Array.from({ length: generationEnd - generationStart + 1 }, (_, i) => generationStart + i)
-          .every(genNum => existingGenerationNumbers.has(genNum))
-        
-        if (!isActivelyAssigned && !allGenerationsExist) {
-          foundBatch = true
-          
-          const job_id = crypto.randomUUID()
-          let assignedWorkerId = worker_id
-          
-          if (!assignedWorkerId) {
-            // Find an available worker
-            const availableWorkers = await queryAll(
-              `SELECT id, max_parallel_jobs, active_jobs_count, status 
-               FROM workers 
-               WHERE status IN ('idle', 'processing') 
-               ORDER BY active_jobs_count ASC`
-            )
-            
-            if (availableWorkers && availableWorkers.length > 0) {
-              const worker = availableWorkers.find((w: any) => 
-                w.active_jobs_count < w.max_parallel_jobs
-              )
-              if (worker) {
-                assignedWorkerId = worker.id
-              }
-            }
-          }
-          
-          if (!assignedWorkerId) {
-            console.log(`[QUEUE] No available workers for experiment ${experiment.id}`)
-            continue
-          }
-          
-          // Create job assignment
-          try {
-            const result = await query(
-              `INSERT INTO job_assignments (experiment_id, worker_id, generation_start, generation_end, status, job_id)
-               VALUES ($1, $2, $3, $4, $5, $6)
-               RETURNING *`,
-              [experiment.id, assignedWorkerId, generationStart, generationEnd, 'assigned', job_id]
-            )
-            
-            if (result.rows.length === 0) {
-              console.error(`[QUEUE] Failed to create job assignment`)
-              continue
-            }
-            
-            // Create experiment config for worker
-            const config: ExperimentConfig = {
-              experiment_id: experiment.id,
-              experiment_name: experiment.experiment_name,
-              mutation_mode: experiment.mutation_mode,
-              mutation_rate: experiment.mutation_rate,
-              mutation_base: experiment.mutation_base,
-              max_possible_elo: experiment.max_possible_elo,
-              random_seed: experiment.random_seed,
-              population_size: experiment.population_size,
-              selection_pressure: experiment.selection_pressure,
-              max_generations: experiment.max_generations,
-              ticks_per_generation: experiment.ticks_per_generation || 750,
-              network_architecture: experiment.network_architecture,
-              experiment_group: experiment.experiment_group
-            }
-            
-            console.log(`[QUEUE] ✓ Assigned batch to worker:`)
-            console.log(`[QUEUE]   Job ID: ${job_id}`)
-            console.log(`[QUEUE]   Experiment ID: ${experiment.id}`)
-            console.log(`[QUEUE]   Worker ID: ${assignedWorkerId}`)
-            console.log(`[QUEUE]   Generations: ${generationStart}-${generationEnd}`)
-            console.log(`[QUEUE] ========================================`)
-            
-            return NextResponse.json({
-              job_id,
-              experiment_id: experiment.id,
-              worker_id: assignedWorkerId,
-              generation_start: generationStart,
-              generation_end: generationEnd,
-              experiment_config: config
-            })
-          } catch (insertError: any) {
-            // Check if error is due to overlapping batch constraint
-            if (insertError.message?.includes('overlapping') || insertError.message?.includes('already active')) {
-              console.log(`[QUEUE] Batch ${generationStart}-${generationEnd} overlaps with existing batch (race condition prevented)`)
-              break
-            }
-            console.error(`[QUEUE] Failed to create job assignment: ${insertError.message}`)
-            continue
+        if (availableWorkers && availableWorkers.length > 0) {
+          const worker = availableWorkers.find((w: any) => 
+            w.active_jobs_count < w.max_parallel_jobs
+          )
+          if (worker) {
+            assignedWorkerId = worker.id
           }
         }
+      }
+      
+      if (!assignedWorkerId) {
+        console.log(`[QUEUE] No available workers for experiment ${experiment.id}`)
+        continue
+      }
+      
+      try {
+        const result = await query(
+          `INSERT INTO job_assignments (experiment_id, worker_id, generation_start, generation_end, status, job_id)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING *`,
+          [experiment.id, assignedWorkerId, generationStart, generationEnd, 'assigned', job_id]
+        )
         
-        generationStart += batchSize
+        if (result.rows.length === 0) {
+          console.error(`[QUEUE] Failed to create job assignment`)
+          continue
+        }
+        
+        const config: ExperimentConfig = {
+          experiment_id: experiment.id,
+          experiment_name: experiment.experiment_name,
+          mutation_mode: experiment.mutation_mode,
+          mutation_rate: experiment.mutation_rate,
+          mutation_base: experiment.mutation_base,
+          max_possible_elo: experiment.max_possible_elo,
+          random_seed: experiment.random_seed,
+          population_size: experiment.population_size,
+          selection_pressure: experiment.selection_pressure,
+          max_generations: experiment.max_generations,
+          ticks_per_generation: experiment.ticks_per_generation || 750,
+          network_architecture: experiment.network_architecture,
+          experiment_group: experiment.experiment_group
+        }
+        
+        console.log(`[QUEUE] ✓ Assigned full experiment to worker:`)
+        console.log(`[QUEUE]   Job ID: ${job_id}`)
+        console.log(`[QUEUE]   Experiment ID: ${experiment.id}`)
+        console.log(`[QUEUE]   Worker ID: ${assignedWorkerId}`)
+        console.log(`[QUEUE]   Generations: ${generationStart}-${generationEnd}`)
+        console.log(`[QUEUE] ========================================`)
+        
+        return NextResponse.json({
+          job_id,
+          experiment_id: experiment.id,
+          worker_id: assignedWorkerId,
+          generation_start: generationStart,
+          generation_end: generationEnd,
+          experiment_config: config
+        })
+      } catch (insertError: any) {
+        console.error(`[QUEUE] Failed to create job assignment: ${insertError.message}`)
+        continue
       }
     }
     

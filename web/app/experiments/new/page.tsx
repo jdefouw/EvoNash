@@ -11,6 +11,10 @@ export default function NewExperimentPage() {
   const [error, setError] = useState<string | null>(null)
   const [bulkMode, setBulkMode] = useState(false)
   const [bulkCount, setBulkCount] = useState(10)
+  const [bulkSeedMode, setBulkSeedMode] = useState(false)
+  const [bulkSeedCount, setBulkSeedCount] = useState(10)
+  const [bulkPerSeedCount, setBulkPerSeedCount] = useState(200)
+  const [bulkSeedFirst, setBulkSeedFirst] = useState(42)
   
   const [formData, setFormData] = useState({
     experiment_name: '',
@@ -50,7 +54,12 @@ export default function NewExperimentPage() {
             output_size: 4
           },
           // Include bulk mode parameters
-          bulk_count: bulkMode ? bulkCount : undefined
+          bulk_count: bulkMode ? bulkCount : undefined,
+          // Seed cohort bulk mode (paired Control + Experimental per seed)
+          bulk_seed_mode: bulkSeedMode ? true : undefined,
+          bulk_seed_count: bulkSeedMode ? bulkSeedCount : undefined,
+          bulk_per_seed_count: bulkSeedMode ? bulkPerSeedCount : undefined,
+          bulk_seed_first: bulkSeedMode ? bulkSeedFirst : undefined
         }),
       })
 
@@ -65,7 +74,7 @@ export default function NewExperimentPage() {
       const data = await response.json()
       
       // If bulk mode, redirect to experiments list; otherwise to single experiment
-      if (bulkMode && data.experiments) {
+      if ((bulkMode || bulkSeedMode) && data.experiments) {
         router.push(`/experiments?created=${data.experiments.length}`)
       } else {
         router.push(`/experiments/${data.experiment.id}`)
@@ -153,12 +162,14 @@ export default function NewExperimentPage() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <Tooltip content={bulkMode 
-                ? "Base name for bulk experiments. Numbers will be appended (e.g., 'CONTROL' becomes 'CONTROL 1', 'CONTROL 2', etc.)"
-                : "A descriptive name for this experiment run. Include the group type and seed for easy identification (e.g., 'Control Run - Seed 42')."
+              <Tooltip content={bulkSeedMode
+                ? "Base name for seed cohorts. Each seed creates paired Control and Experimental runs (e.g., 'EvoNash Seed 42 Control 1')."
+                : bulkMode 
+                  ? "Base name for bulk experiments. Numbers will be appended (e.g., 'CONTROL' becomes 'CONTROL 1', 'CONTROL 2', etc.)"
+                  : "A descriptive name for this experiment run. Include the group type and seed for easy identification (e.g., 'Control Run - Seed 42')."
               }>
                 <label htmlFor="experiment_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                  {bulkMode ? 'Base Experiment Name *' : 'Experiment Name *'}
+                  {bulkMode || bulkSeedMode ? 'Base Experiment Name *' : 'Experiment Name *'}
                 </label>
               </Tooltip>
               <input
@@ -169,11 +180,13 @@ export default function NewExperimentPage() {
                 value={formData.experiment_name}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                placeholder={bulkMode ? "e.g., CONTROL" : "e.g., Control Run - Seed 42"}
+                placeholder={bulkSeedMode ? "e.g., EvoNash Cohort" : bulkMode ? "e.g., CONTROL" : "e.g., Control Run - Seed 42"}
               />
-              {bulkMode && formData.experiment_name && (
+              {(bulkMode || bulkSeedMode) && formData.experiment_name && (
                 <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                  Will create: {formData.experiment_name} 1, {formData.experiment_name} 2, ... {formData.experiment_name} {bulkCount}
+                  {bulkSeedMode
+                    ? `Will create paired runs like: ${formData.experiment_name} Seed 42 Control 1, ${formData.experiment_name} Seed 42 Experimental 1, ...`
+                    : `Will create: ${formData.experiment_name} 1, ${formData.experiment_name} 2, ... ${formData.experiment_name} ${bulkCount}`}
                 </p>
               )}
             </div>
@@ -185,7 +198,11 @@ export default function NewExperimentPage() {
                   type="checkbox"
                   id="bulk_mode"
                   checked={bulkMode}
-                  onChange={(e) => setBulkMode(e.target.checked)}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+                    setBulkMode(checked)
+                    if (checked) setBulkSeedMode(false)
+                  }}
                   className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
                 />
                 <Tooltip content="Create multiple experiments at once with sequential naming (e.g., CONTROL 1, CONTROL 2, etc.). Useful for setting up large experiment batches.">
@@ -216,6 +233,83 @@ export default function NewExperimentPage() {
                   </p>
                 </div>
               )}
+              
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="bulk_seed_mode"
+                    checked={bulkSeedMode}
+                    onChange={(e) => {
+                      const checked = e.target.checked
+                      setBulkSeedMode(checked)
+                      if (checked) setBulkMode(false)
+                    }}
+                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                  />
+                  <Tooltip content="Create paired Control + Experimental experiments for multiple seeds. This is the scientifically rigorous, paired-seed design.">
+                    <label htmlFor="bulk_seed_mode" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-help">
+                      Seed Cohort Bulk (Paired Control + Experimental)
+                    </label>
+                  </Tooltip>
+                </div>
+                
+                {bulkSeedMode && (
+                  <div className="mt-4 grid md:grid-cols-3 gap-4">
+                    <div>
+                      <Tooltip content="Number of distinct initial seeds. For each seed, we create matched Control and Experimental experiments.">
+                        <label htmlFor="bulk_seed_count" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Seed Count
+                        </label>
+                      </Tooltip>
+                      <input
+                        type="number"
+                        id="bulk_seed_count"
+                        min="1"
+                        max="100"
+                        value={bulkSeedCount}
+                        onChange={(e) => setBulkSeedCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <Tooltip content="How many Control and how many Experimental experiments per seed.">
+                        <label htmlFor="bulk_per_seed_count" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Per Seed (per group)
+                        </label>
+                      </Tooltip>
+                      <input
+                        type="number"
+                        id="bulk_per_seed_count"
+                        min="1"
+                        max="1000"
+                        value={bulkPerSeedCount}
+                        onChange={(e) => setBulkPerSeedCount(Math.max(1, Math.min(1000, parseInt(e.target.value) || 1)))}
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <Tooltip content="The first seed value (fixed). Remaining seeds are random on the server.">
+                        <label htmlFor="bulk_seed_first" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          First Seed
+                        </label>
+                      </Tooltip>
+                      <input
+                        type="number"
+                        id="bulk_seed_first"
+                        min="1"
+                        value={bulkSeedFirst}
+                        onChange={(e) => setBulkSeedFirst(parseInt(e.target.value) || 42)}
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      />
+                    </div>
+                    <div className="md:col-span-3 text-xs text-gray-500 dark:text-gray-400">
+                      This creates {bulkSeedCount} seeds × {bulkPerSeedCount} Control × {bulkPerSeedCount} Experimental
+                      = {bulkSeedCount * bulkPerSeedCount * 2} experiments.
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div>
@@ -230,13 +324,16 @@ export default function NewExperimentPage() {
                 required
                 value={formData.experiment_group}
                 onChange={handleChange}
+                disabled={bulkSeedMode}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               >
                 <option value="CONTROL">Control (Static Mutation)</option>
                 <option value="EXPERIMENTAL">Experimental (Adaptive Mutation)</option>
               </select>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                {formData.experiment_group === 'CONTROL' 
+                {bulkSeedMode
+                  ? 'Seed cohort mode creates both Control and Experimental for each seed.'
+                  : formData.experiment_group === 'CONTROL' 
                   ? 'Static mutation: Fixed rate ε = 0.05'
                   : 'Adaptive mutation: ε = Base × (1 - CurrentElo/MaxElo)'}
               </p>
@@ -255,8 +352,14 @@ export default function NewExperimentPage() {
                   name="random_seed"
                   value={formData.random_seed}
                   onChange={handleChange}
+                  disabled={bulkSeedMode}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 />
+                {bulkSeedMode && (
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Seed cohort mode uses the first seed above and generates the remaining seeds on the server.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -397,9 +500,19 @@ export default function NewExperimentPage() {
                 disabled={loading}
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading 
-                  ? (bulkMode ? `Creating ${bulkCount} Experiments...` : 'Creating...') 
-                  : (bulkMode ? `Create ${bulkCount} Experiments` : 'Create Experiment')
+                {loading
+                  ? (bulkSeedMode
+                      ? `Creating ${bulkSeedCount * bulkPerSeedCount * 2} Experiments...`
+                      : bulkMode
+                        ? `Creating ${bulkCount} Experiments...`
+                        : 'Creating...'
+                    )
+                  : (bulkSeedMode
+                      ? `Create ${bulkSeedCount * bulkPerSeedCount * 2} Experiments`
+                      : bulkMode
+                        ? `Create ${bulkCount} Experiments`
+                        : 'Create Experiment'
+                    )
                 }
               </button>
               <Link
