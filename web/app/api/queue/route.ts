@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { queryOne, queryAll, query } from '@/lib/postgres'
 import { ExperimentConfig } from '@/types/protocol'
+import crypto from 'crypto'
 
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
