@@ -24,13 +24,12 @@ from ..logging.csv_logger import CSVLogger
 
 
 # Nash Equilibrium Detection Constants
-# NOTE: Worker-side early stopping is DISABLED. Nash equilibrium detection is now handled
-# by the web app, which signals completion via job_complete in the /api/results response.
-# These constants are kept for reference but are no longer used for early stopping.
+# Worker-side early stopping acts as a safety mechanism and local optimization.
+# The web app (server) also detects equilibrium and signals completion via job_complete.
 CONVERGENCE_THRESHOLD = 0.001  # TIGHTENED for 'True Nash' detection (was 0.01)
 STABILITY_WINDOW = 20  # Consecutive generations below threshold required to confirm convergence
 POST_CONVERGENCE_BUFFER = 30  # Additional generations to run after convergence for post-equilibrium data
-ENABLE_EARLY_STOPPING = True  # ENABLED for automated batch experiments (Web app can override if needed)
+ENABLE_EARLY_STOPPING = True  # ENABLED: Worker will stop locally if it detects equilibrium + buffer
 
 
 class TensorBuffers:
