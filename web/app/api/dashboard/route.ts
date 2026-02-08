@@ -165,7 +165,7 @@ interface BootstrapCIResult {
 function jarqueBeraTest(data: number[]): NormalityTestResult {
   const cleanData = data.filter(x => !isNaN(x) && isFinite(x))
   const n = cleanData.length
-  
+
   if (n < 3) {
     return {
       statistic: null,
@@ -176,13 +176,13 @@ function jarqueBeraTest(data: number[]): NormalityTestResult {
       testName: 'Jarque-Bera'
     }
   }
-  
+
   // Calculate skewness and kurtosis for normality assessment
   const mean = cleanData.reduce((a, b) => a + b, 0) / n
   const m2 = cleanData.reduce((sum, x) => sum + Math.pow(x - mean, 2), 0) / n
   const m3 = cleanData.reduce((sum, x) => sum + Math.pow(x - mean, 3), 0) / n
   const m4 = cleanData.reduce((sum, x) => sum + Math.pow(x - mean, 4), 0) / n
-  
+
   const std = Math.sqrt(m2)
   if (std === 0) {
     return {
@@ -194,19 +194,19 @@ function jarqueBeraTest(data: number[]): NormalityTestResult {
       testName: 'Jarque-Bera'
     }
   }
-  
+
   const skewness = m3 / Math.pow(std, 3)
   const kurtosis = m4 / Math.pow(std, 4) - 3  // Excess kurtosis
-  
+
   // Jarque-Bera test statistic
   // JB = n/6 * (S² + K²/4)
   const jb = (n / 6) * (Math.pow(skewness, 2) + Math.pow(kurtosis, 2) / 4)
-  
+
   // P-value from chi-squared distribution with 2 df
   // For χ²(2): P(X > x) = exp(-x/2) [exact]
   const pValue = Math.exp(-jb / 2)
   const isNormal = pValue >= 0.05
-  
+
   let interpretation: string
   if (n < 30) {
     // Add caution for small samples
@@ -230,7 +230,7 @@ function jarqueBeraTest(data: number[]): NormalityTestResult {
       interpretation = 'Strong evidence against normality'
     }
   }
-  
+
   return {
     statistic: jb,
     pValue,
@@ -271,7 +271,7 @@ function leveneTest(group1: number[], group2: number[]): LeveneTestResult {
   const n2 = g2.length
   const N = n1 + n2
   const k = 2  // Number of groups
-  
+
   if (n1 < 2 || n2 < 2) {
     return {
       statistic: null,
@@ -281,32 +281,32 @@ function leveneTest(group1: number[], group2: number[]): LeveneTestResult {
       sampleSizes: { control: n1, experimental: n2 }
     }
   }
-  
+
   // Calculate median for each group (Brown-Forsythe variant)
   const sorted1 = [...g1].sort((a, b) => a - b)
   const sorted2 = [...g2].sort((a, b) => a - b)
   const median1 = percentile(sorted1, 50)
   const median2 = percentile(sorted2, 50)
-  
+
   // Calculate absolute deviations from median
   const z1 = g1.map(x => Math.abs(x - median1))
   const z2 = g2.map(x => Math.abs(x - median2))
-  
+
   // Group means of absolute deviations
   const zBar1 = z1.reduce((a, b) => a + b, 0) / n1
   const zBar2 = z2.reduce((a, b) => a + b, 0) / n2
-  
+
   // Overall mean of absolute deviations
   const zBar = (z1.reduce((a, b) => a + b, 0) + z2.reduce((a, b) => a + b, 0)) / N
-  
+
   // Between-group sum of squares
   const ssb = n1 * Math.pow(zBar1 - zBar, 2) + n2 * Math.pow(zBar2 - zBar, 2)
-  
+
   // Within-group sum of squares
   const ssw1 = z1.reduce((sum, z) => sum + Math.pow(z - zBar1, 2), 0)
   const ssw2 = z2.reduce((sum, z) => sum + Math.pow(z - zBar2, 2), 0)
   const ssw = ssw1 + ssw2
-  
+
   if (ssw === 0) {
     return {
       statistic: 0,
@@ -316,23 +316,23 @@ function leveneTest(group1: number[], group2: number[]): LeveneTestResult {
       sampleSizes: { control: n1, experimental: n2 }
     }
   }
-  
+
   // Levene's test statistic (F-statistic)
   const dfBetween = k - 1
   const dfWithin = N - k
   const W = ((N - k) / (k - 1)) * (ssb / ssw)
-  
+
   // P-value from F-distribution
   const pValue = 1 - fDistributionCDF(W, dfBetween, dfWithin)
   const equalVariances = pValue >= 0.05
-  
+
   let interpretation: string
   if (equalVariances) {
     interpretation = 'Equal variances (homoscedasticity) - standard t-test assumptions met'
   } else {
     interpretation = 'Unequal variances (heteroscedasticity) - Welch\'s t-test is appropriate'
   }
-  
+
   return {
     statistic: W,
     pValue,
@@ -355,7 +355,7 @@ function leveneTest(group1: number[], group2: number[]): LeveneTestResult {
 function fDistributionCDF(x: number, df1: number, df2: number): number {
   if (x <= 0) return 0
   if (df1 <= 0 || df2 <= 0) return NaN
-  
+
   const y = (df1 * x) / (df1 * x + df2)
   return incompleteBeta(y, df1 / 2, df2 / 2)
 }
@@ -366,7 +366,7 @@ function mannWhitneyUTest(group1: number[], group2: number[]): MannWhitneyResult
   const g2 = group2.filter(x => !isNaN(x) && isFinite(x))
   const n1 = g1.length
   const n2 = g2.length
-  
+
   if (n1 < 2 || n2 < 2) {
     return {
       U: null,
@@ -377,13 +377,13 @@ function mannWhitneyUTest(group1: number[], group2: number[]): MannWhitneyResult
       sampleSizes: { control: n1, experimental: n2 }
     }
   }
-  
+
   // Combine and rank all values
   const combined = [
     ...g1.map(v => ({ value: v, group: 1 })),
     ...g2.map(v => ({ value: v, group: 2 }))
   ].sort((a, b) => a.value - b.value)
-  
+
   // Assign ranks (handling ties with average rank)
   const ranks: number[] = []
   let i = 0
@@ -398,29 +398,29 @@ function mannWhitneyUTest(group1: number[], group2: number[]): MannWhitneyResult
     }
     i = j
   }
-  
+
   // Sum of ranks for group 1
   let R1 = 0
   combined.forEach((item, idx) => {
     if (item.group === 1) R1 += ranks[idx]
   })
-  
+
   // U statistic
   const U1 = R1 - (n1 * (n1 + 1)) / 2
   const U2 = n1 * n2 - U1
   const U = Math.min(U1, U2)
-  
+
   // Normal approximation for p-value (valid for n1, n2 > 10)
   const meanU = (n1 * n2) / 2
   const stdU = Math.sqrt((n1 * n2 * (n1 + n2 + 1)) / 12)
   const z = (U - meanU) / stdU
   const pValue = 2 * normalCDF(-Math.abs(z))
-  
+
   const isSignificant = pValue < 0.05
-  
+
   // Rank-biserial correlation (effect size)
   const rankBiserialR = 1 - (2 * U) / (n1 * n2)
-  
+
   return {
     U,
     pValue,
@@ -437,7 +437,7 @@ function hedgesG(group1: number[], group2: number[]): HedgesGResult {
   const g2 = group2.filter(x => !isNaN(x) && isFinite(x))
   const n1 = g1.length
   const n2 = g2.length
-  
+
   if (n1 < 2 || n2 < 2) {
     return {
       hedgesG: null,
@@ -449,14 +449,14 @@ function hedgesG(group1: number[], group2: number[]): HedgesGResult {
       sampleSizes: { control: n1, experimental: n2 }
     }
   }
-  
+
   const mean1 = g1.reduce((a, b) => a + b, 0) / n1
   const mean2 = g2.reduce((a, b) => a + b, 0) / n2
   const var1 = g1.reduce((sum, x) => sum + Math.pow(x - mean1, 2), 0) / (n1 - 1)
   const var2 = g2.reduce((sum, x) => sum + Math.pow(x - mean2, 2), 0) / (n2 - 1)
-  
+
   const pooledStd = Math.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
-  
+
   if (pooledStd === 0) {
     return {
       hedgesG: 0,
@@ -468,22 +468,22 @@ function hedgesG(group1: number[], group2: number[]): HedgesGResult {
       sampleSizes: { control: n1, experimental: n2 }
     }
   }
-  
+
   // Cohen's d
   const d = (mean2 - mean1) / pooledStd
-  
+
   // Hedges' correction factor
   const df = n1 + n2 - 2
   const correctionFactor = 1 - (3 / (4 * df - 1))
-  
+
   // Hedges' g
   const g = d * correctionFactor
-  
+
   // Standard error and 95% CI
   const seG = Math.sqrt((n1 + n2) / (n1 * n2) + (g * g) / (2 * (n1 + n2)))
   const ciLower = g - 1.96 * seG
   const ciUpper = g + 1.96 * seG
-  
+
   // Interpretation
   const absG = Math.abs(g)
   let interpretation: string
@@ -491,7 +491,7 @@ function hedgesG(group1: number[], group2: number[]): HedgesGResult {
   else if (absG < 0.5) interpretation = 'Small'
   else if (absG < 0.8) interpretation = 'Medium'
   else interpretation = 'Large'
-  
+
   return {
     hedgesG: g,
     cohensD: d,
@@ -509,7 +509,7 @@ function commonLanguageEffectSize(group1: number[], group2: number[]): CLESResul
   const g2 = group2.filter(x => !isNaN(x) && isFinite(x))
   const n1 = g1.length
   const n2 = g2.length
-  
+
   if (n1 < 1 || n2 < 1) {
     return {
       cles: null,
@@ -517,7 +517,7 @@ function commonLanguageEffectSize(group1: number[], group2: number[]): CLESResul
       interpretation: 'Insufficient data'
     }
   }
-  
+
   // Count wins for group2
   let count = 0
   let ties = 0
@@ -527,9 +527,9 @@ function commonLanguageEffectSize(group1: number[], group2: number[]): CLESResul
       else if (v2 === v1) ties++
     }
   }
-  
+
   const cles = (count + 0.5 * ties) / (n1 * n2)
-  
+
   let interpretation: string
   if (cles > 0.71) interpretation = 'Large advantage for experimental'
   else if (cles > 0.64) interpretation = 'Medium advantage for experimental'
@@ -538,7 +538,7 @@ function commonLanguageEffectSize(group1: number[], group2: number[]): CLESResul
   else if (cles >= 0.36) interpretation = 'Small advantage for control'
   else if (cles >= 0.29) interpretation = 'Medium advantage for control'
   else interpretation = 'Large advantage for control'
-  
+
   return {
     cles,
     clesPercentage: cles * 100,
@@ -561,51 +561,51 @@ function commonLanguageEffectSize(group1: number[], group2: number[]): CLESResul
 function nonCentralTCDF(t: number, df: number, ncp: number): number {
   if (df <= 0) return NaN
   if (ncp === 0) return tDistributionCDF(t, df)
-  
+
   // Handle negative t by symmetry
   if (t < 0) {
     return 1 - nonCentralTCDF(-t, df, -ncp)
   }
-  
+
   // Use series expansion
   const x = t * t / (df + t * t)
   const maxIterations = 1000
   const tolerance = 1e-12
-  
+
   // Calculate using the weighted sum of incomplete beta functions
   let sum = 0
   let term: number
   const lambda = ncp * ncp / 2
-  
+
   // Poisson weight: exp(-λ) * λ^j / j!
   let poissonWeight = Math.exp(-lambda)
-  
+
   for (let j = 0; j < maxIterations; j++) {
     // Calculate the incomplete beta term
     // I_x((df + 1)/2 + j, 1/2) for odd terms
     // I_x(df/2 + j, 1/2) for even terms
-    
+
     const beta1 = incompleteBeta(x, (df + 1) / 2 + j, 0.5)
     const beta2 = incompleteBeta(x, df / 2 + j, 0.5)
-    
+
     // Contribution from this term
     const contrib1 = poissonWeight * (1 - beta1) / 2
     const contrib2 = (j > 0 ? lambda / j : 0) * poissonWeight * (1 - beta2) / 2
-    
+
     term = contrib1
     sum += term
-    
+
     if (j > 0 && Math.abs(term) < tolerance * Math.abs(sum)) {
       break
     }
-    
+
     // Update Poisson weight for next iteration
     poissonWeight *= lambda / (j + 1)
   }
-  
+
   // Add the central part
   const centralCDF = normalCDF(-ncp)
-  
+
   // The non-central t CDF
   return centralCDF + sum
 }
@@ -635,20 +635,20 @@ function calculatePower(n1: number, n2: number, effectSize: number | null, alpha
       recommendation: 'Need at least n=2 per group'
     }
   }
-  
+
   const df = n1 + n2 - 2
-  
+
   // Non-centrality parameter
   const ncp = Math.abs(effectSize) * Math.sqrt((n1 * n2) / (n1 + n2))
-  
+
   // Critical t-value for two-tailed test
   const tCrit = tDistributionQuantile(1 - alpha / 2, df)
-  
+
   // Power using non-central t-distribution
   // Power = P(|T| > tCrit) = P(T > tCrit) + P(T < -tCrit)
   //       = 1 - F_nct(tCrit, df, ncp) + F_nct(-tCrit, df, ncp)
   let power: number
-  
+
   // For small ncp or large df, the non-central t calculation can be unstable
   // Use a simpler approximation in those cases
   if (df > 100 || ncp < 0.01) {
@@ -659,19 +659,19 @@ function calculatePower(n1: number, n2: number, effectSize: number | null, alpha
     // Use non-central t-distribution
     power = 1 - nonCentralTCDF(tCrit, df, ncp) + nonCentralTCDF(-tCrit, df, ncp)
   }
-  
+
   // Clamp power to [0, 1]
   power = Math.max(0, Math.min(1, power))
-  
+
   const isAdequate = power >= 0.80
-  
+
   let interpretation: string
   if (power >= 0.95) interpretation = 'Excellent power - very likely to detect effect'
   else if (power >= 0.80) interpretation = 'Adequate power - likely to detect effect'
   else if (power >= 0.60) interpretation = 'Moderate power - may miss real effects'
   else if (power >= 0.40) interpretation = 'Low power - likely to miss real effects'
   else interpretation = 'Very low power - study is underpowered'
-  
+
   return {
     power,
     powerPercentage: power * 100,
@@ -692,13 +692,13 @@ function requiredSampleSize(effectSize: number | null, targetPower: number = 0.8
       interpretation: 'Cannot calculate: effect size is zero or unknown'
     }
   }
-  
+
   // Using normal approximation
   const zAlpha = 1.96  // Two-tailed α = 0.05
   const zBeta = normalQuantile(targetPower)
-  
+
   const nPerGroup = Math.ceil(2 * Math.pow((zAlpha + zBeta) / Math.abs(effectSize), 2))
-  
+
   return {
     nPerGroup,
     totalN: nPerGroup * 2,
@@ -711,7 +711,7 @@ function requiredSampleSize(effectSize: number | null, targetPower: number = 0.8
 // Outlier detection using IQR method
 function detectOutliers(data: number[], k: number = 1.5): OutlierResult {
   const cleanData = data.filter(x => !isNaN(x) && isFinite(x))
-  
+
   if (cleanData.length < 4) {
     return {
       outlierCount: 0,
@@ -725,25 +725,25 @@ function detectOutliers(data: number[], k: number = 1.5): OutlierResult {
       outlierPercentage: 0
     }
   }
-  
+
   const sorted = [...cleanData].sort((a, b) => a - b)
   const Q1 = percentile(sorted, 25)
   const Q3 = percentile(sorted, 75)
   const IQR = Q3 - Q1
-  
+
   const lowerBound = Q1 - k * IQR
   const upperBound = Q3 + k * IQR
-  
+
   const outlierIndices: number[] = []
   const outlierValues: number[] = []
-  
+
   cleanData.forEach((value, index) => {
     if (value < lowerBound || value > upperBound) {
       outlierIndices.push(index)
       outlierValues.push(value)
     }
   })
-  
+
   return {
     outlierCount: outlierValues.length,
     outlierIndices,
@@ -761,7 +761,7 @@ function detectOutliers(data: number[], k: number = 1.5): OutlierResult {
 function getDistributionStats(data: number[]): DistributionStats {
   const cleanData = data.filter(x => !isNaN(x) && isFinite(x))
   const n = cleanData.length
-  
+
   if (n < 1) {
     return {
       n: 0,
@@ -778,12 +778,12 @@ function getDistributionStats(data: number[]): DistributionStats {
       values: []
     }
   }
-  
+
   const sorted = [...cleanData].sort((a, b) => a - b)
   const mean = cleanData.reduce((a, b) => a + b, 0) / n
   const variance = n > 1 ? cleanData.reduce((sum, x) => sum + Math.pow(x - mean, 2), 0) / (n - 1) : 0
   const std = Math.sqrt(variance)
-  
+
   // Skewness and kurtosis
   let skewness: number | null = null
   let kurtosis: number | null = null
@@ -795,10 +795,10 @@ function getDistributionStats(data: number[]): DistributionStats {
     const m4 = cleanData.reduce((sum, x) => sum + Math.pow(x - mean, 4), 0) / n
     kurtosis = m4 / Math.pow(std, 4) - 3  // Excess kurtosis
   }
-  
+
   const Q1 = percentile(sorted, 25)
   const Q3 = percentile(sorted, 75)
-  
+
   return {
     n,
     mean,
@@ -826,7 +826,7 @@ function bootstrapCI(
   const g2 = group2.filter(x => !isNaN(x) && isFinite(x))
   const n1 = g1.length
   const n2 = g2.length
-  
+
   if (n1 < 2 || n2 < 2) {
     return {
       ciLower: null,
@@ -838,9 +838,9 @@ function bootstrapCI(
       interpretation: 'Insufficient data'
     }
   }
-  
+
   const originalDiff = g2.reduce((a, b) => a + b, 0) / n2 - g1.reduce((a, b) => a + b, 0) / n1
-  
+
   // Bootstrap resampling (using seeded random for reproducibility)
   const bootstrapDiffs: number[] = []
   let seed = 42
@@ -848,27 +848,27 @@ function bootstrapCI(
     seed = (seed * 1103515245 + 12345) % 2147483648
     return seed / 2147483648
   }
-  
+
   for (let i = 0; i < nBootstrap; i++) {
     // Resample with replacement
     const bootG1 = Array.from({ length: n1 }, () => g1[Math.floor(random() * n1)])
     const bootG2 = Array.from({ length: n2 }, () => g2[Math.floor(random() * n2)])
-    
+
     const bootDiff = bootG2.reduce((a, b) => a + b, 0) / n2 - bootG1.reduce((a, b) => a + b, 0) / n1
     bootstrapDiffs.push(bootDiff)
   }
-  
+
   bootstrapDiffs.sort((a, b) => a - b)
-  
+
   const alpha = 1 - confidenceLevel
   const ciLower = percentile(bootstrapDiffs, alpha / 2 * 100)
   const ciUpper = percentile(bootstrapDiffs, (1 - alpha / 2) * 100)
-  
+
   const bootstrapMean = bootstrapDiffs.reduce((a, b) => a + b, 0) / nBootstrap
   const bootstrapSE = Math.sqrt(
     bootstrapDiffs.reduce((sum, x) => sum + Math.pow(x - bootstrapMean, 2), 0) / (nBootstrap - 1)
   )
-  
+
   return {
     ciLower,
     ciUpper,
@@ -896,7 +896,7 @@ function normalQuantile(p: number): number {
   if (p <= 0) return -Infinity
   if (p >= 1) return Infinity
   if (p === 0.5) return 0
-  
+
   const a = [
     -3.969683028665376e+01,
     2.209460984245205e+02,
@@ -926,24 +926,24 @@ function normalQuantile(p: number): number {
     2.445134137142996e+00,
     3.754408661907416e+00
   ]
-  
+
   const pLow = 0.02425
   const pHigh = 1 - pLow
-  
+
   let q: number
   if (p < pLow) {
     q = Math.sqrt(-2 * Math.log(p))
     return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
-           ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+      ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
   } else if (p <= pHigh) {
     q = p - 0.5
     const r = q * q
     return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q /
-           (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1)
+      (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1)
   } else {
     q = Math.sqrt(-2 * Math.log(1 - p))
     return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
-            ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+      ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
   }
 }
 
@@ -952,7 +952,7 @@ function normalQuantile(p: number): number {
 function welchTTest(sample1: number[], sample2: number[]): TTestResult {
   const n1 = sample1.length
   const n2 = sample2.length
-  
+
   // Require minimum sample size for meaningful analysis
   if (n1 < 2 || n2 < 2) {
     return {
@@ -978,7 +978,7 @@ function welchTTest(sample1: number[], sample2: number[]): TTestResult {
   // Calculate sample variances (unbiased, using n-1)
   const variance1 = sample1.reduce((sum, val) => sum + Math.pow(val - mean1, 2), 0) / (n1 - 1)
   const variance2 = sample2.reduce((sum, val) => sum + Math.pow(val - mean2, 2), 0) / (n2 - 1)
-  
+
   const std1 = Math.sqrt(variance1)
   const std2 = Math.sqrt(variance2)
 
@@ -986,7 +986,7 @@ function welchTTest(sample1: number[], sample2: number[]): TTestResult {
   const se1 = variance1 / n1
   const se2 = variance2 / n2
   const pooledSE = Math.sqrt(se1 + se2)
-  
+
   if (pooledSE === 0) {
     return {
       pValue: 1,
@@ -1051,28 +1051,28 @@ function welchTTest(sample1: number[], sample2: number[]): TTestResult {
 function incompleteBeta(x: number, a: number, b: number): number {
   if (x <= 0) return 0
   if (x >= 1) return 1
-  
+
   // For numerical stability, use the symmetry relation when appropriate
   // I_x(a,b) = 1 - I_{1-x}(b,a)
   if (x > (a + 1) / (a + b + 2)) {
     return 1 - incompleteBeta(1 - x, b, a)
   }
-  
+
   // Calculate using continued fraction (Lentz's algorithm)
   const lnBeta = logBeta(a, b)
   const front = Math.exp(Math.log(x) * a + Math.log(1 - x) * b - lnBeta) / a
-  
+
   // Continued fraction for I_x(a,b)
   const maxIterations = 200
   const epsilon = 1e-14
-  
+
   let f = 1
   let c = 1
   let d = 0
-  
+
   for (let m = 0; m <= maxIterations; m++) {
     let numerator: number
-    
+
     if (m === 0) {
       numerator = 1
     } else if (m % 2 === 0) {
@@ -1082,22 +1082,22 @@ function incompleteBeta(x: number, a: number, b: number): number {
       const k = (m - 1) / 2
       numerator = -((a + k) * (a + b + k) * x) / ((a + 2 * k) * (a + 2 * k + 1))
     }
-    
+
     d = 1 + numerator * d
     if (Math.abs(d) < 1e-30) d = 1e-30
     d = 1 / d
-    
+
     c = 1 + numerator / c
     if (Math.abs(c) < 1e-30) c = 1e-30
-    
+
     const delta = c * d
     f *= delta
-    
+
     if (Math.abs(delta - 1) < epsilon) {
       break
     }
   }
-  
+
   return front * (f - 1)
 }
 
@@ -1112,9 +1112,9 @@ function logGamma(z: number): number {
     // Reflection formula: Γ(z)Γ(1-z) = π/sin(πz)
     return Math.log(Math.PI / Math.sin(Math.PI * z)) - logGamma(1 - z)
   }
-  
+
   z -= 1
-  
+
   // Lanczos coefficients for g=7
   const g = 7
   const c = [
@@ -1128,12 +1128,12 @@ function logGamma(z: number): number {
     9.9843695780195716e-6,
     1.5056327351493116e-7
   ]
-  
+
   let x = c[0]
   for (let i = 1; i < g + 2; i++) {
     x += c[i] / (z + i)
   }
-  
+
   const t = z + g + 0.5
   return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x)
 }
@@ -1154,10 +1154,10 @@ function logGamma(z: number): number {
 function tDistributionCDF(t: number, df: number): number {
   if (df <= 0) return 0.5
   if (!isFinite(t)) return t > 0 ? 1 : 0
-  
+
   const x = df / (df + t * t)
   const betaValue = incompleteBeta(x, df / 2, 0.5)
-  
+
   if (t >= 0) {
     return 1 - 0.5 * betaValue
   } else {
@@ -1181,45 +1181,45 @@ function tDistributionQuantile(p: number, df: number): number {
   if (p >= 1) return Infinity
   if (p === 0.5) return 0
   if (df <= 0) return NaN
-  
+
   // Handle symmetry: if p < 0.5, compute for 1-p and negate
   if (p < 0.5) {
     return -tDistributionQuantile(1 - p, df)
   }
-  
+
   // Initial guess using normal quantile with correction for df
   // Cornish-Fisher expansion for better starting point
   const z = normalQuantile(p)
   const g1 = (z * z * z + z) / 4
   const g2 = (5 * Math.pow(z, 5) + 16 * Math.pow(z, 3) + 3 * z) / 96
   const g3 = (3 * Math.pow(z, 7) + 19 * Math.pow(z, 5) + 17 * Math.pow(z, 3) - 15 * z) / 384
-  
+
   let t = z + g1 / df + g2 / (df * df) + g3 / (df * df * df)
-  
+
   // Newton-Raphson iteration
   const maxIterations = 50
   const tolerance = 1e-12
-  
+
   for (let i = 0; i < maxIterations; i++) {
     const cdf = tDistributionCDF(t, df)
     const error = cdf - p
-    
+
     if (Math.abs(error) < tolerance) {
       break
     }
-    
+
     // PDF of t-distribution for Newton-Raphson
     const pdf = tDistributionPDF(t, df)
     if (pdf === 0) break
-    
+
     const delta = error / pdf
     t -= delta
-    
+
     if (Math.abs(delta) < tolerance * Math.abs(t)) {
       break
     }
   }
-  
+
   return t
 }
 
@@ -1260,10 +1260,10 @@ export interface DashboardData {
     experimentalConvergenceGen: number | null
     convergenceImprovement: number | null  // Percentage improvement in convergence speed
     // Descriptive only (not used for hypothesis testing)
-    controlFinalElo: number | null
-    experimentalFinalElo: number | null
-    controlPeakElo: number | null
-    experimentalPeakElo: number | null
+    controlFinalFitness: number | null
+    experimentalFinalFitness: number | null
+    controlPeakFitness: number | null
+    experimentalPeakFitness: number | null
     // Primary: Convergence generation t-test (hypothesis test)
     convergencePValue: number | null
     convergenceTStatistic: number | null
@@ -1276,7 +1276,7 @@ export interface DashboardData {
     convergenceControlStd: number | null
     convergenceExperimentalStd: number | null
     convergenceMeanDifference: number | null  // Control − Experimental (positive = experimental faster)
-    // Secondary: Elo t-test (descriptive only)
+    // Secondary: Fitness t-test (descriptive only)
     pValue: number | null
     tStatistic: number | null
     isSignificant: boolean
@@ -1392,7 +1392,7 @@ function calculatePowerLevel(input: PowerLevelInput): StatisticalPowerLevel {
   //
   // These are conservative estimates assuming medium effect size.
   // Once we have data to calculate actual effect size, we use the real power instead.
-  
+
   if (minCount < 2) {
     return 'insufficient'  // Cannot compute t-test statistics
   }
@@ -1451,22 +1451,22 @@ export async function GET() {
     )
 
     // =========================================================================
-    // STATISTICS DATA: Aggregate final Elo for ALL completed experiments
+    // STATISTICS DATA: Aggregate final Fitness for ALL completed experiments
     // Uses SQL aggregation to efficiently calculate avg of last 10 generations
     // =========================================================================
-    
-    interface ExperimentFinalElo {
+
+    interface ExperimentFinalFitness {
       experiment_id: string
       experiment_group: string
-      final_elo: number
+      final_fitness: number
     }
-    
-    const experimentFinalElos = await queryAll<ExperimentFinalElo>(
+
+    const experimentFinalFitnesses = await queryAll<ExperimentFinalFitness>(
       `WITH ranked_generations AS (
         SELECT 
           g.experiment_id,
           e.experiment_group,
-          g.avg_elo,
+          g.avg_fitness,
           g.generation_number,
           ROW_NUMBER() OVER (
             PARTITION BY g.experiment_id 
@@ -1476,51 +1476,51 @@ export async function GET() {
         FROM generations g
         JOIN experiments e ON g.experiment_id = e.id
         WHERE e.status = 'COMPLETED'
-          AND g.avg_elo IS NOT NULL
+          AND g.avg_fitness IS NOT NULL
       )
       SELECT 
         experiment_id,
         experiment_group,
-        AVG(avg_elo) as final_elo
+        AVG(avg_fitness) as final_fitness
       FROM ranked_generations
       WHERE rn <= LEAST(10, total_gens)
       GROUP BY experiment_id, experiment_group
-      HAVING AVG(avg_elo) > 0`
+      HAVING AVG(avg_fitness) > 0`
     ) || []
 
-    // Separate final Elos by group for statistical calculations
-    const allControlFinalElos = experimentFinalElos
+    // Separate final Fitness scores by group for statistical calculations
+    const allControlFinalFitnesses = experimentFinalFitnesses
       .filter(e => e.experiment_group === 'CONTROL')
-      .map(e => e.final_elo)
-    const allExperimentalFinalElos = experimentFinalElos
+      .map(e => e.final_fitness)
+    const allExperimentalFinalFitnesses = experimentFinalFitnesses
       .filter(e => e.experiment_group === 'EXPERIMENTAL')
-      .map(e => e.final_elo)
+      .map(e => e.final_fitness)
 
-    // Per-experiment peak Elo (for descriptive cards; comparable across groups)
-    interface ExperimentPeakElo {
+    // Per-experiment peak Fitness (for descriptive cards; comparable across groups)
+    interface ExperimentPeakFitness {
       experiment_id: string
       experiment_group: string
-      peak_elo: number
+      peak_fitness: number
     }
-    const experimentPeakElos = await queryAll<ExperimentPeakElo>(
-      `SELECT g.experiment_id, e.experiment_group, MAX(g.peak_elo) as peak_elo
+    const experimentPeakFitnesses = await queryAll<ExperimentPeakFitness>(
+      `SELECT g.experiment_id, e.experiment_group, MAX(g.peak_fitness) as peak_fitness
        FROM generations g
        JOIN experiments e ON g.experiment_id = e.id
-       WHERE e.status = 'COMPLETED' AND g.peak_elo IS NOT NULL
+       WHERE e.status = 'COMPLETED' AND g.peak_fitness IS NOT NULL
        GROUP BY g.experiment_id, e.experiment_group`
     ) || []
-    const allControlPeakElos = experimentPeakElos
+    const allControlPeakFitnesses = experimentPeakFitnesses
       .filter(e => e.experiment_group === 'CONTROL')
-      .map(e => e.peak_elo)
-    const allExperimentalPeakElos = experimentPeakElos
+      .map(e => e.peak_fitness)
+    const allExperimentalPeakFitnesses = experimentPeakFitnesses
       .filter(e => e.experiment_group === 'EXPERIMENTAL')
-      .map(e => e.peak_elo)
+      .map(e => e.peak_fitness)
 
     // =========================================================================
     // CHART DATA: Two separate queries with experiment_group filter in SQL.
     // Control and experimental cannot share data — each query filters in DB.
     // =========================================================================
-    
+
     const MAX_EXPERIMENTS_FOR_CHARTS = 20
     const controlIdsForCharts = controlExperiments.slice(0, MAX_EXPERIMENTS_FOR_CHARTS).map((exp: Experiment) => exp.id)
     const experimentalIdsForCharts = experimentalExperiments.slice(0, MAX_EXPERIMENTS_FOR_CHARTS).map((exp: Experiment) => exp.id)
@@ -1561,13 +1561,13 @@ export async function GET() {
     // CONVERGENCE DATA: Fetch ALL generations for ALL completed experiments
     // This is needed to calculate convergence generation for each experiment
     // =========================================================================
-    
+
     const allControlIds = allControlExperiments.map((exp: Experiment) => exp.id)
     const allExperimentalIds = allExperimentalExperiments.map((exp: Experiment) => exp.id)
-    
+
     let allControlGenerations: Generation[] = []
     let allExperimentalGenerations: Generation[] = []
-    
+
     // Fetch all generations for control experiments (for convergence stats)
     if (allControlIds.length > 0) {
       const placeholders = allControlIds.map((_: string, i: number) => `$${i + 1}`).join(', ')
@@ -1578,7 +1578,7 @@ export async function GET() {
         allControlIds
       ) || []
     }
-    
+
     // Fetch all generations for experimental experiments (for convergence stats)
     if (allExperimentalIds.length > 0) {
       const placeholders = allExperimentalIds.map((_: string, i: number) => `$${i + 1}`).join(', ')
@@ -1600,10 +1600,10 @@ export async function GET() {
     // IMPORTANT: Both groups use the same threshold for fair comparison
     const CONVERGENCE_THRESHOLD = 0.01
     const STABILITY_WINDOW = 20  // Require 20 consecutive generations below threshold
-    
+
     const findConvergenceGeneration = (generations: Generation[], absoluteThreshold: number): number | null => {
       if (generations.length < 10) return null
-      
+
       // Get variance data (skip first few gens where data might be unstable)
       const varianceData = generations.slice(5)
         .filter((g: Generation) => g.entropy_variance != null)
@@ -1611,23 +1611,23 @@ export async function GET() {
           gen: g.generation_number,
           variance: g.entropy_variance as number
         }))
-      
+
       if (varianceData.length === 0) return null
 
       // Find peak variance
       const peakVariance = Math.max(...varianceData.map(d => d.variance))
       const peakIndex = varianceData.findIndex(d => d.variance === peakVariance)
-      
+
       // Must have diverged (peak > minimum threshold)
       if (peakVariance <= 0.0001) return null
 
       // Use the fixed threshold for convergence detection
       // This matches the documented methodology: σ < 0.01 after initial divergence
       const effectiveThreshold = absoluteThreshold
-      
+
       // Get data after peak
       const afterPeak = varianceData.slice(peakIndex)
-      
+
       // Find first generation that starts a stable run of STABILITY_WINDOW generations below threshold
       for (let i = 0; i <= afterPeak.length - STABILITY_WINDOW; i++) {
         const window = afterPeak.slice(i, i + STABILITY_WINDOW)
@@ -1635,10 +1635,10 @@ export async function GET() {
           return window[0].gen
         }
       }
-      
+
       return null
     }
-    
+
     const controlConvergenceGen = findConvergenceGeneration(controlGenerations, CONVERGENCE_THRESHOLD)
     const experimentalConvergenceGen = findConvergenceGeneration(experimentalGenerations, CONVERGENCE_THRESHOLD)
 
@@ -1648,30 +1648,30 @@ export async function GET() {
       convergenceImprovement = ((controlConvergenceGen - experimentalConvergenceGen) / controlConvergenceGen) * 100
     }
 
-    // Final and peak Elo (descriptive): use per-experiment aggregates so values are
+    // Final and peak Fitness (descriptive): use per-experiment aggregates so values are
     // comparable across groups (experimental often has fewer generations per run).
     // Mean of each experiment's final/peak avoids skew from chart subset or gen index.
     const mean = (arr: number[]) => (arr.length === 0 ? null : arr.reduce((a, b) => a + b, 0) / arr.length)
-    const controlFinalElo = mean(allControlFinalElos)
-    const experimentalFinalElo = mean(allExperimentalFinalElos)
-    const controlPeakElo = mean(allControlPeakElos)
-    const experimentalPeakElo = mean(allExperimentalPeakElos)
+    const controlFinalFitness = mean(allControlFinalFitnesses)
+    const experimentalFinalFitness = mean(allExperimentalFinalFitnesses)
+    const controlPeakFitness = mean(allControlPeakFitnesses)
+    const experimentalPeakFitness = mean(allExperimentalPeakFitnesses)
 
     // =========================================================================
     // EXPERIMENT-LEVEL T-TEST (Scientifically Rigorous)
     // =========================================================================
     // CRITICAL: We use ONE data point per experiment to avoid pseudoreplication.
-    // Each experiment provides its final average Elo as the summary statistic.
+    // Each experiment provides its final average Fitness as the summary statistic.
     // This ensures statistical independence between samples.
     // 
     // IMPORTANT: We use ALL completed experiments for statistical analysis,
     // not just the subset used for chart visualization.
     // =========================================================================
-    
-    // Use pre-calculated final Elos from SQL aggregation (ALL completed experiments)
-    const controlExperimentElos = allControlFinalElos
-    const experimentalExperimentElos = allExperimentalFinalElos
-    
+
+    // Use pre-calculated final Fitness scores from SQL aggregation (ALL completed experiments)
+    const controlExperimentFitnesses = allControlFinalFitnesses
+    const experimentalExperimentFitnesses = allExperimentalFinalFitnesses
+
     // Perform Welch's t-test on experiment-level data
     let tTestResult: TTestResult | null = null
     let pValue: number | null = null
@@ -1687,8 +1687,8 @@ export async function GET() {
     let meanDifference: number | null = null
 
     // Require at least 2 experiments per group for valid t-test
-    if (controlExperimentElos.length >= 2 && experimentalExperimentElos.length >= 2) {
-      tTestResult = welchTTest(controlExperimentElos, experimentalExperimentElos)
+    if (controlExperimentFitnesses.length >= 2 && experimentalExperimentFitnesses.length >= 2) {
+      tTestResult = welchTTest(controlExperimentFitnesses, experimentalExperimentFitnesses)
       pValue = tTestResult.pValue
       tStatistic = tTestResult.tStatistic
       degreesOfFreedom = tTestResult.degreesOfFreedom
@@ -1700,10 +1700,10 @@ export async function GET() {
       experimentalStd = tTestResult.experimentalStd
       meanDifference = tTestResult.meanDifference
       isSignificant = pValue < 0.05
-    } else if (controlExperimentElos.length >= 1 && experimentalExperimentElos.length >= 1) {
+    } else if (controlExperimentFitnesses.length >= 1 && experimentalExperimentFitnesses.length >= 1) {
       // With only 1 experiment per group, report means but no significance test
-      controlMean = controlExperimentElos.reduce((a, b) => a + b, 0) / controlExperimentElos.length
-      experimentalMean = experimentalExperimentElos.reduce((a, b) => a + b, 0) / experimentalExperimentElos.length
+      controlMean = controlExperimentFitnesses.reduce((a, b) => a + b, 0) / controlExperimentFitnesses.length
+      experimentalMean = experimentalExperimentFitnesses.reduce((a, b) => a + b, 0) / experimentalExperimentFitnesses.length
       meanDifference = experimentalMean - controlMean
     }
 
@@ -1717,7 +1717,7 @@ export async function GET() {
     // IMPORTANT: We use ALL completed experiments for statistical analysis,
     // not just the subset used for chart visualization.
     // =========================================================================
-    
+
     // Get convergence generation for each experiment
     const getExperimentConvergenceGens = (experiments: Experiment[], generations: Generation[]): number[] => {
       return experiments.map(exp => {
@@ -1725,9 +1725,9 @@ export async function GET() {
         const expGens = generations
           .filter(g => g.experiment_id === exp.id)
           .sort((a, b) => a.generation_number - b.generation_number)
-        
+
         if (expGens.length < 10) return null
-        
+
         // Apply the same convergence detection logic as findConvergenceGeneration
         const varianceData = expGens.slice(5)
           .filter(g => g.entropy_variance != null)
@@ -1735,20 +1735,20 @@ export async function GET() {
             gen: g.generation_number,
             variance: g.entropy_variance as number
           }))
-        
+
         if (varianceData.length === 0) return null
-        
+
         const peakVariance = Math.max(...varianceData.map(d => d.variance))
         const peakIndex = varianceData.findIndex(d => d.variance === peakVariance)
-        
+
         if (peakVariance <= 0.0001) return null
-        
+
         // Use the fixed threshold for convergence detection
         // This matches the documented methodology: σ < 0.01 after initial divergence
         const effectiveThreshold = CONVERGENCE_THRESHOLD
-        
+
         const afterPeak = varianceData.slice(peakIndex)
-        
+
         // Find stable convergence window
         for (let i = 0; i <= afterPeak.length - STABILITY_WINDOW; i++) {
           const window = afterPeak.slice(i, i + STABILITY_WINDOW)
@@ -1756,15 +1756,15 @@ export async function GET() {
             return window[0].gen
           }
         }
-        
+
         return null
       }).filter((gen): gen is number => gen !== null)
     }
-    
+
     // Use ALL completed experiments for convergence statistics (not just chart subset)
     const controlConvergenceGens = getExperimentConvergenceGens(allControlExperiments, allControlGenerations)
     const experimentalConvergenceGens = getExperimentConvergenceGens(allExperimentalExperiments, allExperimentalGenerations)
-    
+
     // T-test on convergence generations (PRIMARY hypothesis test)
     let convergenceTTestResult: TTestResult | null = null
     let convergencePValue: number | null = null
@@ -1813,7 +1813,7 @@ export async function GET() {
     // These counts reflect the actual sample sizes used in statistical tests
     const controlExperimentCount = allControlExperiments.length
     const experimentalExperimentCount = allExperimentalExperiments.length
-    
+
     // Calculate average generations from ALL completed experiments
     const controlAvgGenerations = controlExperimentCount > 0
       ? Math.round(allControlGenerations.length / controlExperimentCount)
@@ -1934,10 +1934,10 @@ export async function GET() {
         controlConvergenceGen,
         experimentalConvergenceGen,
         convergenceImprovement,
-        controlFinalElo,
-        experimentalFinalElo,
-        controlPeakElo,
-        experimentalPeakElo,
+        controlFinalFitness,
+        experimentalFinalFitness,
+        controlPeakFitness,
+        experimentalPeakFitness,
         // Primary: convergence generation t-test (hypothesis test)
         convergencePValue,
         convergenceTStatistic,
@@ -1950,7 +1950,7 @@ export async function GET() {
         convergenceControlStd,
         convergenceExperimentalStd,
         convergenceMeanDifference,
-        // Secondary: Elo t-test (descriptive only)
+        // Secondary: Fitness t-test (descriptive only)
         pValue,
         tStatistic,
         isSignificant,
@@ -1989,15 +1989,15 @@ export async function GET() {
     })
   } catch (error) {
     console.error('Dashboard API error:', error)
-    
+
     // Return more detailed error information for debugging
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    const isDbError = errorMessage.includes('DATABASE_URL') || 
-                      errorMessage.includes('ECONNREFUSED') ||
-                      errorMessage.includes('connection')
-    
+    const isDbError = errorMessage.includes('DATABASE_URL') ||
+      errorMessage.includes('ECONNREFUSED') ||
+      errorMessage.includes('connection')
+
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to fetch dashboard data',
         details: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
         isDbError

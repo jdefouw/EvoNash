@@ -32,18 +32,18 @@ export default function LiveMetrics({ generation }: LiveMetricsProps) {
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg">
-              <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Avg Elo</div>
-              <Tooltip content="Population average Elo rating - the mean skill level across all agents">
+              <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Avg Fitness</div>
+              <Tooltip content="Population average fitness score - measures overall agent performance">
                 <div className="text-2xl font-bold text-gray-900 dark:text-white cursor-help">
-                  {generation.avg_elo?.toFixed(2) || 'N/A'}
+                  {generation.avg_fitness?.toFixed(2) || 'N/A'}
                 </div>
               </Tooltip>
             </div>
             <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg">
-              <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Peak Elo</div>
-              <Tooltip content="Highest individual agent Elo rating - the best performing agent in the population">
+              <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Peak Fitness</div>
+              <Tooltip content="Highest individual agent fitness score - the best performing agent">
                 <div className="text-2xl font-bold text-gray-900 dark:text-white cursor-help">
-                  {generation.peak_elo?.toFixed(2) || 'N/A'}
+                  {generation.peak_fitness?.toFixed(2) || 'N/A'}
                 </div>
               </Tooltip>
             </div>
@@ -82,18 +82,18 @@ export default function LiveMetrics({ generation }: LiveMetricsProps) {
               </Tooltip>
             </div>
             <div>
-              <span className="text-gray-600 dark:text-gray-400">Min Elo:</span>
-              <Tooltip content="Lowest Elo rating in population - the worst performing agent">
+              <span className="text-gray-600 dark:text-gray-400">Min Fitness:</span>
+              <Tooltip content="Lowest fitness score in population - the worst performing agent">
                 <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">
-                  {generation.min_elo?.toFixed(2) || 'N/A'}
+                  {generation.min_fitness?.toFixed(2) || 'N/A'}
                 </span>
               </Tooltip>
             </div>
             <div>
-              <span className="text-gray-600 dark:text-gray-400">Avg Fitness:</span>
-              <Tooltip content="Average fitness score combining energy and survival time - measures overall agent performance">
+              <span className="text-gray-600 dark:text-gray-400">Std Fitness:</span>
+              <Tooltip content="Standard deviation of fitness scores - measures spread of performance">
                 <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">
-                  {generation.avg_fitness?.toFixed(2) || 'N/A'}
+                  {generation.std_fitness?.toFixed(2) || 'N/A'}
                 </span>
               </Tooltip>
             </div>

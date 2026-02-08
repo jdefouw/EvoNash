@@ -79,11 +79,11 @@ export default function ExperimentsPage() {
       params.set('count', 'true')
       params.set('summary', 'true')
     }
-    
+
     try {
       const res = await fetch(`/api/experiments?${params}`)
       const data = await res.json()
-      
+
       // Check if the response is an error
       if (data.error) {
         console.error('API returned error:', data)
@@ -91,20 +91,20 @@ export default function ExperimentsPage() {
         if (!append) setExperiments([])
         return
       }
-      
+
       // Response may be array or { experiments, total, summary }
       const experimentsArray = Array.isArray(data) ? data : (data.experiments || [])
-      
+
       if (append) {
         setExperiments(prev => [...prev, ...experimentsArray])
       } else {
         setExperiments(experimentsArray)
       }
-      
+
       if (isFirstPage && data.summary) {
         setSummary(data.summary)
       }
-      
+
       setTotalLoaded(prev => append ? prev + experimentsArray.length : experimentsArray.length)
       setHasMore(data.hasMore ?? experimentsArray.length === EXPERIMENTS_PER_PAGE)
       setError(null)
@@ -157,11 +157,11 @@ export default function ExperimentsPage() {
   const sortedExperiments = [...experiments].sort((a, b) => {
     const statusOrderA = getStatusSortOrder(a.status)
     const statusOrderB = getStatusSortOrder(b.status)
-    
+
     if (statusOrderA !== statusOrderB) {
       return statusOrderA - statusOrderB
     }
-    
+
     // Within same status, sort by created_at descending (newest first)
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   })
@@ -169,15 +169,15 @@ export default function ExperimentsPage() {
   const handleDelete = async (e: React.MouseEvent, expId: string, expName: string, expStatus: string) => {
     e.preventDefault()
     e.stopPropagation()
-    
+
     const warningMessage = expStatus === 'RUNNING'
       ? `WARNING: This experiment is currently running!\n\nAre you sure you want to delete "${expName}"?\n\nThis will permanently delete all generations, matches, and analysis data. This action cannot be undone.`
       : `Are you sure you want to delete "${expName}"?\n\nThis will permanently delete all generations, matches, and analysis data. This action cannot be undone.`
-    
+
     if (!confirm(warningMessage)) {
       return
     }
-    
+
     try {
       const response = await fetch(`/api/experiments/${expId}`, { method: 'DELETE' })
       if (response.ok) {
@@ -204,7 +204,7 @@ export default function ExperimentsPage() {
     } catch {
       // Use local count as fallback
     }
-    
+
     // First confirmation
     const firstConfirm = confirm(
       `⚠️ DELETE ALL EXPERIMENTS ⚠️\n\n` +
@@ -216,11 +216,11 @@ export default function ExperimentsPage() {
       `• All job assignments\n\n` +
       `This action CANNOT be undone!`
     )
-    
+
     if (!firstConfirm) {
       return
     }
-    
+
     // Second confirmation
     const secondConfirm = confirm(
       `🚨 FINAL WARNING 🚨\n\n` +
@@ -229,7 +229,7 @@ export default function ExperimentsPage() {
       `There is NO way to recover this data after deletion.\n\n` +
       `Click OK to proceed with deletion, or Cancel to abort.`
     )
-    
+
     if (!secondConfirm) {
       return
     }
@@ -243,16 +243,16 @@ export default function ExperimentsPage() {
       }
       return
     }
-    
+
     setDeletingAll(true)
-    
+
     try {
       const response = await fetch(`/api/experiments/delete-all?keyword=${encodeURIComponent(keyword.trim())}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', 'x-delete-keyword': keyword.trim() },
         body: JSON.stringify({ keyword: keyword.trim() })
       })
-      
+
       if (response.ok) {
         const result = await response.json()
         setExperiments([])
@@ -293,7 +293,7 @@ export default function ExperimentsPage() {
       <div className="max-w-6xl mx-auto">
         {/* Breadcrumb */}
         <div className="mb-6">
-          <Link 
+          <Link
             href="/"
             className="text-blue-600 dark:text-blue-400 hover:underline text-sm flex items-center gap-1"
           >
@@ -365,22 +365,20 @@ export default function ExperimentsPage() {
             )}
             <button
               onClick={() => setShowWorkers(!showWorkers)}
-              className={`px-5 py-3 rounded-lg font-medium transition-all flex items-center gap-2 ${
-                showWorkers 
-                  ? 'bg-green-600 text-white hover:bg-green-700 shadow-md' 
+              className={`px-5 py-3 rounded-lg font-medium transition-all flex items-center gap-2 ${showWorkers
+                  ? 'bg-green-600 text-white hover:bg-green-700 shadow-md'
                   : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-              }`}
+                }`}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
               </svg>
               Workers
               {workerStats.active > 0 && (
-                <span className={`px-2 py-0.5 text-xs rounded-full ${
-                  showWorkers 
-                    ? 'bg-green-500 text-white' 
+                <span className={`px-2 py-0.5 text-xs rounded-full ${showWorkers
+                    ? 'bg-green-500 text-white'
                     : 'bg-green-600 text-white'
-                }`}>
+                  }`}>
                   {workerStats.active}
                 </span>
               )}
@@ -443,7 +441,7 @@ export default function ExperimentsPage() {
                         </span>
                       </div>
                       <div className="flex gap-6 text-sm text-gray-600 dark:text-gray-400">
-                        <span>Mutation: <strong>{exp.mutation_mode === 'STATIC' ? 'Static (ε=0.05)' : 'Adaptive (starts ~5%, scales by Elo)'}</strong></span>
+                        <span>Mutation: <strong>{exp.mutation_mode === 'STATIC' ? 'Static (ε=0.05)' : 'Adaptive (starts ~5%, scales by Fitness)'}</strong></span>
                         <span>Population: <strong>{exp.population_size}</strong></span>
                         <span>Max Generations: <strong>{exp.max_generations}</strong></span>
                         <span>Seed: <strong>{exp.random_seed}</strong></span>
@@ -467,14 +465,14 @@ export default function ExperimentsPage() {
                   </div>
                 </Link>
               ))}
-              
+
               {/* Pagination Controls */}
               <div className="mt-6 flex flex-col items-center gap-4">
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Showing {sortedExperiments.length} experiment{sortedExperiments.length !== 1 ? 's' : ''}
                   {hasMore && ' (more available)'}
                 </p>
-                
+
                 {hasMore && (
                   <button
                     onClick={loadMore}

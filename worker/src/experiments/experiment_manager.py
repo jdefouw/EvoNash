@@ -13,7 +13,7 @@ def get_mutation_mode_from_group(experiment_group: str) -> str:
     Derive mutation_mode from experiment_group.
     This enforces the proper experimental design:
     - CONTROL group uses STATIC mutation (fixed rate ε = 0.05)
-    - EXPERIMENTAL group uses ADAPTIVE mutation (fitness-scaled ε = f(Elo))
+    - EXPERIMENTAL group uses ADAPTIVE mutation (fitness-scaled ε = f(fitness))
     
     Args:
         experiment_group: 'CONTROL' or 'EXPERIMENTAL'
@@ -32,7 +32,7 @@ class ExperimentConfig:
     mutation_mode: str = None  # Derived from experiment_group: CONTROL→STATIC, EXPERIMENTAL→ADAPTIVE
     mutation_rate: Optional[float] = None  # For STATIC mode (default 0.05)
     mutation_base: Optional[float] = None  # For ADAPTIVE mode (default 0.1)
-    max_possible_elo: float = 2000.0
+    max_possible_fitness: float = 2000.0  # Maximum expected fitness for adaptive scaling
     random_seed: int = 42
     population_size: int = 1000
     selection_pressure: float = 0.2
@@ -58,12 +58,12 @@ class ExperimentConfig:
             # Auto-correct to enforce proper pairing
             self.mutation_mode = expected_mode
     
-    def get_mutation_rate(self, parent_elo: float) -> float:
+    def get_mutation_rate(self, parent_fitness: float) -> float:
         """
         Calculate mutation rate based on mode.
         
         Args:
-            parent_elo: Elo rating of the parent agent
+            parent_fitness: Fitness score of the parent agent
             
         Returns:
             Mutation rate to apply
@@ -72,7 +72,7 @@ class ExperimentConfig:
             return self.mutation_rate or 0.05
         elif self.mutation_mode == 'ADAPTIVE':
             base = self.mutation_base or 0.1
-            return base * (1 - parent_elo / self.max_possible_elo)
+            return base * (1 - parent_fitness / self.max_possible_fitness)
         else:
             raise ValueError(f"Unknown mutation mode: {self.mutation_mode}")
 
@@ -131,7 +131,7 @@ class ExperimentManager:
             "mutation_mode": config.mutation_mode,
             "mutation_rate": config.mutation_rate,
             "mutation_base": config.mutation_base,
-            "max_possible_elo": config.max_possible_elo,
+            "max_possible_fitness": config.max_possible_fitness,
             "random_seed": config.random_seed,
             "population_size": config.population_size,
             "selection_pressure": config.selection_pressure,

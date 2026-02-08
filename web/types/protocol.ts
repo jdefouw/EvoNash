@@ -10,7 +10,7 @@ export type ExperimentStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 
  * Derives mutation_mode from experiment_group.
  * This enforces the proper experimental design:
  * - CONTROL group uses STATIC mutation (fixed rate ε = 0.05)
- * - EXPERIMENTAL group uses ADAPTIVE mutation (fitness-scaled ε = f(Elo))
+ * - EXPERIMENTAL group uses ADAPTIVE mutation (fitness-scaled ε = f(fitness))
  */
 export function getMutationModeFromGroup(group: ExperimentGroup): MutationMode {
   return group === 'CONTROL' ? 'STATIC' : 'ADAPTIVE';
@@ -28,7 +28,7 @@ export interface ExperimentConfig {
   mutation_mode: MutationMode;
   mutation_rate?: number;
   mutation_base?: number;
-  max_possible_elo: number;
+  max_possible_fitness: number;
   random_seed: number;
   population_size: number;
   selection_pressure: number;
@@ -56,16 +56,12 @@ export interface Match {
 
 export interface GenerationStats {
   avg_fitness: number;
-  avg_elo: number;
-  peak_elo: number;
+  peak_fitness: number;
   policy_entropy: number;
   entropy_variance: number;
   population_diversity: number;
   mutation_rate: number;
-  min_elo?: number;
-  std_elo?: number;
   min_fitness?: number;
-  max_fitness?: number;
   std_fitness?: number;
 }
 
@@ -108,7 +104,7 @@ export interface Experiment {
   completed_at?: string;
   mutation_rate?: number;
   mutation_base?: number;
-  max_possible_elo: number;
+  max_possible_fitness: number;
   selection_pressure: number;
   network_architecture: NetworkArchitecture;
 }
@@ -120,15 +116,11 @@ export interface Generation {
   created_at: string;
   population_size: number;
   avg_fitness?: number;
-  avg_elo?: number;
-  peak_elo?: number;
-  min_elo?: number;
-  std_elo?: number;
+  peak_fitness?: number;
   policy_entropy?: number;
   entropy_variance?: number;
   population_diversity?: number;
   mutation_rate?: number;
   min_fitness?: number;
-  max_fitness?: number;
   std_fitness?: number;
 }

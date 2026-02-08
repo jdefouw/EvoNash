@@ -9,10 +9,10 @@ interface StatisticalSignificanceProps {
 }
 
 interface AnalysisData {
-  final_avg_elo: number
-  final_peak_elo: number
+  final_avg_fitness: number
+  final_peak_fitness: number
   convergence_generation: number | null
-  avg_elo_trend: number[]
+  avg_fitness_trend: number[]
   entropy_trend: number[]
 }
 
@@ -58,23 +58,23 @@ export default function StatisticalSignificance({ experimentId, mutationMode }: 
   }
 
   // Calculate statistics from trend data
-  const avgEloMean = analysis.avg_elo_trend.length > 0
-    ? analysis.avg_elo_trend.reduce((a, b) => a + b, 0) / analysis.avg_elo_trend.length
+  const avgFitnessMean = analysis.avg_fitness_trend.length > 0
+    ? analysis.avg_fitness_trend.reduce((a, b) => a + b, 0) / analysis.avg_fitness_trend.length
     : 0
-  
-  const avgEloStd = analysis.avg_elo_trend.length > 1
+
+  const avgFitnessStd = analysis.avg_fitness_trend.length > 1
     ? Math.sqrt(
-        analysis.avg_elo_trend.reduce((sum, val) => sum + Math.pow(val - avgEloMean, 2), 0) /
-        (analysis.avg_elo_trend.length - 1)
-      )
+      analysis.avg_fitness_trend.reduce((sum, val) => sum + Math.pow(val - avgFitnessMean, 2), 0) /
+      (analysis.avg_fitness_trend.length - 1)
+    )
     : 0
 
   const chartData = [
     {
       name: 'Final Performance',
-      avgElo: analysis.final_avg_elo || 0,
-      peakElo: analysis.final_peak_elo || 0,
-      stdDev: avgEloStd
+      avgFitness: analysis.final_avg_fitness || 0,
+      peakFitness: analysis.final_peak_fitness || 0,
+      stdDev: avgFitnessStd
     }
   ]
 
@@ -86,44 +86,44 @@ export default function StatisticalSignificance({ experimentId, mutationMode }: 
       <ResponsiveContainer width="100%" height={300}>
         <BarChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-gray-300 dark:stroke-gray-700" />
-          <XAxis 
-            dataKey="name" 
+          <XAxis
+            dataKey="name"
             className="text-gray-600 dark:text-gray-400"
           />
-          <YAxis 
+          <YAxis
             className="text-gray-600 dark:text-gray-400"
-            label={{ value: 'Elo Rating', angle: -90, position: 'insideLeft' }}
+            label={{ value: 'Fitness Score', angle: -90, position: 'insideLeft' }}
           />
-          <Tooltip 
-            contentStyle={{ 
+          <Tooltip
+            contentStyle={{
               backgroundColor: 'rgba(255, 255, 255, 0.95)',
               border: '1px solid #e5e7eb',
               borderRadius: '8px'
             }}
           />
           <Legend />
-          <Bar 
-            dataKey="avgElo" 
-            fill="#3b82f6" 
-            name="Average Elo"
+          <Bar
+            dataKey="avgFitness"
+            fill="#3b82f6"
+            name="Average Fitness"
           >
             <ErrorBar dataKey="stdDev" stroke="#ef4444" strokeWidth={2} />
           </Bar>
-          <Bar 
-            dataKey="peakElo" 
-            fill="#8b5cf6" 
-            name="Peak Elo"
+          <Bar
+            dataKey="peakFitness"
+            fill="#8b5cf6"
+            name="Peak Fitness"
           />
         </BarChart>
       </ResponsiveContainer>
       <div className="mt-4 grid md:grid-cols-3 gap-4 text-sm">
         <div>
-          <span className="text-gray-600 dark:text-gray-400">Final Avg Elo:</span>
-          <span className="ml-2 font-medium">{analysis.final_avg_elo?.toFixed(2) || 'N/A'}</span>
+          <span className="text-gray-600 dark:text-gray-400">Final Avg Fitness:</span>
+          <span className="ml-2 font-medium">{analysis.final_avg_fitness?.toFixed(2) || 'N/A'}</span>
         </div>
         <div>
-          <span className="text-gray-600 dark:text-gray-400">Final Peak Elo:</span>
-          <span className="ml-2 font-medium">{analysis.final_peak_elo?.toFixed(2) || 'N/A'}</span>
+          <span className="text-gray-600 dark:text-gray-400">Final Peak Fitness:</span>
+          <span className="ml-2 font-medium">{analysis.final_peak_fitness?.toFixed(2) || 'N/A'}</span>
         </div>
         <div>
           <span className="text-gray-600 dark:text-gray-400">Convergence Gen (σ &lt; {convergenceThreshold}):</span>

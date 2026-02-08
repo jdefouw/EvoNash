@@ -865,7 +865,7 @@ class WorkerService:
             self.logger.info(f"  Max Generations: {config.max_generations:,}")
             self.logger.info(f"  Random Seed:     {config.random_seed}")
             self.logger.info(f"  Selection Press: {config.selection_pressure}")
-            self.logger.info(f"  Max Possible Elo: {config.max_possible_elo}")
+            self.logger.info(f"  Max Possible Fitness: {config.max_possible_fitness}")
             self.logger.info("=" * 80)
             self.logger.info("🚀 STARTING BATCH ON GPU")
             self.logger.info("=" * 80)

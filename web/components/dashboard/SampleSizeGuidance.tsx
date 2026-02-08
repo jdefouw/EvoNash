@@ -25,23 +25,23 @@ interface SampleSizeGuidanceProps {
 // rigorous approach.
 // =============================================================================
 const POWER_THRESHOLDS = [
-  { 
-    level: 'minimum', 
-    powerRange: '40-59%', 
-    label: 'Minimum', 
-    description: 'Low power - may miss real effects (Type II error risk)' 
+  {
+    level: 'minimum',
+    powerRange: '40-59%',
+    label: 'Minimum',
+    description: 'Low power - may miss real effects (Type II error risk)'
   },
-  { 
-    level: 'recommended', 
-    powerRange: '60-79%', 
-    label: 'Moderate', 
-    description: 'Moderate power - can detect large effects reliably' 
+  {
+    level: 'recommended',
+    powerRange: '60-79%',
+    label: 'Moderate',
+    description: 'Moderate power - can detect large effects reliably'
   },
-  { 
-    level: 'robust', 
-    powerRange: '≥80%', 
-    label: 'Adequate', 
-    description: 'Standard threshold for publication-quality research (Cohen, 1988)' 
+  {
+    level: 'robust',
+    powerRange: '≥80%',
+    label: 'Adequate',
+    description: 'Standard threshold for publication-quality research (Cohen, 1988)'
   },
 ] as const
 
@@ -148,7 +148,7 @@ export default function SampleSizeGuidance({
 
     // We have actual power - show progress toward 80%
     const progress = Math.min(100, Math.round((achievedPower / 0.80) * 100))
-    
+
     if (achievedPower >= 0.80) {
       return {
         progress: 100,
@@ -217,7 +217,7 @@ export default function SampleSizeGuidance({
           </div>
           <div className="text-sm font-medium text-gray-700 dark:text-gray-300">Experimental Group</div>
           <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-            Adaptive Mutation (starts ~5%, scales by Elo)
+            Adaptive Mutation (starts ~5%, scales by Fitness)
           </div>
           <div className="text-xs text-gray-400 dark:text-gray-600 mt-1">
             {experimentalAvgGenerations.toLocaleString()} avg generations
@@ -236,7 +236,7 @@ export default function SampleSizeGuidance({
           </span>
         </div>
         <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-          <div 
+          <div
             className={`h-full ${getLevelColor(statisticalPowerLevel)} transition-all duration-500`}
             style={{ width: `${progressInfo.progress}%` }}
           />
@@ -295,20 +295,20 @@ export default function SampleSizeGuidance({
           Understanding Statistical Power
         </div>
         <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-          <strong>Statistical power</strong> is the probability of correctly detecting a true effect when one exists. 
+          <strong>Statistical power</strong> is the probability of correctly detecting a true effect when one exists.
           The <strong>80% threshold</strong> (Cohen, 1988) is the standard for publication-quality research.
         </p>
         <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-          Power depends on: <strong>(1) sample size</strong> (number of independent experiments), 
-          <strong>(2) effect size</strong> (how different the groups are), and <strong>(3) data variance</strong>. 
+          Power depends on: <strong>(1) sample size</strong> (number of independent experiments),
+          <strong>(2) effect size</strong> (how different the groups are), and <strong>(3) data variance</strong>.
           The power shown above is calculated from your actual observed effect size, not arbitrary thresholds.
         </p>
         <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-          <strong>Type II Error Risk:</strong> With power below 80%, you have a significant chance of failing to detect 
+          <strong>Type II Error Risk:</strong> With power below 80%, you have a significant chance of failing to detect
           a real effect (false negative). For example, 60% power means a 40% chance of missing a true difference.
         </p>
         <p className="text-xs text-gray-600 dark:text-gray-400">
-          <strong>Note:</strong> Each experiment provides one independent data point for the statistical test. 
+          <strong>Note:</strong> Each experiment provides one independent data point for the statistical test.
           Running experiments longer doesn&apos;t increase power—running more independent experiments with different random seeds does.
         </p>
       </div>

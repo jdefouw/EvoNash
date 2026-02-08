@@ -8,7 +8,7 @@ interface Agent {
   energy: number
   vx: number
   vy: number
-  elo: number
+  fitness: number
 }
 
 interface Food {
@@ -53,7 +53,7 @@ export default function PetriDishViewer({
             />
           </g>
         ))}
-        
+
         {/* Agents */}
         {agents.map((agent) => (
           <g key={agent.id}>

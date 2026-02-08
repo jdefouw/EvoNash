@@ -20,7 +20,7 @@ import WorkerList from '@/components/WorkerList'
 export default function ExperimentDetailPage() {
   const params = useParams()
   const experimentId = params.id as string
-  
+
   const [experiment, setExperiment] = useState<Experiment | null>(null)
   const [generations, setGenerations] = useState<Generation[]>([])
   const [latestGeneration, setLatestGeneration] = useState<Generation | null>(null)
@@ -29,7 +29,7 @@ export default function ExperimentDetailPage() {
   const [loading, setLoading] = useState(true)
   const [pollingError, setPollingError] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
-  const [workerStatus, setWorkerStatus] = useState<{connected: boolean, pending_count: number} | null>(null)
+  const [workerStatus, setWorkerStatus] = useState<{ connected: boolean, pending_count: number } | null>(null)
   const [batches, setBatches] = useState<any[]>([])
   const [processingWorker, setProcessingWorker] = useState<{
     id: string
@@ -37,7 +37,7 @@ export default function ExperimentDetailPage() {
     gpu_type: string | null
     vram_gb: number
   } | null>(null)
-  
+
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const lastGenerationNumberRef = useRef<number>(-1)
   const lastPollTimeRef = useRef<string | null>(null)
@@ -62,7 +62,7 @@ export default function ExperimentDetailPage() {
       }
 
       const data = await response.json()
-      
+
       // Update experiment status if changed - use functional update to avoid stale closure
       if (data.experiment_status) {
         setExperiment(prev => {
@@ -98,8 +98,8 @@ export default function ExperimentDetailPage() {
       // Update matches
       if (data.matches && data.matches.length > 0) {
         setMatches(prev => {
-          const newMatches = data.matches.filter((m: Match) => 
-            !prev.some(existing => existing.agent_a_id === m.agent_a_id && 
+          const newMatches = data.matches.filter((m: Match) =>
+            !prev.some(existing => existing.agent_a_id === m.agent_a_id &&
               existing.agent_b_id === m.agent_b_id &&
               Math.abs(new Date(existing.created_at || '').getTime() - new Date(m.created_at || '').getTime()) < 1000)
           )
@@ -114,7 +114,7 @@ export default function ExperimentDetailPage() {
       console.error('Polling error:', error)
       setPollingError('Failed to fetch live data')
       setRetryCount(prev => prev + 1)
-      
+
       // Exponential backoff: stop polling after 5 retries
       if (retryCount >= 5) {
         if (pollingIntervalRef.current) {
@@ -194,7 +194,7 @@ export default function ExperimentDetailPage() {
         console.error('Error fetching worker status:', err)
         // Don't block on this error
       })
-    
+
     // Fetch batch assignments and worker info (non-blocking, handles missing tables gracefully)
     const fetchBatches = async () => {
       try {
@@ -203,12 +203,12 @@ export default function ExperimentDetailPage() {
         const batchData = batchRes.ok ? await batchRes.json() : { batches: [] }
         const batchList = batchData.batches || []
         setBatches(batchList)
-        
+
         // Find the active batch (assigned or processing) and extract worker info
-        const activeBatch = batchList.find((b: any) => 
+        const activeBatch = batchList.find((b: any) =>
           b.status === 'assigned' || b.status === 'processing'
         )
-        
+
         if (activeBatch) {
           // Try to get worker info from the batch join first
           if (activeBatch.workers) {
@@ -271,9 +271,9 @@ export default function ExperimentDetailPage() {
         setProcessingWorker(null)
       }
     }
-    
+
     fetchBatches()
-    
+
     // Refresh batches every 10 seconds
     batchesInterval = setInterval(fetchBatches, 10000)
 
@@ -297,7 +297,7 @@ export default function ExperimentDetailPage() {
         console.error('Error fetching generations:', err)
         // Don't block on this error
       })
-    
+
     return () => {
       if (batchesInterval) clearInterval(batchesInterval)
       if (timeoutId) clearTimeout(timeoutId)
@@ -329,7 +329,7 @@ export default function ExperimentDetailPage() {
   // NOTE: Only depends on experiment?.status to avoid re-running on every state change
   useEffect(() => {
     const status = experiment?.status
-    
+
     if (!status || (status !== 'RUNNING' && status !== 'PENDING')) {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current)
@@ -342,7 +342,7 @@ export default function ExperimentDetailPage() {
     const pollInterval = status === 'RUNNING' ? 3000 : 5000
     console.log(`[Experiment] Starting polling with interval: ${pollInterval}ms for status: ${status}`)
     pollingIntervalRef.current = setInterval(pollLiveData, pollInterval)
-    
+
     // Initial poll
     pollLiveData()
 
@@ -392,7 +392,7 @@ export default function ExperimentDetailPage() {
     energy: 50 + Math.random() * 50,
     vx: (Math.random() - 0.5) * 2,
     vy: (Math.random() - 0.5) * 2,
-    elo: (latestGeneration.avg_elo || 1500) + (Math.random() - 0.5) * 200
+    fitness: (latestGeneration.avg_fitness || 1500) + (Math.random() - 0.5) * 200
   })) : []
 
   const sampleFood = Array.from({ length: 30 }, () => ({
@@ -407,14 +407,14 @@ export default function ExperimentDetailPage() {
         {/* Header */}
         <div className="mb-6">
           <div className="flex items-center gap-2 text-sm mb-4">
-            <Link 
+            <Link
               href="/"
               className="text-blue-600 dark:text-blue-400 hover:underline transition-colors"
             >
               Experiment
             </Link>
             <span className="text-gray-400">/</span>
-            <Link 
+            <Link
               href="/experiments"
               className="text-blue-600 dark:text-blue-400 hover:underline transition-colors"
             >
@@ -565,7 +565,7 @@ export default function ExperimentDetailPage() {
                   const warningMessage = experiment.status === 'RUNNING'
                     ? `WARNING: This experiment is currently running!\n\nAre you sure you want to delete "${experiment.experiment_name}"?\n\nThis will permanently delete all generations, matches, and analysis data. This action cannot be undone.`
                     : `Are you sure you want to delete "${experiment.experiment_name}"?\n\nThis will permanently delete all generations, matches, and analysis data. This action cannot be undone.`
-                  
+
                   if (!confirm(warningMessage)) {
                     return
                   }
@@ -613,7 +613,7 @@ export default function ExperimentDetailPage() {
             </div>
           </div>
         )}
-        
+
         {pollingError && retryCount >= 5 && (
           <div className="mb-4 p-4 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 rounded-lg animate-fade-in">
             <div className="flex items-center gap-2">
@@ -669,16 +669,16 @@ export default function ExperimentDetailPage() {
           {/* Right: Metrics Panel */}
           <div className="space-y-4">
             <LiveMetrics generation={latestGeneration} />
-            <GenerationProgress 
-              experiment={experiment} 
+            <GenerationProgress
+              experiment={experiment}
               currentGeneration={latestGeneration}
               generations={generations}
             />
             <LiveViewLegend />
-            
+
             {/* All Workers */}
             <WorkerList compact={true} />
-            
+
             {/* Worker Status Card */}
             {experiment.status === 'PENDING' && (
               <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
@@ -693,7 +693,7 @@ export default function ExperimentDetailPage() {
                 </p>
               </div>
             )}
-            
+
             {experiment.status === 'RUNNING' && latestGeneration && (
               <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
                 <div className="flex items-center gap-2">
@@ -707,7 +707,7 @@ export default function ExperimentDetailPage() {
                 </p>
               </div>
             )}
-            
+
             {experiment.status === 'RUNNING' && !latestGeneration && (
               <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
                 <div className="flex items-center gap-2">
@@ -721,7 +721,7 @@ export default function ExperimentDetailPage() {
                 </p>
               </div>
             )}
-            
+
             {/* Batch Assignments */}
             {experiment.status === 'RUNNING' && batches.length > 0 && (
               <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -740,7 +740,7 @@ export default function ExperimentDetailPage() {
                         default: return 'bg-gray-500'
                       }
                     }
-                    
+
                     return (
                       <div
                         key={batch.id}
@@ -768,7 +768,7 @@ export default function ExperimentDetailPage() {
                 </div>
               </div>
             )}
-            
+
             {/* Configuration Card */}
             <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
               <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Configuration</h2>
@@ -808,7 +808,7 @@ export default function ExperimentDetailPage() {
                 {experiment.mutation_mode === 'ADAPTIVE' && experiment.mutation_base && (
                   <div>
                     <span className="text-gray-600 dark:text-gray-400">Mutation Base:</span>
-                    <Tooltip content="Base rate for adaptive mutation. Default 0.0615 is calibrated so effective rate starts at ~5% (same as static) at initial Elo, ensuring fair comparison. Rate then scales by fitness.">
+                    <Tooltip content="Base rate for adaptive mutation. Default 0.0615 is calibrated so effective rate starts at ~5% (same as static) at initial fitness, ensuring fair comparison. Rate then scales by fitness.">
                       <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{experiment.mutation_base}</span>
                     </Tooltip>
                   </div>
@@ -846,13 +846,13 @@ export default function ExperimentDetailPage() {
         {/* Charts Section */}
         {generations.length > 0 && (
           <div className="space-y-6">
-            <ExperimentChart 
-              generations={generations} 
-              experiment={experiment} 
+            <ExperimentChart
+              generations={generations}
+              experiment={experiment}
               isLive={experiment.status === 'RUNNING'}
             />
-            <EntropyChart 
-              generations={generations} 
+            <EntropyChart
+              generations={generations}
               experiment={experiment}
               isLive={experiment.status === 'RUNNING'}
             />

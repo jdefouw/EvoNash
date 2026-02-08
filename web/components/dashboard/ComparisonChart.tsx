@@ -8,7 +8,7 @@ import { Generation } from '@/types/protocol'
 interface ComparisonChartProps {
   controlGenerations: Generation[]
   experimentalGenerations: Generation[]
-  metric: 'elo' | 'entropy'
+  metric: 'fitness' | 'entropy'
   title?: string
   showConvergenceMarker?: boolean
   controlConvergenceGen?: number | null
@@ -41,7 +41,7 @@ export default function ComparisonChart({
   }
 
   // Aggregate by (generation_number, experiment_id): one value per experiment per generation so control/experimental cannot share data
-  type GenBucket = { avgElo: number[]; peakElo: number[]; entropy: number[]; variance: number[] }
+  type GenBucket = { avgFitness: number[]; peakFitness: number[]; entropy: number[]; variance: number[] }
   const controlByGen = new Map<number, GenBucket>()
   const experimentalByGen = new Map<number, GenBucket>()
   const seenControl = new Map<number, Set<string>>() // gen -> Set(experiment_id)
@@ -52,10 +52,10 @@ export default function ComparisonChart({
     if (!seenControl.has(i)) seenControl.set(i, new Set())
     if (seenControl.get(i)!.has(g.experiment_id)) continue // skip duplicate (same experiment, same gen)
     seenControl.get(i)!.add(g.experiment_id)
-    if (!controlByGen.has(i)) controlByGen.set(i, { avgElo: [], peakElo: [], entropy: [], variance: [] })
+    if (!controlByGen.has(i)) controlByGen.set(i, { avgFitness: [], peakFitness: [], entropy: [], variance: [] })
     const b = controlByGen.get(i)!
-    if (g.avg_elo != null) b.avgElo.push(g.avg_elo)
-    if (g.peak_elo != null) b.peakElo.push(g.peak_elo)
+    if (g.avg_fitness != null) b.avgFitness.push(g.avg_fitness)
+    if (g.peak_fitness != null) b.peakFitness.push(g.peak_fitness)
     if (g.policy_entropy != null) b.entropy.push(g.policy_entropy)
     if (g.entropy_variance != null) b.variance.push(g.entropy_variance)
   }
@@ -64,10 +64,10 @@ export default function ComparisonChart({
     if (!seenExperimental.has(i)) seenExperimental.set(i, new Set())
     if (seenExperimental.get(i)!.has(g.experiment_id)) continue
     seenExperimental.get(i)!.add(g.experiment_id)
-    if (!experimentalByGen.has(i)) experimentalByGen.set(i, { avgElo: [], peakElo: [], entropy: [], variance: [] })
+    if (!experimentalByGen.has(i)) experimentalByGen.set(i, { avgFitness: [], peakFitness: [], entropy: [], variance: [] })
     const b = experimentalByGen.get(i)!
-    if (g.avg_elo != null) b.avgElo.push(g.avg_elo)
-    if (g.peak_elo != null) b.peakElo.push(g.peak_elo)
+    if (g.avg_fitness != null) b.avgFitness.push(g.avg_fitness)
+    if (g.peak_fitness != null) b.peakFitness.push(g.peak_fitness)
     if (g.policy_entropy != null) b.entropy.push(g.policy_entropy)
     if (g.entropy_variance != null) b.variance.push(g.entropy_variance)
   }
@@ -77,13 +77,13 @@ export default function ComparisonChart({
   const overlayData = Array.from({ length: maxGen + 1 }, (_, i) => {
     const c = controlByGen.get(i)
     const e = experimentalByGen.get(i)
-    if (metric === 'elo') {
+    if (metric === 'fitness') {
       return {
         generation: i,
-        controlAvgElo: c ? mean(c.avgElo) : null,
-        controlPeakElo: c ? mean(c.peakElo) : null,
-        experimentalAvgElo: e ? mean(e.avgElo) : null,
-        experimentalPeakElo: e ? mean(e.peakElo) : null,
+        controlAvgFitness: c ? mean(c.avgFitness) : null,
+        controlPeakFitness: c ? mean(c.peakFitness) : null,
+        experimentalAvgFitness: e ? mean(e.avgFitness) : null,
+        experimentalPeakFitness: e ? mean(e.peakFitness) : null,
       }
     } else {
       return {
@@ -95,13 +95,13 @@ export default function ComparisonChart({
       }
     }
   }).filter(d =>
-    (metric === 'elo' && (d.controlAvgElo !== null || d.experimentalAvgElo !== null)) ||
+    (metric === 'fitness' && (d.controlAvgFitness !== null || d.experimentalAvgFitness !== null)) ||
     (metric === 'entropy' && (d.controlEntropy !== null || d.experimentalEntropy !== null))
   )
 
-  const chartTitle = title || (metric === 'elo' ? 'Convergence Velocity: Elo Rating Comparison' : 'Entropy Collapse: Policy Entropy Comparison')
+  const chartTitle = title || (metric === 'fitness' ? 'Convergence Velocity: Fitness Score Comparison' : 'Entropy Collapse: Policy Entropy Comparison')
 
-  // Custom tooltip: show generation and values explicitly from DB (generations.avg_elo at this generation)
+  // Custom tooltip: show generation and values explicitly from DB (generations.avg_fitness at this generation)
   const renderTooltipContent = (props: TooltipProps<number, string>) => {
     const { active, payload, label } = props
     if (!active || !payload?.length) return null
@@ -115,12 +115,12 @@ export default function ComparisonChart({
           Generation: {gen}
         </div>
         <div className="space-y-1 text-gray-700 dark:text-gray-300">
-          {metric === 'elo' ? (
+          {metric === 'fitness' ? (
             <>
-              <div>Control Avg Elo: {(p.controlAvgElo as number) != null ? Number(p.controlAvgElo).toFixed(4) : '—'}</div>
-              <div>Experimental Avg Elo: {(p.experimentalAvgElo as number) != null ? Number(p.experimentalAvgElo).toFixed(4) : '—'}</div>
-              <div>Control Peak Elo: {(p.controlPeakElo as number) != null ? Number(p.controlPeakElo).toFixed(4) : '—'}</div>
-              <div>Experimental Peak Elo: {(p.experimentalPeakElo as number) != null ? Number(p.experimentalPeakElo).toFixed(4) : '—'}</div>
+              <div>Control Avg Fitness: {(p.controlAvgFitness as number) != null ? Number(p.controlAvgFitness).toFixed(2) : '—'}</div>
+              <div>Experimental Avg Fitness: {(p.experimentalAvgFitness as number) != null ? Number(p.experimentalAvgFitness).toFixed(2) : '—'}</div>
+              <div>Control Peak Fitness: {(p.controlPeakFitness as number) != null ? Number(p.controlPeakFitness).toFixed(2) : '—'}</div>
+              <div>Experimental Peak Fitness: {(p.experimentalPeakFitness as number) != null ? Number(p.experimentalPeakFitness).toFixed(2) : '—'}</div>
             </>
           ) : (
             <>
@@ -142,21 +142,21 @@ export default function ComparisonChart({
     <ResponsiveContainer width="100%" height={400}>
       <LineChart data={overlayData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-gray-300 dark:stroke-gray-700" />
-        <XAxis 
-          dataKey="generation" 
+        <XAxis
+          dataKey="generation"
           label={{ value: 'Generation', position: 'insideBottom', offset: -10 }}
           className="text-gray-600 dark:text-gray-400"
         />
-        <YAxis 
-          label={{ 
-            value: metric === 'elo' ? 'Elo Rating' : 'Policy Entropy', 
-            angle: -90, 
-            position: 'insideLeft' 
+        <YAxis
+          label={{
+            value: metric === 'fitness' ? 'Fitness Score' : 'Policy Entropy',
+            angle: -90,
+            position: 'insideLeft'
           }}
           className="text-gray-600 dark:text-gray-400"
         />
-        <Tooltip 
-          contentStyle={{ 
+        <Tooltip
+          contentStyle={{
             backgroundColor: 'rgba(255, 255, 255, 0.95)',
             border: '1px solid #e5e7eb',
             borderRadius: '8px'
@@ -164,100 +164,100 @@ export default function ComparisonChart({
           content={renderTooltipContent}
         />
         <Legend />
-        
+
         {/* Convergence reference lines */}
         {showConvergenceMarker && controlConvergenceGen && (
-          <ReferenceLine 
-            x={controlConvergenceGen} 
-            stroke="#3b82f6" 
+          <ReferenceLine
+            x={controlConvergenceGen}
+            stroke="#3b82f6"
             strokeDasharray="5 5"
             label={{ value: `Control Conv.`, position: 'top', fill: '#3b82f6', fontSize: 10 }}
           />
         )}
         {showConvergenceMarker && experimentalConvergenceGen && (
-          <ReferenceLine 
-            x={experimentalConvergenceGen} 
-            stroke="#8b5cf6" 
+          <ReferenceLine
+            x={experimentalConvergenceGen}
+            stroke="#8b5cf6"
             strokeDasharray="5 5"
             label={{ value: `Exp. Conv.`, position: 'top', fill: '#8b5cf6', fontSize: 10 }}
           />
         )}
 
-        {metric === 'elo' ? (
+        {metric === 'fitness' ? (
           <>
-            <Line 
-              type="monotone" 
-              dataKey="controlAvgElo" 
-              stroke="#3b82f6" 
+            <Line
+              type="monotone"
+              dataKey="controlAvgFitness"
+              stroke="#3b82f6"
               strokeWidth={2}
-              name="Control Avg Elo"
+              name="Control Avg Fitness"
               dot={false}
               connectNulls
             />
-            <Line 
-              type="monotone" 
-              dataKey="experimentalAvgElo" 
-              stroke="#8b5cf6" 
+            <Line
+              type="monotone"
+              dataKey="experimentalAvgFitness"
+              stroke="#8b5cf6"
               strokeWidth={2}
-              name="Experimental Avg Elo"
+              name="Experimental Avg Fitness"
               dot={false}
               connectNulls
             />
-            <Line 
-              type="monotone" 
-              dataKey="controlPeakElo" 
-              stroke="#93c5fd" 
+            <Line
+              type="monotone"
+              dataKey="controlPeakFitness"
+              stroke="#93c5fd"
               strokeWidth={1}
               strokeDasharray="3 3"
-              name="Control Peak Elo"
+              name="Control Peak Fitness"
               dot={false}
               connectNulls
             />
-            <Line 
-              type="monotone" 
-              dataKey="experimentalPeakElo" 
-              stroke="#c4b5fd" 
+            <Line
+              type="monotone"
+              dataKey="experimentalPeakFitness"
+              stroke="#c4b5fd"
               strokeWidth={1}
               strokeDasharray="3 3"
-              name="Experimental Peak Elo"
+              name="Experimental Peak Fitness"
               dot={false}
               connectNulls
             />
           </>
         ) : (
           <>
-            <Line 
-              type="monotone" 
-              dataKey="controlEntropy" 
-              stroke="#3b82f6" 
+            <Line
+              type="monotone"
+              dataKey="controlEntropy"
+              stroke="#3b82f6"
               strokeWidth={2}
               name="Control Entropy"
               dot={false}
               connectNulls
             />
-            <Line 
-              type="monotone" 
-              dataKey="experimentalEntropy" 
-              stroke="#8b5cf6" 
+            <Line
+              type="monotone"
+              dataKey="experimentalEntropy"
+              stroke="#8b5cf6"
               strokeWidth={2}
               name="Experimental Entropy"
               dot={false}
               connectNulls
             />
-            <Line 
-              type="monotone" 
-              dataKey="controlVariance" 
-              stroke="#93c5fd" 
+            <Line
+              type="monotone"
+              dataKey="controlVariance"
+              stroke="#93c5fd"
               strokeWidth={1}
               strokeDasharray="3 3"
               name="Control Variance"
               dot={false}
               connectNulls
             />
-            <Line 
-              type="monotone" 
-              dataKey="experimentalVariance" 
-              stroke="#c4b5fd" 
+            <Line
+              type="monotone"
+              dataKey="experimentalVariance"
+              stroke="#c4b5fd"
               strokeWidth={1}
               strokeDasharray="3 3"
               name="Experimental Variance"
@@ -265,10 +265,10 @@ export default function ComparisonChart({
               connectNulls
             />
             {/* Nash Equilibrium threshold line - same for both groups */}
-            <ReferenceLine 
-              y={0.01} 
-              stroke="#ef4444" 
-              strokeDasharray="5 5" 
+            <ReferenceLine
+              y={0.01}
+              stroke="#ef4444"
+              strokeDasharray="5 5"
               label={{ value: "Convergence Threshold (σ < 0.01)", position: "right", fontSize: 9 }}
             />
           </>
@@ -280,19 +280,19 @@ export default function ComparisonChart({
   const renderSideBySideCharts = () => {
     const controlData = controlGenerations.map(g => ({
       generation: g.generation_number,
-      avgValue: metric === 'elo' ? g.avg_elo : g.policy_entropy,
-      peakValue: metric === 'elo' ? g.peak_elo : g.entropy_variance,
+      avgValue: metric === 'fitness' ? g.avg_fitness : g.policy_entropy,
+      peakValue: metric === 'fitness' ? g.peak_fitness : g.entropy_variance,
     }))
 
     const expData = experimentalGenerations.map(g => ({
       generation: g.generation_number,
-      avgValue: metric === 'elo' ? g.avg_elo : g.policy_entropy,
-      peakValue: metric === 'elo' ? g.peak_elo : g.entropy_variance,
+      avgValue: metric === 'fitness' ? g.avg_fitness : g.policy_entropy,
+      peakValue: metric === 'fitness' ? g.peak_fitness : g.entropy_variance,
     }))
 
-    const yLabel = metric === 'elo' ? 'Elo Rating' : 'Entropy'
-    const avgLabel = metric === 'elo' ? 'Avg Elo' : 'Entropy'
-    const peakLabel = metric === 'elo' ? 'Peak Elo' : 'Variance'
+    const yLabel = metric === 'fitness' ? 'Fitness Score' : 'Entropy'
+    const avgLabel = metric === 'fitness' ? 'Avg Fitness' : 'Entropy'
+    const peakLabel = metric === 'fitness' ? 'Peak Fitness' : 'Variance'
 
     return (
       <div className="grid md:grid-cols-2 gap-4">
@@ -363,21 +363,19 @@ export default function ComparisonChart({
           <div className="flex gap-2">
             <button
               onClick={() => setViewMode('overlay')}
-              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                viewMode === 'overlay'
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-              }`}
+              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${viewMode === 'overlay'
+                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
             >
               Overlay
             </button>
             <button
               onClick={() => setViewMode('side-by-side')}
-              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                viewMode === 'side-by-side'
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-              }`}
+              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${viewMode === 'side-by-side'
+                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
             >
               Side by Side
             </button>

@@ -10,7 +10,7 @@ interface ExperimentDataTableProps {
   experimentalGenerations: Generation[]
 }
 
-type SortField = 'generation' | 'avg_elo' | 'peak_elo' | 'entropy' | 'variance' | 'diversity'
+type SortField = 'generation' | 'avg_fitness' | 'peak_fitness' | 'entropy' | 'variance' | 'diversity'
 type SortDirection = 'asc' | 'desc'
 type FilterGroup = 'all' | 'control' | 'experimental'
 
@@ -18,10 +18,10 @@ interface TableRow {
   group: 'control' | 'experimental'
   experimentName: string
   generation: number
-  avg_elo: number | null
-  peak_elo: number | null
-  min_elo: number | null
-  std_elo: number | null
+  avg_fitness: number | null
+  peak_fitness: number | null
+  min_fitness: number | null
+  std_fitness: number | null
   entropy: number | null
   variance: number | null
   diversity: number | null
@@ -51,10 +51,10 @@ export default function ExperimentDataTable({
         group: 'control',
         experimentName: exp?.experiment_name || 'Control',
         generation: gen.generation_number,
-        avg_elo: gen.avg_elo ?? null,
-        peak_elo: gen.peak_elo ?? null,
-        min_elo: gen.min_elo ?? null,
-        std_elo: gen.std_elo ?? null,
+        avg_fitness: gen.avg_fitness ?? null,
+        peak_fitness: gen.peak_fitness ?? null,
+        min_fitness: gen.min_fitness ?? null,
+        std_fitness: gen.std_fitness ?? null,
         entropy: gen.policy_entropy ?? null,
         variance: gen.entropy_variance ?? null,
         diversity: gen.population_diversity ?? null,
@@ -69,10 +69,10 @@ export default function ExperimentDataTable({
         group: 'experimental',
         experimentName: exp?.experiment_name || 'Experimental',
         generation: gen.generation_number,
-        avg_elo: gen.avg_elo ?? null,
-        peak_elo: gen.peak_elo ?? null,
-        min_elo: gen.min_elo ?? null,
-        std_elo: gen.std_elo ?? null,
+        avg_fitness: gen.avg_fitness ?? null,
+        peak_fitness: gen.peak_fitness ?? null,
+        min_fitness: gen.min_fitness ?? null,
+        std_fitness: gen.std_fitness ?? null,
         entropy: gen.policy_entropy ?? null,
         variance: gen.entropy_variance ?? null,
         diversity: gen.population_diversity ?? null,
@@ -101,7 +101,7 @@ export default function ExperimentDataTable({
       const aNum = aVal ?? -Infinity
       const bNum = bVal ?? -Infinity
 
-      return sortDirection === 'asc' 
+      return sortDirection === 'asc'
         ? aNum - bNum
         : bNum - aNum
     })
@@ -126,17 +126,17 @@ export default function ExperimentDataTable({
   }
 
   const exportToCSV = () => {
-    const headers = ['Group', 'Experiment', 'Generation', 'Avg Elo', 'Peak Elo', 'Min Elo', 'Std Elo', 'Entropy', 'Variance', 'Diversity', 'Mutation Rate']
+    const headers = ['Group', 'Experiment', 'Generation', 'Avg Fitness', 'Peak Fitness', 'Min Fitness', 'Std Fitness', 'Entropy', 'Variance', 'Diversity', 'Mutation Rate']
     const csvContent = [
       headers.join(','),
       ...filteredAndSortedData.map(row => [
         row.group,
         `"${row.experimentName}"`,
         row.generation,
-        row.avg_elo?.toFixed(4) ?? '',
-        row.peak_elo?.toFixed(4) ?? '',
-        row.min_elo?.toFixed(4) ?? '',
-        row.std_elo?.toFixed(4) ?? '',
+        row.avg_fitness?.toFixed(4) ?? '',
+        row.peak_fitness?.toFixed(4) ?? '',
+        row.min_fitness?.toFixed(4) ?? '',
+        row.std_fitness?.toFixed(4) ?? '',
         row.entropy?.toFixed(6) ?? '',
         row.variance?.toFixed(6) ?? '',
         row.diversity?.toFixed(6) ?? '',
@@ -179,7 +179,7 @@ export default function ExperimentDataTable({
               Raw generation data from all experiments ({filteredAndSortedData.length} records)
             </p>
           </div>
-          
+
           <div className="flex flex-wrap gap-3">
             {/* Filter Buttons */}
             <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
@@ -187,11 +187,10 @@ export default function ExperimentDataTable({
                 <button
                   key={group}
                   onClick={() => { setFilterGroup(group); setCurrentPage(1); }}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                    filterGroup === group
-                      ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                  }`}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${filterGroup === group
+                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
                 >
                   {group === 'all' ? 'All' : group === 'control' ? 'Control' : 'Experimental'}
                 </button>
@@ -219,7 +218,7 @@ export default function ExperimentDataTable({
                 <th className="text-left py-3 px-2 font-semibold text-gray-900 dark:text-white">
                   Group
                 </th>
-                <th 
+                <th
                   className="text-left py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
                   onClick={() => handleSort('generation')}
                 >
@@ -227,23 +226,23 @@ export default function ExperimentDataTable({
                     Gen <SortIcon field="generation" />
                   </div>
                 </th>
-                <th 
+                <th
                   className="text-right py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
-                  onClick={() => handleSort('avg_elo')}
+                  onClick={() => handleSort('avg_fitness')}
                 >
                   <div className="flex items-center justify-end gap-1">
-                    Avg Elo <SortIcon field="avg_elo" />
+                    Avg Fitness <SortIcon field="avg_fitness" />
                   </div>
                 </th>
-                <th 
+                <th
                   className="text-right py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
-                  onClick={() => handleSort('peak_elo')}
+                  onClick={() => handleSort('peak_fitness')}
                 >
                   <div className="flex items-center justify-end gap-1">
-                    Peak Elo <SortIcon field="peak_elo" />
+                    Peak Fitness <SortIcon field="peak_fitness" />
                   </div>
                 </th>
-                <th 
+                <th
                   className="text-right py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
                   onClick={() => handleSort('entropy')}
                 >
@@ -251,7 +250,7 @@ export default function ExperimentDataTable({
                     Entropy <SortIcon field="entropy" />
                   </div>
                 </th>
-                <th 
+                <th
                   className="text-right py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
                   onClick={() => handleSort('variance')}
                 >
@@ -259,7 +258,7 @@ export default function ExperimentDataTable({
                     Variance <SortIcon field="variance" />
                   </div>
                 </th>
-                <th 
+                <th
                   className="text-right py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
                   onClick={() => handleSort('diversity')}
                 >
@@ -275,18 +274,16 @@ export default function ExperimentDataTable({
             <tbody>
               {paginatedData.length > 0 ? (
                 paginatedData.map((row, idx) => (
-                  <tr 
+                  <tr
                     key={`${row.group}-${row.generation}-${idx}`}
-                    className={`border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
-                      idx % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50/50 dark:bg-gray-800/50'
-                    }`}
+                    className={`border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${idx % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50/50 dark:bg-gray-800/50'
+                      }`}
                   >
                     <td className="py-2 px-2">
-                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                        row.group === 'control'
-                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-                          : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
-                      }`}>
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${row.group === 'control'
+                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                        : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
+                        }`}>
                         {row.group === 'control' ? 'CTRL' : 'EXP'}
                       </span>
                     </td>
@@ -294,10 +291,10 @@ export default function ExperimentDataTable({
                       {row.generation}
                     </td>
                     <td className="py-2 px-2 text-right font-mono text-gray-700 dark:text-gray-300">
-                      {formatNumber(row.avg_elo)}
+                      {formatNumber(row.avg_fitness)}
                     </td>
                     <td className="py-2 px-2 text-right font-mono text-gray-700 dark:text-gray-300">
-                      {formatNumber(row.peak_elo)}
+                      {formatNumber(row.peak_fitness)}
                     </td>
                     <td className="py-2 px-2 text-right font-mono text-gray-700 dark:text-gray-300">
                       {formatNumber(row.entropy, 4)}

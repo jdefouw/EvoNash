@@ -157,15 +157,15 @@ export default function OverviewPage() {
                 groups except one thing: <strong>how much we mutate</strong> the offspring. In the
                 <strong> control group</strong>, we always add the same small random amount of
                 change to the brain weights (static mutation). In the <strong>experimental
-                group</strong>, we add more change when the parent had a low rating (Elo) and less
-                change when the parent had a high rating (adaptive mutation). For each group we:
+                  group</strong>, we add more change when the parent had a low fitness score and less
+                change when the parent had a high fitness score (adaptive mutation). For each group we:
               </p>
               <ul className="list-disc pl-6 space-y-2 mt-2">
                 <li>Start with 1,000 random neural-network &quot;brains&quot; in the same petri dish world.</li>
                 <li>Let them live for many &quot;ticks&quot; (moments)—moving, eating food, and sometimes shooting each other—and track who has the most energy.</li>
-                <li>At the end of each generation, we pick the top 20% by rating (Elo), copy their brains to create offspring, and mutate those copies (more or less depending on the group).</li>
+                <li>At the end of each generation, we pick the top 20% by fitness score, copy their brains to create offspring, and mutate those copies (more or less depending on the group).</li>
                 <li>We repeat for many generations until the population&apos;s behavior <strong>stabilizes</strong>—meaning the mix of strategies stops changing much (we call that reaching Nash equilibrium).</li>
-                <li>We record <strong>when</strong> that happened (which generation) and <strong>how well</strong> the population did (peak rating).</li>
+                <li>We record <strong>when</strong> that happened (which generation) and <strong>how well</strong> the population did (peak fitness).</li>
               </ul>
               <p className="mt-2">
                 Then we <strong>compare</strong> the two groups using statistics: did the
@@ -173,14 +173,14 @@ export default function OverviewPage() {
                 supports our hypothesis.
               </p>
             </div>
-            
+
             <div>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                 Why We Use the Same Seed (Fair Start)
               </h3>
               <p>
                 To be fair, we start the control and experimental groups with the <strong>same
-                random seed</strong>. A seed is like a recipe that decides the starting
+                  random seed</strong>. A seed is like a recipe that decides the starting
                 conditions. Using the same seed means both groups begin with the same kind of
                 brains and the same world setup. The <strong>only</strong> thing that is different
                 is the mutation strategy. That way, if one group reaches a stable result faster,
@@ -347,31 +347,31 @@ export default function OverviewPage() {
 
             <div>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Elo (in depth)
+                Fitness Score (in depth)
               </h3>
               <p>
-                <strong>Elo</strong> is a rating system invented for chess (by Arpad Elo) that
-                estimates how strong a player is from their wins and losses. In our experiment,
-                each organism has an Elo rating (a number). We start everyone at 1500; over time,
-                the number goes up if they tend to &quot;win&quot; and down if they tend to
-                &quot;lose.&quot;
+                <strong>Fitness Score</strong> is a rating that measures how well an organism
+                performs in the petri dish environment. In our experiment, each organism has a
+                fitness score (a number) that reflects its survival and resource-gathering ability.
+                We start everyone at 1500; over time, the number goes up if they tend to
+                &quot;win&quot; and down if they tend to &quot;lose.&quot;
               </p>
               <p>
-                We do not play full chess games. After each <strong>generation</strong> (one round
-                of life in the petri dish), we run many short &quot;matches&quot; between random
-                pairs of organisms. In each match we ask: who had more energy at the end of the
-                generation? That organism &quot;wins&quot; (score 1), the other &quot;loses&quot;
-                (score 0); if they had the same energy, it is a tie (0.5). Then we update both
-                organisms&apos; Elo ratings. If you beat someone you were &quot;expected&quot; to
-                lose to, your rating goes up more; if you lose to someone you were expected to
-                beat, it goes down more. Over many matches, Elo reflects who tends to do better in
-                the petri dish.
+                After each <strong>generation</strong> (one round of life in the petri dish), we
+                run many short &quot;matches&quot; between random pairs of organisms. In each match
+                we ask: who had more energy at the end of the generation? That organism
+                &quot;wins&quot; (score 1), the other &quot;loses&quot; (score 0); if they had the
+                same energy, it is a tie (0.5). Then we update both organisms&apos; fitness scores.
+                If you beat someone you were &quot;expected&quot; to lose to, your score goes up
+                more; if you lose to someone you were expected to beat, it goes down more. Over
+                many matches, the fitness score reflects who tends to do better in the petri dish.
               </p>
               <p>
-                We use Elo to select parents (top 20% by rating get to reproduce), to set mutation
-                rate in the experimental group (low Elo = more mutation, high Elo = less), and to
-                measure how well the population did (peak Elo = highest rating anyone reached). So
-                Elo is the fitness measure that drives evolution and our statistics.
+                We use fitness scores to select parents (top 20% by score get to reproduce), to set
+                mutation rate in the experimental group (low fitness = more mutation, high fitness
+                = less), and to measure how well the population did (peak fitness = highest score
+                anyone reached). So fitness score is the measure that drives evolution and our
+                statistics.
               </p>
             </div>
 
@@ -387,14 +387,14 @@ export default function OverviewPage() {
                 a little energy every tick (like burning calories). <strong>Foraging</strong> —
                 Getting energy by eating food pellets. <strong>Predation</strong> — Getting energy
                 by shooting another organism and stealing their energy.                 <strong>Policy
-                entropy</strong> — A number that measures how &quot;mixed&quot; or
+                  entropy</strong> — A number that measures how &quot;mixed&quot; or
                 &quot;certain&quot; one organism&apos;s decisions are (averaged over the population
                 we get mean policy entropy). <strong>Entropy variance</strong> — How much
                 organisms differ from each other in that &quot;mixed vs certain&quot; measure;
                 when it is low and stable, the population has settled on a similar mix of
                 strategies (we use this to detect Nash equilibrium). <strong>Convergence</strong> —
-                The population settling into a stable mix of strategies (Nash equilibrium). <strong>Fitness</strong> —
-                How well an organism did; we use Elo as our fitness measure. <strong>Weights</strong> —
+                The population settling into a stable mix of strategies (Nash equilibrium). <strong>Fitness Score</strong> —
+                How well an organism did; our primary performance measure. <strong>Weights</strong> —
                 The numbers inside the neural network that get evolved. <strong>Mutation</strong> —
                 Randomly changing those weights a little when creating offspring.
               </p>
@@ -482,7 +482,7 @@ export default function OverviewPage() {
             So their motivation is not written in code; it is implicit: organisms that by chance
             behave in ways that keep energy high get to reproduce, so over many generations the
             population tends to act in ways that help survival. We measure their success with a
-            rating called Elo (see Key terms)—higher Elo means they tend to &quot;win&quot; more
+            fitness score (see Key terms)—higher fitness means they tend to &quot;win&quot; more
             often in our pairwise comparisons. Think of it like nature selecting the best
             survivors.
           </p>
@@ -492,7 +492,7 @@ export default function OverviewPage() {
         <SectionCard id={sectionIds.whyTheyAct} title="Why do they act the way they do?">
           <p>
             We do not tell the organisms how to behave. We only select the best performers (top
-            20% by rating), copy their neural network weights to create offspring, and randomly
+            20% by fitness score), copy their neural network weights to create offspring, and randomly
             change (mutate) those weights a little. So &quot;why they act the way they do&quot; is:
             their brains were shaped by many generations of trial and error.
           </p>
@@ -641,9 +641,9 @@ export default function OverviewPage() {
             outcome we compare between the two groups.
           </p>
           <p>
-            Important detail: <strong>Elo</strong> tells us how well organisms did, while
+            Important detail: <strong>Fitness score</strong> tells us how well organisms did, while
             <strong>entropy variance</strong> tells us how similar their decision-making styles are.
-            Two groups could have similar Elo but still behave differently. That is why we track
+            Two groups could have similar fitness but still behave differently. That is why we track
             both performance <em>and</em> behavior.
           </p>
           <ul className="list-disc pl-6 space-y-3">
@@ -652,7 +652,7 @@ export default function OverviewPage() {
               equilibrium?&quot;) — We record the generation number at which the population&apos;s
               behavior becomes stable: the variety of strategies (who forages, who attacks) stops
               changing much from generation to generation. We check this using <strong>entropy
-              variance</strong>—how much the organisms differ from each other in how mixed or
+                variance</strong>—how much the organisms differ from each other in how mixed or
               certain their decisions are. When that difference is small and stays small for many
               generations, everyone is behaving similarly and we say we have reached a Nash-like
               equilibrium. So convergence velocity = how many generations it took to get there.
@@ -660,9 +660,9 @@ export default function OverviewPage() {
             </li>
             <li>
               <strong>Peak fitness</strong> (&quot;how good did they get?&quot;) — We record the
-              highest Elo rating that any organism (or the population) reached (see Key terms for
-              what Elo is and how we calculate it). This tells us how well the evolved strategies
-              performed in the petri dish.
+              highest fitness score that any organism (or the population) reached (see Key terms for
+              how we calculate it). This tells us how well the evolved strategies performed in the
+              petri dish.
             </li>
             <li>
               <strong>Policy entropy</strong> (&quot;how predictable are one organism&apos;s

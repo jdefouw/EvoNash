@@ -11,8 +11,8 @@ interface SimulationReplayProps {
   height?: number
 }
 
-export default function SimulationReplay({ 
-  generations, 
+export default function SimulationReplay({
+  generations,
   experiment,
   width = 800,
   height = 600
@@ -42,35 +42,35 @@ export default function SimulationReplay({
   const generateAgentsForGeneration = (generation: Generation, tick: number) => {
     const populationSize = generation.population_size || experiment.population_size || 10
     const numAgents = Math.min(20, populationSize) // Show up to 20 agents for performance
-    
+
     // Use generation number and tick as seed for consistent positioning
     const baseSeed = generation.generation_number * 10000 + tick
-    
+
     return Array.from({ length: numAgents }, (_, i) => {
       const seed = baseSeed + i * 1000
-      
+
       // Generate deterministic but varied positions
       const x = seededRandom(seed) * 1000
       const y = seededRandom(seed + 1) * 1000
       const angle = seededRandom(seed + 2) * Math.PI * 2
-      
+
       // Agents move in circular/exploratory patterns
       const time = tick / ticksPerGeneration
       const radius = 50 + seededRandom(seed + 3) * 100
       const orbitSpeed = 0.01 + seededRandom(seed + 4) * 0.02
       const centerX = 500 + (seededRandom(seed + 5) - 0.5) * 200
       const centerY = 500 + (seededRandom(seed + 6) - 0.5) * 200
-      
+
       // Calculate position with some orbital motion
       const orbitAngle = angle + time * orbitSpeed * Math.PI * 2
       const finalX = centerX + Math.cos(orbitAngle) * radius
       const finalY = centerY + Math.sin(orbitAngle) * radius
-      
+
       // Energy decreases over time, but varies by agent
       const baseEnergy = 100 - (time * 30)
       const energyVariation = (seededRandom(seed + 7) - 0.5) * 20
       const energy = Math.max(0, baseEnergy + energyVariation)
-      
+
       return {
         id: `agent-${generation.generation_number}-${i}`,
         x: finalX,
@@ -79,7 +79,7 @@ export default function SimulationReplay({
         energy: energy,
         vx: Math.cos(orbitAngle) * (2 + seededRandom(seed + 8) * 2),
         vy: Math.sin(orbitAngle) * (2 + seededRandom(seed + 9) * 2),
-        elo: (generation.avg_elo || 1500) + (seededRandom(seed + 10) - 0.5) * 400
+        fitness: (generation.avg_fitness || 0) + (seededRandom(seed + 10) - 0.5) * 400
       }
     })
   }
@@ -88,20 +88,20 @@ export default function SimulationReplay({
   const generateFoodForGeneration = (generation: Generation, tick: number) => {
     const numFood = 30
     const baseSeed = generation.generation_number * 10000 + tick
-    
+
     return Array.from({ length: numFood }, (_, i) => {
       const seed = baseSeed + i * 100
-      
+
       // Distribute food evenly across the dish
       const x = seededRandom(seed) * 1000
       const y = seededRandom(seed + 1) * 1000
-      
+
       // Food gets consumed over time (more consumed later in generation)
-      // Higher Elo generations consume food faster (better agents)
-      const consumptionRate = 0.3 + (generation.avg_elo || 1500) / 2000 * 0.3
+      // Higher fitness generations consume food faster (better agents)
+      const consumptionRate = 0.3 + (generation.avg_fitness || 0) / 2000 * 0.3
       const timeProgress = tick / ticksPerGeneration
       const consumed = seededRandom(seed + 2) < (timeProgress * consumptionRate)
-      
+
       return {
         x: x,
         y: y,
@@ -111,10 +111,10 @@ export default function SimulationReplay({
   }
 
   const currentGeneration = generations[currentGenerationIndex]
-  const agents = currentGeneration 
+  const agents = currentGeneration
     ? generateAgentsForGeneration(currentGeneration, currentTick)
     : []
-  const food = currentGeneration 
+  const food = currentGeneration
     ? generateFoodForGeneration(currentGeneration, currentTick)
     : []
 
@@ -170,7 +170,7 @@ export default function SimulationReplay({
         food={food}
         mode="replay"
       />
-      
+
       {/* Status Overlay */}
       <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-sm rounded-lg px-4 py-2 text-white text-sm">
         <div className="flex items-center gap-4">
@@ -209,12 +209,12 @@ export default function SimulationReplay({
         <div className="absolute top-4 right-4 bg-black/70 backdrop-blur-sm rounded-lg px-4 py-2 text-white text-xs">
           <div className="space-y-1">
             <div>
-              <span className="text-gray-300">Avg Elo: </span>
-              <span className="font-bold">{currentGeneration.avg_elo?.toFixed(1) || 'N/A'}</span>
+              <span className="text-gray-300">Avg Fitness: </span>
+              <span className="font-bold">{currentGeneration.avg_fitness?.toFixed(1) || 'N/A'}</span>
             </div>
             <div>
-              <span className="text-gray-300">Peak Elo: </span>
-              <span className="font-bold">{currentGeneration.peak_elo?.toFixed(1) || 'N/A'}</span>
+              <span className="text-gray-300">Peak Fitness: </span>
+              <span className="font-bold">{currentGeneration.peak_fitness?.toFixed(1) || 'N/A'}</span>
             </div>
             <div>
               <span className="text-gray-300">Entropy: </span>

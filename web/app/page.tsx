@@ -34,7 +34,7 @@ export default function DashboardPage() {
       { name: "Convergence Velocity", description: "Generations to reach Nash Equilibrium (Policy Entropy < 0.01)" },
       { name: "Policy Entropy", description: "Measure of strategy randomness (Shannon Entropy)" },
       { name: "Entropy Variance", description: "Stability of population strategies" },
-      { name: "Elo Rating", description: "Relative skill level (Self-play performance)" }
+      { name: "Fitness Score", description: "Relative skill level (Self-play performance)" }
     ],
     controlled: [
       { name: "Population Size", description: "Fixed number of agents per generation", value: 100 },
@@ -57,7 +57,7 @@ export default function DashboardPage() {
       {
         phase: "Phase 2",
         title: "Adaptive Implementation",
-        description: "Implement Elo-based adaptive mutation scaling. Mutation rate decreases as fitness increases.",
+        description: "Implement fitness-based adaptive mutation scaling. Mutation rate decreases as fitness increases.",
         status: "completed" as const
       },
       {
@@ -122,7 +122,7 @@ export default function DashboardPage() {
               studentName="Joel deFouw"
               division="Junior - Grade 8"
               category="Digital Technology / Computing & Information Systems"
-              abstract="This experiment investigates the efficiency of evolutionary algorithms in finding Nash Equilibrium in a competitive multi-agent environment (Tag). We compare a standard static mutation rate against a novel adaptive mutation strategy where the mutation rate scales inversely with an agent's fitness (Elo rating). The hypothesis is that adaptive mutation—mimicking biological 'stress-induced mutagenesis'—will allow low-fitness populations to explore the solution space aggressively while high-fitness populations exploit their successful strategies, resulting in significantly faster convergence to a stable strategy (Nash Equilibrium)."
+              abstract="This experiment investigates the efficiency of evolutionary algorithms in finding Nash Equilibrium in a competitive multi-agent environment (Tag). We compare a standard static mutation rate against a novel adaptive mutation strategy where the mutation rate scales inversely with an agent's fitness score. The hypothesis is that adaptive mutation—mimicking biological 'stress-induced mutagenesis'—will allow low-fitness populations to explore the solution space aggressively while high-fitness populations exploit their successful strategies, resulting in significantly faster convergence to a stable strategy (Nash Equilibrium)."
             />
             <div className="space-y-6">
               <ProblemStatement
@@ -134,7 +134,7 @@ export default function DashboardPage() {
                 ]}
               />
               <HypothesisCard
-                ifStatement="the mutation rate of a neural network is dynamically scaled inversely to its Elo rating (fitness),"
+                ifStatement="the mutation rate of a neural network is dynamically scaled inversely to its fitness score,"
                 thenStatement="the population will reach a state of Policy Entropy stability (Nash Equilibrium) in fewer generations than a control group with a static mutation rate,"
                 becauseStatement="this mechanism mimics biological 'stress-induced mutagenesis,' allowing poor-performing agents to explore the solution space rapidly while high-performing agents preserve their successful traits, balancing exploration and exploitation more efficiently."
                 isSupported={null}
@@ -169,10 +169,10 @@ export default function DashboardPage() {
                 controlConvergenceGen={null}
                 experimentalConvergenceGen={null}
                 convergenceImprovement={null}
-                controlFinalElo={null}
-                experimentalFinalElo={null}
-                controlPeakElo={null}
-                experimentalPeakElo={null}
+                controlFinalFitness={null}
+                experimentalFinalFitness={null}
+                controlPeakFitness={null}
+                experimentalPeakFitness={null}
                 totalGenerationsControl={0}
                 totalGenerationsExperimental={0}
                 convergencePValue={null}
@@ -183,7 +183,7 @@ export default function DashboardPage() {
               <ComparisonChart
                 controlGenerations={controlGenerations}
                 experimentalGenerations={experimentalGenerations}
-                metric="elo"
+                metric="fitness"
               />
               <ComparisonChart
                 controlGenerations={controlGenerations}

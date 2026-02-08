@@ -346,35 +346,6 @@ class ExperimentRunner:
             'avg_energy': avg_energy
         }
     
-    def _run_elo_matches(self, num_matches: Optional[int] = None):
-        """
-        Run Elo rating matches between agents with balanced pairing.
-        
-        Args:
-            num_matches: Optional target number of matches. If None, uses max(500, N).
-        """
-        agents = self.ga.population
-        num_agents = len(agents)
-        if num_agents < 2:
-            return
-        
-        target_matches = num_matches if num_matches is not None else max(500, num_agents)
-        matches_per_round = num_agents // 2
-        rounds = max(1, int(np.ceil(target_matches / matches_per_round)))
-        
-        for _ in range(rounds):
-            indices = np.random.permutation(num_agents)
-            for i in range(0, num_agents - 1, 2):
-                agent_a = agents[indices[i]]
-                agent_b = agents[indices[i + 1]]
-                
-                # Simulate match (simplified: compare fitness)
-                score_a = 1.0 if agent_a.fitness_score > agent_b.fitness_score else 0.0
-                if agent_a.fitness_score == agent_b.fitness_score:
-                    score_a = 0.5
-                
-                # Update Elo ratings
-                self.ga.update_elo(agent_a, agent_b, score_a)
     
     def run_generation(self) -> Dict:
         """
@@ -388,18 +359,11 @@ class ExperimentRunner:
         exp_name = self.config.experiment_name
         
         # Simulate generation in Petri Dish
-        print(f"\n[{exp_name}] [GEN {self.current_generation}] Step 1/3: Running Petri Dish simulation...")
+        print(f"\n[{exp_name}] [GEN {self.current_generation}] Step 1/2: Running Petri Dish simulation...")
         sim_results = self._simulate_generation()
         
-        # Run Elo matches
-        print(f"[{exp_name}] [GEN {self.current_generation}] Step 2/3: Running Elo matches...")
-        elo_start = time.time()
-        self._run_elo_matches()
-        elo_time = time.time() - elo_start
-        print(f"  [ELO] Elo matches complete in {elo_time:.2f}s")
-        
         # Get generation statistics
-        print(f"[{exp_name}] [GEN {self.current_generation}] Step 3/3: Calculating statistics...")
+        print(f"[{exp_name}] [GEN {self.current_generation}] Step 2/2: Calculating statistics...")
         stats_start = time.time()
         # Create sample inputs for entropy calculation
         sample_inputs = torch.randn(10, 24).to(self.device)
@@ -420,13 +384,14 @@ class ExperimentRunner:
         # Log to CSV
         self.logger.log_generation(
             generation=self.current_generation,
-            avg_elo=stats['avg_elo'],
-            peak_elo=stats['peak_elo'],
+            avg_fitness=stats['avg_fitness'],
+            peak_fitness=stats.get('peak_fitness', 0),
             policy_entropy=stats['policy_entropy'],
             entropy_variance=stats['entropy_variance'],
             mutation_rate=stats['mutation_rate'],
             population_diversity=stats['population_diversity'],
-            avg_fitness=stats['avg_fitness']
+            min_fitness=stats.get('min_fitness'),
+            std_fitness=stats.get('std_fitness')
         )
         
         # Store history
@@ -526,14 +491,13 @@ class ExperimentRunner:
             
             # Print generation results immediately
             print(f"\n✓ [{exp_name}] Generation {gen} Complete (took {gen_elapsed:.2f}s)")
-            print(f"  Avg Elo: {stats.get('avg_elo', 0):7.2f} | "
-                  f"Peak Elo: {stats.get('peak_elo', 0):7.2f} | "
-                  f"Min Elo: {stats.get('min_elo', 0):7.2f}")
+            print(f"  Avg Fitness: {stats.get('avg_fitness', 0):7.2f} | "
+                  f"Peak Fitness: {stats.get('peak_fitness', 0):7.2f} | "
+                  f"Min Fitness: {stats.get('min_fitness', 0):7.2f}")
             print(f"  Entropy: {stats.get('policy_entropy', 0):.4f} | "
                   f"Entropy Var: {stats.get('entropy_variance', 0):.6f} | "
                   f"Diversity: {stats.get('population_diversity', 0):.4f}")
-            print(f"  Avg Fitness: {stats.get('avg_fitness', 0):.2f} | "
-                  f"Mutation Rate: {stats.get('mutation_rate', 0):.4f}")
+            print(f"  Mutation Rate: {stats.get('mutation_rate', 0):.4f}")
             
             # Estimate time remaining
             if batch_progress > 1:
@@ -592,12 +556,12 @@ class ExperimentRunner:
                 print(f"\n{'='*80}")
                 print(f"📊 [{exp_name}] DETAILED STATISTICS - Generation {gen} (Batch: {batch_progress}/{num_generations})")
                 print(f"{'='*80}")
-                print(f"  Elo Ratings:")
-                print(f"    Average: {stats.get('avg_elo', 0):.2f}")
-                print(f"    Peak:    {stats.get('peak_elo', 0):.2f}")
-                print(f"    Min:     {stats.get('min_elo', 0):.2f}")
-                print(f"    Std Dev: {stats.get('std_elo', 0):.2f}")
-                print(f"  Fitness:")
+                print(f"  Fitness Ratings:")
+                print(f"    Average: {stats.get('avg_fitness', 0):.2f}")
+                print(f"    Peak:    {stats.get('peak_fitness', 0):.2f}")
+                print(f"    Min:     {stats.get('min_fitness', 0):.2f}")
+                print(f"    Std Dev: {stats.get('std_fitness', 0):.2f}")
+                print(f"  Details:")
                 print(f"    Average: {stats.get('avg_fitness', 0):.2f}")
                 print(f"    Min:     {stats.get('min_fitness', 0):.2f}")
                 print(f"    Max:     {stats.get('max_fitness', 0):.2f}")

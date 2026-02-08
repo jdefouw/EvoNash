@@ -88,10 +88,8 @@ class Agent:
         else:
             self.network = network.to(device)
         
-        # Elo rating for genetic algorithm
-        self.elo_rating = 1500.0
+        # Fitness for genetic algorithm selection
         self.fitness_score = 0.0
-        self.parent_elo: Optional[float] = None
         self.mutation_rate_applied: Optional[float] = None
     
     def get_input_vector(self, raycast_data: np.ndarray, petri_dish) -> torch.Tensor:

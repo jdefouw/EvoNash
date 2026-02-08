@@ -6,10 +6,10 @@ interface StatsSummaryProps {
   controlConvergenceGen: number | null
   experimentalConvergenceGen: number | null
   convergenceImprovement: number | null // percentage
-  controlFinalElo: number | null
-  experimentalFinalElo: number | null
-  controlPeakElo: number | null
-  experimentalPeakElo: number | null
+  controlFinalFitness: number | null
+  experimentalFinalFitness: number | null
+  controlPeakFitness: number | null
+  experimentalPeakFitness: number | null
   totalGenerationsControl: number
   totalGenerationsExperimental: number
   // Primary: convergence-generation t-test (hypothesis test)
@@ -30,7 +30,7 @@ interface StatsSummaryProps {
   controlExperimentCount?: number
   experimentalExperimentCount?: number
   statisticalPowerLevel?: StatisticalPowerLevel
-  // Secondary/descriptive (Elo t-test - not used for hypothesis)
+  // Secondary/descriptive (Fitness t-test - not used for hypothesis)
   pValue?: number | null
   isSignificant?: boolean
   tStatistic?: number | null
@@ -48,10 +48,10 @@ export default function StatsSummary({
   controlConvergenceGen,
   experimentalConvergenceGen,
   convergenceImprovement,
-  controlFinalElo,
-  experimentalFinalElo,
-  controlPeakElo,
-  experimentalPeakElo,
+  controlFinalFitness,
+  experimentalFinalFitness,
+  controlPeakFitness,
+  experimentalPeakFitness,
   convergencePValue,
   convergenceIsSignificant,
   convergenceTStatistic = null,
@@ -114,14 +114,14 @@ export default function StatsSummary({
 
   const confidence = getConfidenceLabel(statisticalPowerLevel)
 
-  const StatCard = ({ 
-    label, 
-    controlValue, 
-    experimentalValue, 
+  const StatCard = ({
+    label,
+    controlValue,
+    experimentalValue,
     unit = '',
     comparison,
     highlight = false
-  }: { 
+  }: {
     label: string
     controlValue: string | number | null
     experimentalValue: string | number | null
@@ -135,7 +135,7 @@ export default function StatsSummary({
     if (comparison && controlValue !== null && experimentalValue !== null) {
       const cv = typeof controlValue === 'string' ? parseFloat(controlValue) : controlValue
       const ev = typeof experimentalValue === 'string' ? parseFloat(experimentalValue) : experimentalValue
-      
+
       if (comparison === 'lower-better') {
         controlBetter = cv < ev
         experimentalBetter = ev < cv
@@ -182,18 +182,17 @@ export default function StatsSummary({
         <p className="text-xs text-gray-600 dark:text-gray-400 mb-6">
           Paired-seed design: each random seed generates a matched Control and Experimental run to
           isolate the mutation strategy as the only independent variable. Convergence is inferred
-          from entropy variance stability (behavioral convergence), which is distinct from Elo
-          dispersion (fitness dispersion). Both are reported for scientific context.
+          from entropy variance stability (behavioral convergence), which is distinct from fitness
+          dispersion. Both are reported for scientific context.
         </p>
 
         {hasData ? (
           <>
             {/* Main Result Banner - Generations to Nash equilibrium */}
-            <div className={`mb-6 p-6 rounded-xl ${
-              convergenceIsSignificant
+            <div className={`mb-6 p-6 rounded-xl ${convergenceIsSignificant
                 ? 'bg-gradient-to-r from-green-500 to-emerald-500'
                 : 'bg-gradient-to-r from-gray-400 to-gray-500'
-            } text-white`}>
+              } text-white`}>
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="text-2xl font-bold mb-1">
@@ -263,15 +262,15 @@ export default function StatsSummary({
                 highlight={experimentalConvergenceGen !== null && controlConvergenceGen !== null && experimentalConvergenceGen < controlConvergenceGen}
               />
               <StatCard
-                label="Final Average Elo (descriptive)"
-                controlValue={controlFinalElo?.toFixed(2) ?? null}
-                experimentalValue={experimentalFinalElo?.toFixed(2) ?? null}
+                label="Final Average Fitness (descriptive)"
+                controlValue={controlFinalFitness?.toFixed(2) ?? null}
+                experimentalValue={experimentalFinalFitness?.toFixed(2) ?? null}
                 comparison="higher-better"
               />
               <StatCard
-                label="Peak Elo Achieved (descriptive)"
-                controlValue={controlPeakElo?.toFixed(2) ?? null}
-                experimentalValue={experimentalPeakElo?.toFixed(2) ?? null}
+                label="Peak Fitness Achieved (descriptive)"
+                controlValue={controlPeakFitness?.toFixed(2) ?? null}
+                experimentalValue={experimentalPeakFitness?.toFixed(2) ?? null}
                 comparison="higher-better"
               />
               <StatCard

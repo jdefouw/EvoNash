@@ -41,7 +41,7 @@ export default function BoxPlotChart({
   const allValues: number[] = []
   if (controlData?.values) allValues.push(...controlData.values)
   if (experimentalData?.values) allValues.push(...experimentalData.values)
-  
+
   if (allValues.length === 0) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
@@ -90,11 +90,11 @@ export default function BoxPlotChart({
     }
 
     const { min, max, Q1, Q3, median, IQR, values, mean } = data
-    
+
     // Calculate whisker bounds (1.5 * IQR from quartiles, but capped at min/max data)
     const lowerWhisker = Math.max(min ?? Q1, Q1 - 1.5 * (IQR ?? 0))
     const upperWhisker = Math.min(max ?? Q3, Q3 + 1.5 * (IQR ?? 0))
-    
+
     // Find outliers
     const outliers = values.filter(v => v < lowerWhisker || v > upperWhisker)
 
@@ -118,7 +118,7 @@ export default function BoxPlotChart({
           stroke={color}
           strokeWidth={2}
         />
-        
+
         {/* Median line */}
         <line
           x1={x - boxWidth / 2}
@@ -128,7 +128,7 @@ export default function BoxPlotChart({
           stroke={color}
           strokeWidth={3}
         />
-        
+
         {/* Mean marker (diamond) */}
         {yMean !== null && (
           <polygon
@@ -138,7 +138,7 @@ export default function BoxPlotChart({
             strokeWidth={2}
           />
         )}
-        
+
         {/* Lower whisker */}
         <line
           x1={x}
@@ -157,7 +157,7 @@ export default function BoxPlotChart({
           stroke={color}
           strokeWidth={2}
         />
-        
+
         {/* Upper whisker */}
         <line
           x1={x}
@@ -176,7 +176,7 @@ export default function BoxPlotChart({
           stroke={color}
           strokeWidth={2}
         />
-        
+
         {/* Outliers */}
         {outliers.map((v, i) => (
           <circle
@@ -189,7 +189,7 @@ export default function BoxPlotChart({
             strokeWidth={2}
           />
         ))}
-        
+
         {/* Label */}
         <text
           x={x}
@@ -199,7 +199,7 @@ export default function BoxPlotChart({
         >
           {label}
         </text>
-        
+
         {/* Sample size */}
         <text
           x={x}
@@ -215,14 +215,14 @@ export default function BoxPlotChart({
 
   // Y-axis ticks
   const yTicks = 5
-  const tickValues = Array.from({ length: yTicks + 1 }, (_, i) => 
+  const tickValues = Array.from({ length: yTicks + 1 }, (_, i) =>
     scaleMin + (scaleRange * i) / yTicks
   )
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
       <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{title}</h4>
-      
+
       <div className="flex justify-center">
         <svg width={svgWidth} height={svgHeight} className="overflow-visible">
           {/* Y-axis */}
@@ -234,7 +234,7 @@ export default function BoxPlotChart({
             className="stroke-gray-300 dark:stroke-gray-600"
             strokeWidth={1}
           />
-          
+
           {/* Y-axis ticks and labels */}
           {tickValues.map((value, i) => (
             <g key={i}>
@@ -267,7 +267,7 @@ export default function BoxPlotChart({
               />
             </g>
           ))}
-          
+
           {/* Y-axis label */}
           <text
             x={15}
@@ -277,15 +277,15 @@ export default function BoxPlotChart({
             transform={`rotate(-90, 15, ${plotMargin.top + plotHeight / 2})`}
             className="text-xs fill-gray-600 dark:fill-gray-400 font-medium"
           >
-            Final Elo Rating
+            Final Fitness Score
           </text>
-          
+
           {/* Box plots */}
           {renderBoxPlot(controlData, controlX, '#3B82F6', 'Control')}
           {renderBoxPlot(experimentalData, experimentalX, '#8B5CF6', 'Experimental')}
         </svg>
       </div>
-      
+
       {/* Legend */}
       <div className="flex justify-center gap-6 mt-4 text-xs text-gray-600 dark:text-gray-400">
         <div className="flex items-center gap-2">

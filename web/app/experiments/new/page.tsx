@@ -15,7 +15,7 @@ export default function NewExperimentPage() {
   const [bulkSeedCount, setBulkSeedCount] = useState(10)
   const [bulkPerSeedCount, setBulkPerSeedCount] = useState(200)
   const [bulkSeedFirst, setBulkSeedFirst] = useState(42)
-  
+
   const [formData, setFormData] = useState({
     experiment_name: '',
     experiment_group: 'CONTROL' as 'CONTROL' | 'EXPERIMENTAL',
@@ -25,13 +25,13 @@ export default function NewExperimentPage() {
     ticks_per_generation: 750,
     mutation_rate: 0.05,
     mutation_base: 0.0615,
-    max_possible_elo: 8000.0,
+    max_possible_fitness: 8000.0,
     selection_pressure: 0.2
   })
 
   // Derive mutation_mode from experiment_group
   // CONTROL = STATIC mutation (fixed rate ε = 0.05)
-  // EXPERIMENTAL = ADAPTIVE mutation (fitness-scaled ε = f(Elo))
+  // EXPERIMENTAL = ADAPTIVE mutation (fitness-scaled ε = f(Fitness))
   const mutation_mode = formData.experiment_group === 'CONTROL' ? 'STATIC' : 'ADAPTIVE'
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -72,7 +72,7 @@ export default function NewExperimentPage() {
       }
 
       const data = await response.json()
-      
+
       // If bulk mode, redirect to experiments list; otherwise to single experiment
       if ((bulkMode || bulkSeedMode) && data.experiments) {
         router.push(`/experiments?created=${data.experiments.length}`)
@@ -91,9 +91,9 @@ export default function NewExperimentPage() {
       ...prev,
       [name]: name === 'random_seed' || name === 'population_size' || name === 'max_generations' || name === 'ticks_per_generation'
         ? parseInt(value) || 0
-        : name === 'mutation_rate' || name === 'mutation_base' || name === 'max_possible_elo' || name === 'selection_pressure'
-        ? parseFloat(value) || 0
-        : value
+        : name === 'mutation_rate' || name === 'mutation_base' || name === 'max_possible_fitness' || name === 'selection_pressure'
+          ? parseFloat(value) || 0
+          : value
     }))
   }
 
@@ -102,14 +102,14 @@ export default function NewExperimentPage() {
       <div className="max-w-4xl mx-auto">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm mb-6">
-          <Link 
+          <Link
             href="/"
             className="text-blue-600 dark:text-blue-400 hover:underline transition-colors"
           >
             Experiment
           </Link>
           <span className="text-gray-400">/</span>
-          <Link 
+          <Link
             href="/experiments"
             className="text-blue-600 dark:text-blue-400 hover:underline transition-colors"
           >
@@ -136,21 +136,21 @@ export default function NewExperimentPage() {
               Understanding Experiment Groups
             </h3>
             <p className="text-sm text-blue-700 dark:text-blue-400 mb-3">
-              This experiment tests whether <strong>adaptive mutation</strong> (scaling mutation rate by fitness) 
+              This experiment tests whether <strong>adaptive mutation</strong> (scaling mutation rate by fitness)
               accelerates convergence to Nash Equilibrium compared to <strong>static mutation</strong>.
             </p>
             <div className="grid md:grid-cols-2 gap-4 text-xs">
               <div className="bg-white dark:bg-gray-800 p-3 rounded border border-blue-100 dark:border-blue-900">
                 <div className="font-semibold text-gray-900 dark:text-white mb-1">Control Group</div>
                 <div className="text-gray-600 dark:text-gray-400">
-                  <strong>Static Mutation</strong> — Fixed rate ε = 0.05 applied uniformly to all offspring. 
+                  <strong>Static Mutation</strong> — Fixed rate ε = 0.05 applied uniformly to all offspring.
                   Traditional genetic algorithm approach serving as the baseline.
                 </div>
               </div>
               <div className="bg-white dark:bg-gray-800 p-3 rounded border border-blue-100 dark:border-blue-900">
                 <div className="font-semibold text-gray-900 dark:text-white mb-1">Experimental Group</div>
                 <div className="text-gray-600 dark:text-gray-400">
-                  <strong>Adaptive Mutation</strong> — Dynamic rate calibrated to start at ~5% (same as Control), 
+                  <strong>Adaptive Mutation</strong> — Dynamic rate calibrated to start at ~5% (same as Control),
                   then scales with fitness: low-fitness agents mutate more (exploration), high-fitness agents mutate less (exploitation).
                 </div>
               </div>
@@ -164,7 +164,7 @@ export default function NewExperimentPage() {
             <div>
               <Tooltip content={bulkSeedMode
                 ? "Base name for seed cohorts. Each seed creates paired Control and Experimental runs (e.g., 'EvoNash Seed 42 Control 1')."
-                : bulkMode 
+                : bulkMode
                   ? "Base name for bulk experiments. Numbers will be appended (e.g., 'CONTROL' becomes 'CONTROL 1', 'CONTROL 2', etc.)"
                   : "A descriptive name for this experiment run. Include the group type and seed for easy identification (e.g., 'Control Run - Seed 42')."
               }>
@@ -211,7 +211,7 @@ export default function NewExperimentPage() {
                   </label>
                 </Tooltip>
               </div>
-              
+
               {bulkMode && (
                 <div className="mt-4">
                   <Tooltip content="Number of experiments to create (1-100). Each experiment will be named with a sequential number appended to the base name.">
@@ -233,7 +233,7 @@ export default function NewExperimentPage() {
                   </p>
                 </div>
               )}
-              
+
               <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
                 <div className="flex items-center gap-3">
                   <input
@@ -253,7 +253,7 @@ export default function NewExperimentPage() {
                     </label>
                   </Tooltip>
                 </div>
-                
+
                 {bulkSeedMode && (
                   <div className="mt-4 grid md:grid-cols-3 gap-4">
                     <div>
@@ -313,7 +313,7 @@ export default function NewExperimentPage() {
             </div>
 
             <div>
-              <Tooltip content="Control group uses static mutation (fixed ε = 0.05). Experimental group uses adaptive mutation calibrated to also start at ~5% at initial Elo, then scales by fitness (lower-fitness agents mutate more). This ensures fair comparison.">
+              <Tooltip content="Control group uses static mutation (fixed ε = 0.05). Experimental group uses adaptive mutation calibrated to also start at ~5% at initial fitness, then scales by fitness (lower-fitness agents mutate more). This ensures fair comparison.">
                 <label htmlFor="experiment_group" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
                   Experiment Group *
                 </label>
@@ -333,9 +333,9 @@ export default function NewExperimentPage() {
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 {bulkSeedMode
                   ? 'Seed cohort mode creates both Control and Experimental for each seed.'
-                  : formData.experiment_group === 'CONTROL' 
-                  ? 'Static mutation: Fixed rate ε = 0.05'
-                  : 'Adaptive mutation: ε = Base × (1 - CurrentElo/MaxElo)'}
+                  : formData.experiment_group === 'CONTROL'
+                    ? 'Static mutation: Fixed rate ε = 0.05'
+                    : 'Adaptive mutation: ε = Base × (1 - CurrentFitness/MaxFitness)'}
               </p>
             </div>
 
@@ -435,7 +435,7 @@ export default function NewExperimentPage() {
               </div>
             ) : (
               <div>
-                <Tooltip content="Base mutation rate for adaptive mode. Default 0.0615 is calibrated so that at initial Elo (~1500), the effective rate equals the static rate (5%). Formula: 0.05 / (1 - 1500/8000) = 0.0615. This ensures both groups start with identical mutation rates for fair comparison.">
+                <Tooltip content="Base mutation rate for adaptive mode. Default 0.0615 is calibrated so that at initial fitness (~1500), the effective rate equals the static rate (5%). Formula: 0.05 / (1 - 1500/8000) = 0.0615. This ensures both groups start with identical mutation rates for fair comparison.">
                   <label htmlFor="mutation_base" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
                     Mutation Base (Adaptive)
                   </label>
@@ -451,23 +451,23 @@ export default function NewExperimentPage() {
                   onChange={handleChange}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 />
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Calibrated so adaptive starts at ~5% (same as static) at initial Elo</p>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Calibrated so adaptive starts at ~5% (same as static) at initial fitness</p>
               </div>
             )}
 
             <div className="grid md:grid-cols-2 gap-6">
               <div>
-                <Tooltip content="The highest possible Elo rating that an agent can achieve within the experiment's scoring system. This helps define the scale of performance and is used in adaptive mutation calculations.">
-                  <label htmlFor="max_possible_elo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                    Max Possible Elo
+                <Tooltip content="The highest possible Fitness score that an agent can achieve within the experiment's scoring system. This helps define the scale of performance and is used in adaptive mutation calculations.">
+                  <label htmlFor="max_possible_fitness" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                    Max Possible Fitness
                   </label>
                 </Tooltip>
                 <input
                   type="number"
-                  id="max_possible_elo"
-                  name="max_possible_elo"
+                  id="max_possible_fitness"
+                  name="max_possible_fitness"
                   step="100"
-                  value={formData.max_possible_elo}
+                  value={formData.max_possible_fitness}
                   onChange={handleChange}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 />
@@ -502,17 +502,17 @@ export default function NewExperimentPage() {
               >
                 {loading
                   ? (bulkSeedMode
-                      ? `Creating ${bulkSeedCount * bulkPerSeedCount * 2} Experiments...`
-                      : bulkMode
-                        ? `Creating ${bulkCount} Experiments...`
-                        : 'Creating...'
-                    )
+                    ? `Creating ${bulkSeedCount * bulkPerSeedCount * 2} Experiments...`
+                    : bulkMode
+                      ? `Creating ${bulkCount} Experiments...`
+                      : 'Creating...'
+                  )
                   : (bulkSeedMode
-                      ? `Create ${bulkSeedCount * bulkPerSeedCount * 2} Experiments`
-                      : bulkMode
-                        ? `Create ${bulkCount} Experiments`
-                        : 'Create Experiment'
-                    )
+                    ? `Create ${bulkSeedCount * bulkPerSeedCount * 2} Experiments`
+                    : bulkMode
+                      ? `Create ${bulkCount} Experiments`
+                      : 'Create Experiment'
+                  )
                 }
               </button>
               <Link
@@ -524,7 +524,7 @@ export default function NewExperimentPage() {
             </div>
           </form>
         </div>
-      </div>
-    </main>
+      </div >
+    </main >
   )
 }

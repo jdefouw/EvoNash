@@ -16,7 +16,7 @@ Or standalone: python tests/test_cuda_optimizations.py
 import logging
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import torch
 import numpy as np
@@ -34,8 +34,8 @@ def test_batched_network_ensemble():
     print("TEST: BatchedNetworkEnsemble vs Individual Forward Passes")
     print("="*60)
     
-    from simulation.agent import Agent, NeuralNetwork
-    from simulation.agent_batched import BatchedNetworkEnsemble
+    from src.simulation.agent import Agent, NeuralNetwork
+    from src.simulation.agent_batched import BatchedNetworkEnsemble
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Device: {device}")
@@ -128,7 +128,7 @@ def test_analytical_raycast():
     print("TEST: Analytical Raycast vs Step-Based Raycast (Deterministic)")
     print("="*60)
     
-    from simulation.petri_dish_vectorized import VectorizedPetriDish
+    from src.simulation.petri_dish_vectorized import VectorizedPetriDish
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Device: {device}")
@@ -146,7 +146,7 @@ def test_analytical_raycast():
     
     # Force food position
     if len(petri_dish.food) == 0:
-        from simulation.petri_dish import Food
+        from src.simulation.petri_dish import Food
         petri_dish.food = [Food(150.0, 100.0, 0)]
     else:
         petri_dish.food[0].x = 150.0
@@ -209,8 +209,8 @@ def test_vectorized_food_consumption():
     print("TEST: Vectorized Food Consumption vs Loop-Based (Deterministic)")
     print("="*60)
     
-    from simulation.petri_dish_vectorized import VectorizedPetriDish
-    from simulation.petri_dish import Food
+    from src.simulation.petri_dish_vectorized import VectorizedPetriDish
+    from src.simulation.petri_dish import Food
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Device: {device}")

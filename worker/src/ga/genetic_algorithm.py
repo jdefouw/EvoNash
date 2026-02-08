@@ -1,6 +1,6 @@
 """
 Genetic Algorithm implementation with STATIC and ADAPTIVE mutation modes.
-Implements Elo rating system and policy entropy calculation.
+Implements fitness-based selection and policy entropy calculation.
 """
 
 import numpy as np
@@ -28,8 +28,8 @@ class GeneticAlgorithm:
     - Population initialization (N=1000)
     - Selection: Top 20% (selection_pressure)
     - Crossover: Uniform weight mixing
-    - Mutation: STATIC (ε=0.05) or ADAPTIVE (ε = Base × (1 - CurrentElo/MaxGlobalElo))
-    - Elo rating system
+    - Mutation: STATIC (ε=0.05) or ADAPTIVE (ε = Base × (1 - CurrentFitness/MaxGlobalFitness))
+    - Fitness-based selection
     - Policy entropy calculation
     """
     
@@ -55,7 +55,7 @@ class GeneticAlgorithm:
         
         # Initialize population
         self.population: List[Agent] = []
-        self.max_global_elo = 1500.0  # Track max Elo for adaptive mutation
+        self.max_global_fitness = 0.0  # Track max fitness for adaptive mutation
         
         # Enable cuDNN benchmarking for optimal GPU performance
         if self.device == 'cuda' and torch.cuda.is_available():
@@ -103,40 +103,10 @@ class GeneticAlgorithm:
                 initial_energy=100.0,
                 device=self.device
             )
-            agent.elo_rating = 1500.0
+            agent.fitness_score = 0.0
             self.population.append(agent)
     
-    def calculate_elo_expectation(self, rating_a: float, rating_b: float) -> float:
-        """
-        Calculate Elo expectation: E_A = 1 / (1 + 10^((R_B - R_A) / 400))
-        
-        Args:
-            rating_a: Elo rating of agent A
-            rating_b: Elo rating of agent B
-            
-        Returns:
-            Expected score for agent A (0-1)
-        """
-        return 1.0 / (1.0 + 10.0 ** ((rating_b - rating_a) / 400.0))
-    
-    def update_elo(self, agent_a: Agent, agent_b: Agent, score_a: float, k_factor: float = 32.0):
-        """
-        Update Elo ratings after a match.
-        
-        Args:
-            agent_a: First agent
-            agent_b: Second agent
-            score_a: Score for agent A (1.0 for win, 0.5 for draw, 0.0 for loss)
-            k_factor: K-factor for Elo updates (default 32)
-        """
-        expected_a = self.calculate_elo_expectation(agent_a.elo_rating, agent_b.elo_rating)
-        expected_b = 1.0 - expected_a
-        
-        agent_a.elo_rating += k_factor * (score_a - expected_a)
-        agent_b.elo_rating += k_factor * ((1.0 - score_a) - expected_b)
-        
-        # Update max global Elo for adaptive mutation
-        self.max_global_elo = max(self.max_global_elo, agent_a.elo_rating, agent_b.elo_rating)
+
     
     def calculate_policy_entropy(self, agent: Agent, sample_inputs: torch.Tensor) -> float:
         """
@@ -233,15 +203,15 @@ class GeneticAlgorithm:
     
     def select_parents(self) -> List[Agent]:
         """
-        Select top k% of population based on fitness/elo.
+        Select top k% of population based on fitness score.
         
         Returns:
             List of selected parent agents
         """
-        # Sort by Elo rating (descending)
+        # Sort by fitness score (descending)
         sorted_population = sorted(
             self.population,
-            key=lambda a: a.elo_rating,
+            key=lambda a: a.fitness_score,
             reverse=True
         )
         
@@ -284,8 +254,8 @@ class GeneticAlgorithm:
         except Exception:
             pass
         
-        # Use average of parent Elo ratings
-        parent_elo = (parent_a.elo_rating + parent_b.elo_rating) / 2.0
+        # Use average of parent fitness scores
+        parent_fitness = (parent_a.fitness_score + parent_b.fitness_score) / 2.0
         
         # Create new agent
         offspring = Agent(
@@ -294,8 +264,8 @@ class GeneticAlgorithm:
             initial_energy=100.0,
             device=self.device
         )
-        offspring.elo_rating = parent_elo
-        offspring.parent_elo = parent_elo
+        offspring.fitness_score = parent_fitness
+        offspring.parent_fitness = parent_fitness
         
         return offspring
     
@@ -313,12 +283,14 @@ class GeneticAlgorithm:
         if self.config.mutation_mode == 'STATIC':
             mutation_rate = self.config.mutation_rate or 0.05
         else:  # ADAPTIVE
-            parent_elo = agent.parent_elo if agent.parent_elo is not None else agent.elo_rating
-            # Default mutation_base = 0.0615 chosen so that at initial Elo (~1500), adaptive rate ≈ static rate (5%)
-            # Formula: 0.05 / (1 - 1500/8000) = 0.0615. This ensures fair comparison at experiment start.
-            # With max_possible_elo = 8000: ~5% at 1500 Elo, ~3.1% at 4000 Elo, ~0.8% near 8000 Elo
+            parent_fitness = getattr(agent, 'parent_fitness', None) or agent.fitness_score
+            # Default mutation_base = 0.0615 chosen so that at low fitness, adaptive rate is higher
+            # As fitness improves, mutation rate decreases proportionally
+            # With max_possible_fitness (scale of 8000):
+            # ~5% at fitness 1500, ~3.1% at fitness 4000, ~0.8% near 8000
             base = self.config.mutation_base or 0.0615
-            mutation_rate = base * (1.0 - parent_elo / self.config.max_possible_elo)
+            max_fitness = self.config.max_possible_fitness  # Use max_possible_fitness for scaling
+            mutation_rate = base * (1.0 - parent_fitness / max_fitness)
             # Clamp to reasonable range
             mutation_rate = np.clip(mutation_rate, 0.01, 0.2)
         
@@ -377,7 +349,6 @@ class GeneticAlgorithm:
         Returns:
             Dictionary with generation statistics
         """
-        elo_ratings = [agent.elo_rating for agent in self.population]
         fitness_scores = [agent.fitness_score for agent in self.population]
         mutation_rates = [
             agent.mutation_rate_applied or 0.0
@@ -401,13 +372,9 @@ class GeneticAlgorithm:
         entropy_variance = float(np.var(policy_entropies)) if len(policy_entropies) > 1 else 0.0
         
         return {
-            'avg_elo': float(np.mean(elo_ratings)),
-            'peak_elo': float(np.max(elo_ratings)),
-            'min_elo': float(np.min(elo_ratings)),
-            'std_elo': float(np.std(elo_ratings)),
             'avg_fitness': float(np.mean(fitness_scores)),
+            'peak_fitness': float(np.max(fitness_scores)),
             'min_fitness': float(np.min(fitness_scores)),
-            'max_fitness': float(np.max(fitness_scores)),
             'std_fitness': float(np.std(fitness_scores)),
             'mutation_rate': float(np.mean(mutation_rates)) if mutation_rates else 0.0,
             'policy_entropy': float(avg_policy_entropy),
@@ -435,14 +402,14 @@ class GeneticAlgorithm:
             # Default: save top 10% of population, but cap at 50 to keep payloads manageable
             max_agents = min(int(len(self.population) * 0.1), 50)
         
-        # Sort agents by Elo rating (descending) and take top performers
-        sorted_agents = sorted(self.population, key=lambda a: a.elo_rating, reverse=True)
+        # Sort agents by fitness score (descending) and take top performers
+        sorted_agents = sorted(self.population, key=lambda a: a.fitness_score, reverse=True)
         agents_to_save = sorted_agents[:max_agents]
         
         population_state = {
             'experiment_id': experiment_id,
             'generation': generation,
-            'max_global_elo': float(self.max_global_elo),
+            'max_global_fitness': float(self.max_global_fitness),
             'population_size': len(self.population),
             'saved_agents_count': len(agents_to_save),
             'agents': []
@@ -455,9 +422,8 @@ class GeneticAlgorithm:
             
             agent_state = {
                 'agent_id': agent.id,
-                'elo_rating': float(agent.elo_rating),
                 'fitness_score': float(agent.fitness_score),
-                'parent_elo': float(agent.parent_elo) if agent.parent_elo is not None else None,
+                'parent_fitness': float(getattr(agent, 'parent_fitness', 0.0)) if hasattr(agent, 'parent_fitness') else None,
                 'mutation_rate_applied': float(agent.mutation_rate_applied) if agent.mutation_rate_applied is not None else None,
                 'network_weights': weights.tolist(),  # Convert numpy to list for JSON
                 'network_architecture': {
@@ -482,8 +448,8 @@ class GeneticAlgorithm:
         # Clear current population
         self.population = []
         
-        # Restore max global Elo
-        self.max_global_elo = float(state_dict.get('max_global_elo', 1500.0))
+        # Restore max global fitness
+        self.max_global_fitness = float(state_dict.get('max_global_fitness', 0.0))
         
         # Restore each agent
         for agent_state in state_dict.get('agents', []):
@@ -520,9 +486,8 @@ class GeneticAlgorithm:
             )
             
             # Restore metadata
-            agent.elo_rating = float(agent_state.get('elo_rating', 1500.0))
             agent.fitness_score = float(agent_state.get('fitness_score', 0.0))
-            agent.parent_elo = float(agent_state['parent_elo']) if agent_state.get('parent_elo') is not None else None
+            agent.parent_fitness = float(agent_state['parent_fitness']) if agent_state.get('parent_fitness') is not None else None
             agent.mutation_rate_applied = float(agent_state['mutation_rate_applied']) if agent_state.get('mutation_rate_applied') is not None else None
             
             self.population.append(agent)
@@ -562,7 +527,7 @@ class GeneticAlgorithm:
                         initial_energy=100.0,
                         device=self.device
                     )
-                    offspring.elo_rating = parent.elo_rating
+                    offspring.fitness_score = parent.fitness_score
                     self.mutate(offspring)
                 
                 offspring.id = len(self.population)
@@ -584,7 +549,7 @@ class GeneticAlgorithm:
                     initial_energy=100.0,
                     device=self.device
                 )
-                agent.elo_rating = 1500.0
+                agent.fitness_score = 0.0
                 self.population.append(agent)
         
         # Trim if too large

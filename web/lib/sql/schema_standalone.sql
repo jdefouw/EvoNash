@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS experiments (
     completed_at TIMESTAMP WITH TIME ZONE,
     mutation_rate FLOAT,
     mutation_base FLOAT,
-    max_possible_elo FLOAT DEFAULT 2000.0,
+    max_possible_fitness FLOAT DEFAULT 2000.0,
     selection_pressure FLOAT DEFAULT 0.2,
     ticks_per_generation INTEGER DEFAULT 750,
     network_architecture JSONB
@@ -89,18 +89,14 @@ CREATE TABLE IF NOT EXISTS generations (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     population_size INTEGER NOT NULL,
     avg_fitness FLOAT,
-    avg_elo FLOAT,
-    peak_elo FLOAT,
-    min_elo FLOAT,
-    std_elo FLOAT,
+    peak_fitness FLOAT,
+    min_fitness FLOAT,
+    std_fitness FLOAT,
     policy_entropy FLOAT,
     entropy_variance FLOAT,
     win_rate_variance FLOAT,
     population_diversity FLOAT,
     mutation_rate FLOAT,
-    min_fitness FLOAT,
-    max_fitness FLOAT,
-    std_fitness FLOAT,
     UNIQUE(experiment_id, generation_number)
 );
 
@@ -110,10 +106,9 @@ CREATE TABLE IF NOT EXISTS agents (
     experiment_id UUID NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
     generation_id UUID NOT NULL REFERENCES generations(id) ON DELETE CASCADE,
     agent_index INTEGER NOT NULL,
-    elo_rating FLOAT NOT NULL DEFAULT 1500,
-    fitness_score FLOAT,
+    fitness_score FLOAT NOT NULL DEFAULT 0,
     network_weights_path TEXT,
-    parent_elo FLOAT,
+    parent_fitness FLOAT,
     mutation_rate_applied FLOAT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(experiment_id, generation_id, agent_index)

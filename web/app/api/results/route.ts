@@ -34,38 +34,38 @@ async function detectEquilibrium(experimentId: string): Promise<{
      ORDER BY generation_number ASC`,
     [experimentId]
   )
-  
+
   // Need enough generations to detect equilibrium
   if (!generations || generations.length < STABILITY_WINDOW + POST_CONVERGENCE_BUFFER) {
     return { equilibriumReached: false, convergenceGeneration: null }
   }
-  
+
   // Skip first 5 generations (unstable data)
   const varianceData = generations.slice(5).map(g => ({
     gen: g.generation_number,
     variance: g.entropy_variance ?? 0
   }))
-  
+
   if (varianceData.length === 0) {
     return { equilibriumReached: false, convergenceGeneration: null }
   }
-  
+
   // Find peak variance
   const peakVariance = Math.max(...varianceData.map(d => d.variance))
   const peakIndex = varianceData.findIndex(d => d.variance === peakVariance)
-  
+
   // Must have diverged (peak > minimum threshold)
   if (peakVariance <= 0.0001) {
     return { equilibriumReached: false, convergenceGeneration: null }
   }
-  
+
   // Use relative threshold (10% of peak) when peak is high, absolute when peak is low
   const relativeThreshold = peakVariance * RELATIVE_THRESHOLD_PERCENT
   const effectiveThreshold = Math.max(ABSOLUTE_THRESHOLD, relativeThreshold)
-  
+
   // Get data after peak
   const afterPeak = varianceData.slice(peakIndex)
-  
+
   // Find first generation that starts a stable run of STABILITY_WINDOW generations below threshold
   let convergenceGen: number | null = null
   for (let i = 0; i <= afterPeak.length - STABILITY_WINDOW; i++) {
@@ -75,18 +75,18 @@ async function detectEquilibrium(experimentId: string): Promise<{
       break
     }
   }
-  
+
   // Check if we have POST_CONVERGENCE_BUFFER generations after convergence
   if (convergenceGen !== null) {
     const maxGen = generations[generations.length - 1].generation_number
     const gensPastConvergence = maxGen - convergenceGen
-    
+
     if (gensPastConvergence >= POST_CONVERGENCE_BUFFER) {
       console.log(`[detectEquilibrium] Nash equilibrium confirmed: convergence at gen ${convergenceGen}, ${gensPastConvergence} generations past (threshold: ${effectiveThreshold.toFixed(4)}, peak: ${peakVariance.toFixed(4)})`)
       return { equilibriumReached: true, convergenceGeneration: convergenceGen }
     }
   }
-  
+
   return { equilibriumReached: false, convergenceGeneration: null }
 }
 
@@ -100,16 +100,16 @@ export async function POST(request: NextRequest) {
     } catch (parseError: any) {
       const errorMessage = (parseError?.message || String(parseError)).toLowerCase()
       // Check for various payload size error messages
-      if (errorMessage.includes('too large') || 
-          errorMessage.includes('413') || 
-          errorMessage.includes('payload') ||
-          errorMessage.includes('request entity too large') ||
-          errorMessage.includes('body size limit') ||
-          errorMessage.includes('max body size')) {
+      if (errorMessage.includes('too large') ||
+        errorMessage.includes('413') ||
+        errorMessage.includes('payload') ||
+        errorMessage.includes('request entity too large') ||
+        errorMessage.includes('body size limit') ||
+        errorMessage.includes('max body size')) {
         console.error(`[RESULTS] Payload too large error:`, parseError?.message || String(parseError))
         return NextResponse.json(
-          { 
-            error: 'Payload too large', 
+          {
+            error: 'Payload too large',
             details: 'The results data exceeds the maximum allowed size (50MB configured in nginx). Consider reducing batch size or splitting the upload.',
             hint: 'Try reducing the number of generations per batch, matches per upload, or limit the amount of telemetry data included'
           },
@@ -119,28 +119,28 @@ export async function POST(request: NextRequest) {
       // Re-throw if it's a different error
       throw parseError
     }
-    
+
     const { job_id, experiment_id, worker_id, generation_stats, generation_stats_batch, matches } = body
-    
+
     console.log(`[RESULTS] Received upload request for experiment ${experiment_id}, job ${job_id}, worker ${worker_id || 'unknown'}`)
-    
+
     if (!experiment_id) {
       return NextResponse.json(
         { error: 'Missing required field: experiment_id' },
         { status: 400 }
       )
     }
-    
+
     // Support both single generation_stats and batch generation_stats_batch
     const statsArray = generation_stats_batch || (generation_stats ? [generation_stats] : [])
-    
+
     if (statsArray.length === 0) {
       return NextResponse.json(
         { error: 'Missing required field: generation_stats or generation_stats_batch' },
         { status: 400 }
       )
     }
-    
+
     // Validate job assignment exists and verify ownership
     let jobGenerationStart: number | null = null
     let jobGenerationEnd: number | null = null
@@ -195,24 +195,21 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    
+
     // Prepare generation inserts
     const generationInserts = statsArray.map((stats: any) => {
       const generation_number = stats.generation !== undefined ? stats.generation : null
-      
+
       if (generation_number === null) {
         throw new Error('Generation number is required in generation_stats')
       }
-      
+
       return {
         experiment_id,
         generation_number,
         population_size: stats.population_size || 1000,
         avg_fitness: stats.avg_fitness || null,
-        avg_elo: stats.avg_elo || null,
-        peak_elo: stats.peak_elo || null,
-        min_elo: stats.min_elo || null,
-        std_elo: stats.std_elo || null,
+        peak_fitness: stats.peak_fitness || null,
         policy_entropy: stats.policy_entropy || null,
         entropy_variance: stats.entropy_variance || null,
         population_diversity: stats.population_diversity || null,
@@ -222,7 +219,7 @@ export async function POST(request: NextRequest) {
         std_fitness: stats.std_fitness || null
       }
     })
-    
+
     // Check which generations already exist to avoid duplicate key errors
     const generationNumbers = generationInserts.map((g: any) => g.generation_number)
     const placeholders = generationNumbers.map((_: number, i: number) => `$${i + 2}`).join(', ')
@@ -231,20 +228,20 @@ export async function POST(request: NextRequest) {
        WHERE experiment_id = $1 AND generation_number IN (${placeholders})`,
       [experiment_id, ...generationNumbers]
     )
-    
+
     // Filter out generations that already exist
     const existingNumbers = new Set((existingGenerations || []).map((g: any) => g.generation_number))
     const newGenerationInserts = generationInserts.filter((g: any) => !existingNumbers.has(g.generation_number))
-    
+
     let insertedGenerations: any[] = []
-    
+
     // Only insert if there are new generations
     if (newGenerationInserts.length > 0) {
       insertedGenerations = await insertMany('generations', newGenerationInserts)
       console.log(`[RESULTS] Successfully saved ${insertedGenerations.length} new generations for experiment ${experiment_id} (${existingNumbers.size} already existed)`)
     } else {
       console.log(`[RESULTS] All ${generationNumbers.length} generations already exist for experiment ${experiment_id}, skipping insert`)
-      
+
       // Fetch existing generations for return value
       const placeholders2 = generationNumbers.map((_: number, i: number) => `$${i + 2}`).join(', ')
       insertedGenerations = await queryAll(
@@ -252,18 +249,18 @@ export async function POST(request: NextRequest) {
         [experiment_id, ...generationNumbers]
       ) || []
     }
-    
+
     // Insert matches if provided
     if (matches && matches.length > 0) {
       const allMatches = Array.isArray(matches[0]) ? matches.flat() : matches
       const matchInserts = allMatches.map((match: any) => {
-        const generation = insertedGenerations?.find((g: any) => 
+        const generation = insertedGenerations?.find((g: any) =>
           g.generation_number === match.generation_number
         )
         if (!generation) {
           return null
         }
-        
+
         return {
           experiment_id,
           generation_id: generation.id,
@@ -275,12 +272,12 @@ export async function POST(request: NextRequest) {
           telemetry: JSON.stringify(match.telemetry || {})
         }
       }).filter((m: any) => m !== null)
-      
+
       if (matchInserts.length > 0) {
         await insertMany('matches', matchInserts)
       }
     }
-    
+
     // Mark job completed ONLY when all generations in the job's range exist in DB
     if (job_id && jobGenerationStart != null && jobGenerationEnd != null) {
       const rangePlaceholders = []
@@ -288,7 +285,7 @@ export async function POST(request: NextRequest) {
         rangePlaceholders.push(`$${i + 2}`)
       }
       const rangeNumbers = Array.from({ length: jobGenerationEnd - jobGenerationStart + 1 }, (_, i) => jobGenerationStart! + i)
-      
+
       const rangeGens = await queryAll<{ generation_number: number }>(
         `SELECT generation_number FROM generations 
          WHERE experiment_id = $1 AND generation_number >= $2 AND generation_number <= $3`,
@@ -324,31 +321,31 @@ export async function POST(request: NextRequest) {
         )
       }
     }
-    
+
     // Check if all batches for experiment are complete
     const experiment = await queryOne<{ max_generations: number; status: string }>(
       'SELECT max_generations, status FROM experiments WHERE id = $1',
       [experiment_id]
     )
-    
+
     // Track whether we should signal job completion to the worker
     let jobComplete = false
-    
+
     if (experiment) {
       // Check for Nash equilibrium (web app-side detection)
       // This runs on every results upload and checks if equilibrium conditions are met
       if (experiment.status === 'RUNNING' || experiment.status === 'PENDING') {
         const { equilibriumReached, convergenceGeneration } = await detectEquilibrium(experiment_id)
-        
+
         if (equilibriumReached) {
           console.log(`[RESULTS] Nash equilibrium detected at generation ${convergenceGeneration}, ${POST_CONVERGENCE_BUFFER}+ generations past, marking COMPLETED`)
-          
+
           // Mark experiment as COMPLETED
           await query(
             'UPDATE experiments SET status = $1, completed_at = $2 WHERE id = $3',
             ['COMPLETED', new Date().toISOString(), experiment_id]
           )
-          
+
           // Mark all active job assignments as completed for this experiment
           // This ensures workers can move on to the next experiment
           const completedResult = await query(
@@ -357,39 +354,39 @@ export async function POST(request: NextRequest) {
              RETURNING job_id`,
             [experiment_id]
           )
-          
+
           const completedJobs = completedResult.rows?.length || 0
           console.log(`[RESULTS] ✓ Experiment ${experiment_id} marked COMPLETED (Nash equilibrium at gen ${convergenceGeneration})`)
           console.log(`[RESULTS]   Completed ${completedJobs} active job assignments`)
-          
+
           // Signal to worker that job is complete
           jobComplete = true
         }
       }
-      
+
       // If not completed by equilibrium, check if we have all generations (fallback completion)
       if (!jobComplete) {
         const allGenerations = await queryAll<{ generation_number: number }>(
           'SELECT generation_number FROM generations WHERE experiment_id = $1',
           [experiment_id]
         )
-        
+
         const generationNums = new Set((allGenerations || []).map((g: any) => g.generation_number))
         const expectedGenerations = new Set(Array.from({ length: experiment.max_generations }, (_, i) => i))
-        
-        const hasAllGenerations = generationNums.size >= experiment.max_generations && 
+
+        const hasAllGenerations = generationNums.size >= experiment.max_generations &&
           Array.from(expectedGenerations).every(gen => generationNums.has(gen))
-        
+
         const finalGenerationExists = generationNums.has(experiment.max_generations - 1)
         const hasEnoughGenerations = generationNums.size >= experiment.max_generations
         const shouldComplete = hasAllGenerations || (finalGenerationExists && hasEnoughGenerations)
-        
+
         // Get all job assignments
         const allAssignments = await queryAll(
           'SELECT status, started_at, assigned_at FROM job_assignments WHERE experiment_id = $1',
           [experiment_id]
         )
-        
+
         // Only check for completion if experiment is still RUNNING or PENDING
         if (shouldComplete && (experiment.status === 'RUNNING' || experiment.status === 'PENDING')) {
           const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
@@ -401,9 +398,9 @@ export async function POST(request: NextRequest) {
             }
             return false
           })
-          
+
           if (!hasActiveAssignments) {
-            const reason = hasAllGenerations 
+            const reason = hasAllGenerations
               ? `all ${generationNums.size} generations present`
               : `final generation ${experiment.max_generations - 1} exists with ${generationNums.size} total`
             console.log(`[RESULTS] Experiment ${experiment_id} completing: ${reason}`)
@@ -411,7 +408,7 @@ export async function POST(request: NextRequest) {
               'UPDATE experiments SET status = $1, completed_at = $2 WHERE id = $3',
               ['COMPLETED', new Date().toISOString(), experiment_id]
             )
-            
+
             // Mark all remaining active job assignments as completed
             const completedResult = await query(
               `UPDATE job_assignments SET status = 'completed', completed_at = NOW()
@@ -420,7 +417,7 @@ export async function POST(request: NextRequest) {
               [experiment_id]
             )
             const completedJobs = completedResult.rows?.length || 0
-            
+
             console.log(`[RESULTS] ✓ Successfully marked experiment ${experiment_id} as COMPLETED`)
             if (completedJobs > 0) {
               console.log(`[RESULTS]   Completed ${completedJobs} remaining job assignments`)
@@ -429,7 +426,7 @@ export async function POST(request: NextRequest) {
           } else {
             const completedBatches = allAssignments?.filter((a: any) => a.status === 'completed').length || 0
             const totalBatches = allAssignments?.length || 0
-            const activeBatches = allAssignments?.filter((a: any) => 
+            const activeBatches = allAssignments?.filter((a: any) =>
               a.status === 'assigned' || (a.status === 'processing' && (a.started_at || a.assigned_at) > tenMinutesAgo)
             ).length || 0
             const missingGenerations = Array.from(expectedGenerations).filter(gen => !generationNums.has(gen))
@@ -445,9 +442,9 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    
-    return NextResponse.json({ 
-      success: true, 
+
+    return NextResponse.json({
+      success: true,
       generations_inserted: insertedGenerations?.length || 0,
       generation_ids: insertedGenerations?.map((g: any) => g.id) || [],
       job_complete: jobComplete  // Signal to worker that experiment is complete

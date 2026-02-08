@@ -696,11 +696,11 @@ class StatisticalAnalyzer:
         
         return None
     
-    def calculate_convergence_generation_multi_metric(
+    def calculate_multi_metric_convergence(
         self, 
         df: pd.DataFrame, 
         entropy_threshold: float = 0.01,
-        elo_std_threshold: float = 50.0,
+        fitness_std_threshold: float = 50.0,
         stability_window: int = 20
     ) -> Optional[int]:
         """
@@ -708,22 +708,22 @@ class StatisticalAnalyzer:
         
         This method uses a combination of:
         1. Entropy variance (primary) - policy homogeneity
-        2. Elo standard deviation (secondary) - fitness stability
+        2. Fitness standard deviation (secondary) - fitness stability
         
         Both metrics must be stable for the stability_window to confirm true Nash equilibrium.
         
         Args:
             df: DataFrame with generation data
             entropy_threshold: Entropy variance threshold (default 0.01)
-            elo_std_threshold: Elo standard deviation threshold (default 50.0, ~5% of typical range)
+            fitness_std_threshold: Fitness standard deviation threshold (default 50.0, ~5% of typical range)
             stability_window: Consecutive generations required below thresholds (default 20)
             
         Returns:
             Generation number where multi-metric convergence occurred, or None if not converged
         """
-        required_cols = ['entropy_variance', 'std_elo', 'generation']
+        required_cols = ['entropy_variance', 'std_fitness', 'generation']
         if not all(col in df.columns for col in required_cols):
-            # Fall back to single-metric if std_elo not available
+            # Fall back to single-metric if std_fitness not available
             return self.calculate_convergence_generation(df, entropy_threshold, stability_window)
         
         # First, find where entropy variance exceeds threshold (population diverged)
@@ -738,12 +738,12 @@ class StatisticalAnalyzer:
         if len(after_divergence) < stability_window:
             return None
         
-        # Check both metrics: entropy variance AND Elo stability
+        # Check both metrics: entropy variance AND fitness stability
         entropy_stable = (after_divergence['entropy_variance'] < entropy_threshold).values
-        elo_stable = (after_divergence['std_elo'] < elo_std_threshold).values
+        fitness_stable = (after_divergence['std_fitness'] < fitness_std_threshold).values
         
         # Both must be stable
-        both_stable = entropy_stable & elo_stable
+        both_stable = entropy_stable & fitness_stable
         
         for i in range(len(both_stable) - stability_window + 1):
             if all(both_stable[i:i + stability_window]):
@@ -863,10 +863,10 @@ class StatisticalAnalyzer:
 
     def perform_t_test(self) -> Dict:
         """
-        Perform Welch's two-sample t-test on final Elo ratings (SECONDARY / exploratory).
+        Perform Welch's two-sample t-test on final fitness scores (SECONDARY / exploratory).
         
         The primary hypothesis test is generations to Nash equilibrium; use
-        perform_convergence_t_test() for that. This Elo-based test is descriptive only.
+        perform_convergence_t_test() for that. This fitness-based test is descriptive only.
         
         For single control vs single experimental (typical CSV analysis), uses the
         average of last 10 generations as the summary statistic.
@@ -876,22 +876,22 @@ class StatisticalAnalyzer:
         """
         # Get average of last 10 generations for each group (more stable than single point)
         last_n = min(10, len(self.control_df), len(self.experimental_df))
-        control_elos = self.control_df['avg_elo'].tail(last_n).values
-        experimental_elos = self.experimental_df['avg_elo'].tail(last_n).values
+        control_fitness = self.control_df['avg_fitness'].tail(last_n).values
+        experimental_fitness = self.experimental_df['avg_fitness'].tail(last_n).values
 
         # Welch's t-test (unequal variances)
-        t_stat, p_value = stats.ttest_ind(control_elos, experimental_elos, equal_var=False)
+        t_stat, p_value = stats.ttest_ind(control_fitness, experimental_fitness, equal_var=False)
 
         is_significant = p_value < 0.05
 
         # Calculate effect size (Cohen's d)
-        control_mean = float(np.mean(control_elos))
-        experimental_mean = float(np.mean(experimental_elos))
-        control_std = float(np.std(control_elos, ddof=1))
-        experimental_std = float(np.std(experimental_elos, ddof=1))
+        control_mean = float(np.mean(control_fitness))
+        experimental_mean = float(np.mean(experimental_fitness))
+        control_std = float(np.std(control_fitness, ddof=1))
+        experimental_std = float(np.std(experimental_fitness, ddof=1))
 
         # Pooled standard deviation for Cohen's d
-        n1, n2 = len(control_elos), len(experimental_elos)
+        n1, n2 = len(control_fitness), len(experimental_fitness)
         pooled_std = np.sqrt(((n1 - 1) * control_std**2 + (n2 - 1) * experimental_std**2) / (n1 + n2 - 2))
         cohens_d = abs(experimental_mean - control_mean) / pooled_std if pooled_std > 0 else None
 
@@ -920,7 +920,7 @@ class StatisticalAnalyzer:
             'effect_size_label': effect_size_label,
             'sample_sizes': {'control': n1, 'experimental': n2},
             'interpretation': 'Statistically significant' if is_significant else 'Not statistically significant',
-            'note': 'Secondary/exploratory: Elo ratings. For hypothesis testing use perform_convergence_t_test() (generations to Nash).'
+            'note': 'Secondary/exploratory: Fitness scores. For hypothesis testing use perform_convergence_t_test() (generations to Nash).'
         }
     
     def analyze_convergence(self) -> Dict:
@@ -953,15 +953,15 @@ class StatisticalAnalyzer:
             'control_convergence_gen': control_convergence,
             'experimental_convergence_gen': experimental_convergence,
             'acceleration_percent': acceleration,
-            'control_peak_elo': float(self.control_df['peak_elo'].max()),
-            'experimental_peak_elo': float(self.experimental_df['peak_elo'].max()),
+            'control_peak_fitness': float(self.control_df['peak_fitness'].max()),
+            'experimental_peak_fitness': float(self.experimental_df['peak_fitness'].max()),
             'threshold_used': self.CONVERGENCE_THRESHOLD,
             'stability_window': self.STABILITY_WINDOW
         }
     
     def plot_convergence_velocity(self, output_path: str):
         """
-        Plot Convergence Velocity graph (Generation vs Average Elo).
+        Plot Convergence Velocity graph (Generation vs Average Fitness).
         
         Args:
             output_path: Path to save the graph
@@ -970,20 +970,20 @@ class StatisticalAnalyzer:
         
         plt.plot(
             self.control_df['generation'],
-            self.control_df['avg_elo'],
+            self.control_df['avg_fitness'],
             label='Control (Static Mutation)',
             linewidth=2
         )
         plt.plot(
             self.experimental_df['generation'],
-            self.experimental_df['avg_elo'],
+            self.experimental_df['avg_fitness'],
             label='Experimental (Adaptive Mutation)',
             linewidth=2
         )
         
         plt.xlabel('Generation', fontsize=12)
-        plt.ylabel('Average Elo Rating', fontsize=12)
-        plt.title('Convergence Velocity: Generation vs Average Elo', fontsize=14, fontweight='bold')
+        plt.ylabel('Average Fitness Score', fontsize=12)
+        plt.title('Convergence Velocity: Generation vs Average Fitness', fontsize=14, fontweight='bold')
         plt.legend(fontsize=10)
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
@@ -1040,8 +1040,8 @@ class StatisticalAnalyzer:
         
         bars = plt.bar(groups, means, yerr=stds, capsize=10, alpha=0.7, color=['#3498db', '#e74c3c'])
         
-        plt.ylabel('Average Elo Rating', fontsize=12)
-        plt.title('Statistical Significance: Final Mean Performance', fontsize=14, fontweight='bold')
+        plt.ylabel('Average Fitness Score', fontsize=12)
+        plt.title('Statistical Significance: Final Mean Fitness', fontsize=14, fontweight='bold')
         plt.grid(True, alpha=0.3, axis='y')
         
         # Add p-value annotation
@@ -1067,21 +1067,21 @@ class StatisticalAnalyzer:
         Returns:
             Dictionary with all assumption check results and recommendations
         """
-        # Get final Elos for each group (using last 10 generations averaged)
+        # Get final fitness for each group (using last 10 generations averaged)
         last_n = min(10, len(self.control_df), len(self.experimental_df))
-        control_elos = self.control_df['avg_elo'].tail(last_n).values
-        experimental_elos = self.experimental_df['avg_elo'].tail(last_n).values
+        control_fitness = self.control_df['avg_fitness'].tail(last_n).values
+        experimental_fitness = self.experimental_df['avg_fitness'].tail(last_n).values
         
         # Normality tests
-        control_normality = shapiro_wilk_test(control_elos)
-        experimental_normality = shapiro_wilk_test(experimental_elos)
+        control_normality = shapiro_wilk_test(control_fitness)
+        experimental_normality = shapiro_wilk_test(experimental_fitness)
         
         # Variance equality
-        variance_equality = levene_test(control_elos, experimental_elos)
+        variance_equality = levene_test(control_fitness, experimental_fitness)
         
         # Outlier detection
-        control_outliers = detect_outliers_iqr(control_elos)
-        experimental_outliers = detect_outliers_iqr(experimental_elos)
+        control_outliers = detect_outliers_iqr(control_fitness)
+        experimental_outliers = detect_outliers_iqr(experimental_fitness)
         
         # Recommendation logic
         both_normal = (control_normality.get('is_normal', False) and 
@@ -1123,10 +1123,10 @@ class StatisticalAnalyzer:
             Dictionary with Mann-Whitney U test results
         """
         last_n = min(10, len(self.control_df), len(self.experimental_df))
-        control_elos = self.control_df['avg_elo'].tail(last_n).values
-        experimental_elos = self.experimental_df['avg_elo'].tail(last_n).values
+        control_fitness = self.control_df['avg_fitness'].tail(last_n).values
+        experimental_fitness = self.experimental_df['avg_fitness'].tail(last_n).values
         
-        return mann_whitney_u_test(control_elos, experimental_elos)
+        return mann_whitney_u_test(control_fitness, experimental_fitness)
     
     def calculate_effect_sizes(self) -> Dict:
         """
@@ -1136,11 +1136,11 @@ class StatisticalAnalyzer:
             Dictionary with Cohen's d, Hedges' g, and CLES
         """
         last_n = min(10, len(self.control_df), len(self.experimental_df))
-        control_elos = self.control_df['avg_elo'].tail(last_n).values
-        experimental_elos = self.experimental_df['avg_elo'].tail(last_n).values
+        control_fitness = self.control_df['avg_fitness'].tail(last_n).values
+        experimental_fitness = self.experimental_df['avg_fitness'].tail(last_n).values
         
-        hedges_result = hedges_g(control_elos, experimental_elos)
-        cles_result = common_language_effect_size(control_elos, experimental_elos)
+        hedges_result = hedges_g(control_fitness, experimental_fitness)
+        cles_result = common_language_effect_size(control_fitness, experimental_fitness)
         
         return {
             'hedges_g': hedges_result,
@@ -1156,15 +1156,15 @@ class StatisticalAnalyzer:
             Dictionary with power analysis results
         """
         last_n = min(10, len(self.control_df), len(self.experimental_df))
-        control_elos = self.control_df['avg_elo'].tail(last_n).values
-        experimental_elos = self.experimental_df['avg_elo'].tail(last_n).values
+        control_fitness = self.control_df['avg_fitness'].tail(last_n).values
+        experimental_fitness = self.experimental_df['avg_fitness'].tail(last_n).values
         
         # Get effect size
         effect_sizes = self.calculate_effect_sizes()
         d = effect_sizes.get('cohens_d')
         
         # Calculate achieved power
-        n1, n2 = len(control_elos), len(experimental_elos)
+        n1, n2 = len(control_fitness), len(experimental_fitness)
         achieved_power = calculate_statistical_power(n1, n2, d)
         
         # Calculate required sample sizes for various power levels
@@ -1194,12 +1194,12 @@ class StatisticalAnalyzer:
             Dictionary with bootstrap CI for mean difference
         """
         last_n = min(10, len(self.control_df), len(self.experimental_df))
-        control_elos = self.control_df['avg_elo'].tail(last_n).values
-        experimental_elos = self.experimental_df['avg_elo'].tail(last_n).values
+        control_fitness = self.control_df['avg_fitness'].tail(last_n).values
+        experimental_fitness = self.experimental_df['avg_fitness'].tail(last_n).values
         
         return bootstrap_confidence_interval(
-            control_elos, 
-            experimental_elos, 
+            control_fitness, 
+            experimental_fitness, 
             n_bootstrap=n_bootstrap
         )
     
@@ -1211,12 +1211,12 @@ class StatisticalAnalyzer:
             Dictionary with distribution statistics for both groups
         """
         last_n = min(10, len(self.control_df), len(self.experimental_df))
-        control_elos = self.control_df['avg_elo'].tail(last_n).values
-        experimental_elos = self.experimental_df['avg_elo'].tail(last_n).values
+        control_fitness = self.control_df['avg_fitness'].tail(last_n).values
+        experimental_fitness = self.experimental_df['avg_fitness'].tail(last_n).values
         
         return {
-            'control': get_distribution_statistics(control_elos),
-            'experimental': get_distribution_statistics(experimental_elos)
+            'control': get_distribution_statistics(control_fitness),
+            'experimental': get_distribution_statistics(experimental_fitness)
         }
     
     def generate_all_analysis(self, output_dir: str) -> Dict:

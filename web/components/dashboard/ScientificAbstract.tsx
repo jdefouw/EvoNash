@@ -6,10 +6,10 @@ interface Statistics {
   controlConvergenceGen: number | null
   experimentalConvergenceGen: number | null
   convergenceImprovement: number | null
-  controlFinalElo: number | null
-  experimentalFinalElo: number | null
-  controlPeakElo: number | null
-  experimentalPeakElo: number | null
+  controlFinalFitness: number | null
+  experimentalFinalFitness: number | null
+  controlPeakFitness: number | null
+  experimentalPeakFitness: number | null
   convergencePValue: number | null
   convergenceIsSignificant: boolean
   pValue: number | null
@@ -47,16 +47,16 @@ export default function ScientificAbstract({
   let highlightedAbstract = abstract
     .replace(/Adaptive Mutation Strategy/g, '<strong class="text-purple-600 dark:text-purple-400">Adaptive Mutation Strategy</strong>')
     .replace(/Nash Equilibrium/g, '<strong class="text-blue-600 dark:text-blue-400">Nash Equilibrium</strong>')
-  
+
   // Only highlight percentages and p-values if they represent actual calculated values
   // Match percentage patterns (e.g., "40%", "35%") and highlight in green if significant
   if (statistics && statistics.convergenceImprovement != null && statistics.convergenceImprovement > 0) {
     highlightedAbstract = highlightedAbstract.replace(
-      /(\d+)% faster/g, 
+      /(\d+)% faster/g,
       '<strong class="text-green-600 dark:text-green-400">$1% faster</strong>'
     )
   }
-  
+
   // Highlight p-values (generations to Nash equilibrium - primary hypothesis test)
   if (statistics && statistics.convergencePValue != null) {
     highlightedAbstract = highlightedAbstract.replace(
@@ -74,7 +74,7 @@ export default function ScientificAbstract({
       '<strong class="text-green-600 dark:text-green-400">statistically significant</strong>'
     )
   }
-  
+
   // Highlight "did not reach statistical significance" as a neutral/warning indicator
   highlightedAbstract = highlightedAbstract.replace(
     /did not reach statistical significance/g,
@@ -110,7 +110,7 @@ export default function ScientificAbstract({
           <p className="text-sm text-gray-600 dark:text-gray-400 italic mb-4">
             {subtitle}
           </p>
-          <p 
+          <p
             className="text-gray-700 dark:text-gray-300 leading-relaxed"
             dangerouslySetInnerHTML={{ __html: highlightedAbstract }}
           />

@@ -49,35 +49,27 @@ class CSVLogger:
                 writer.writerow([
                     'generation',
                     'timestamp',
-                    'avg_elo',
-                    'peak_elo',
-                    'min_elo',
-                    'std_elo',
+                    'avg_fitness',
+                    'peak_fitness',
+                    'min_fitness',
+                    'std_fitness',
                     'policy_entropy',
                     'entropy_variance',
                     'mutation_rate',
-                    'population_diversity',
-                    'avg_fitness',
-                    'min_fitness',
-                    'max_fitness',
-                    'std_fitness'
+                    'population_diversity'
                 ])
         self.file_initialized = True
     
     def log_generation(
         self,
         generation: int,
-        avg_elo: float,
-        peak_elo: float,
+        avg_fitness: float,
+        peak_fitness: float,
         policy_entropy: float,
         entropy_variance: float,
         mutation_rate: float,
         population_diversity: float,
-        avg_fitness: float,
-        min_elo: Optional[float] = None,
-        std_elo: Optional[float] = None,
         min_fitness: Optional[float] = None,
-        max_fitness: Optional[float] = None,
         std_fitness: Optional[float] = None
     ):
         """
@@ -85,17 +77,13 @@ class CSVLogger:
         
         Args:
             generation: Generation number
-            avg_elo: Average Elo rating of population
-            peak_elo: Highest Elo rating in population
+            avg_fitness: Average fitness score of population
+            peak_fitness: Highest fitness score in population
             policy_entropy: Policy entropy value
             entropy_variance: Variance of entropy (for convergence tracking)
             mutation_rate: Mutation rate used in this generation
             population_diversity: Average Euclidean distance between weight vectors
-            avg_fitness: Average fitness score
-            min_elo: Minimum Elo rating (optional)
-            std_elo: Standard deviation of Elo ratings (optional)
             min_fitness: Minimum fitness score (optional)
-            max_fitness: Maximum fitness score (optional)
             std_fitness: Standard deviation of fitness scores (optional)
         """
         if not self.file_initialized:
@@ -108,18 +96,14 @@ class CSVLogger:
             writer.writerow([
                 generation,
                 timestamp,
-                avg_elo,
-                peak_elo,
-                min_elo if min_elo is not None else '',
-                std_elo if std_elo is not None else '',
+                avg_fitness,
+                peak_fitness,
+                min_fitness if min_fitness is not None else '',
+                std_fitness if std_fitness is not None else '',
                 policy_entropy,
                 entropy_variance,
                 mutation_rate,
-                population_diversity,
-                avg_fitness,
-                min_fitness if min_fitness is not None else '',
-                max_fitness if max_fitness is not None else '',
-                std_fitness if std_fitness is not None else ''
+                population_diversity
             ])
     
     def get_filepath(self) -> Path:
