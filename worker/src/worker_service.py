@@ -1017,7 +1017,13 @@ class WorkerService:
                             else:
                                 self.status = 'idle'
                     except requests.exceptions.RequestException as e:
-                        self.logger.warning(f"Error requesting job: {e}")
+                        error_msg = f"Error requesting job: {e}"
+                        if hasattr(e, 'response') and e.response is not None:
+                            try:
+                                error_msg += f"\nServer Response: {e.response.text}"
+                            except:
+                                pass
+                        self.logger.warning(error_msg)
                         self.status = 'idle'
                 else:
                     self.status = 'idle'
