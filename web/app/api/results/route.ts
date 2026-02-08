@@ -215,7 +215,6 @@ export async function POST(request: NextRequest) {
         population_diversity: stats.population_diversity || null,
         mutation_rate: stats.mutation_rate || null,
         min_fitness: stats.min_fitness || null,
-        max_fitness: stats.max_fitness || null,
         std_fitness: stats.std_fitness || null
       }
     })
