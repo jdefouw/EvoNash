@@ -190,8 +190,8 @@ export default function StatsSummary({
           <>
             {/* Main Result Banner - Generations to Nash equilibrium */}
             <div className={`mb-6 p-6 rounded-xl ${convergenceIsSignificant
-                ? 'bg-gradient-to-r from-green-500 to-emerald-500'
-                : 'bg-gradient-to-r from-gray-400 to-gray-500'
+              ? 'bg-gradient-to-r from-green-500 to-emerald-500'
+              : 'bg-gradient-to-r from-gray-400 to-gray-500'
               } text-white`}>
               <div className="flex items-center justify-between">
                 <div>
@@ -394,7 +394,7 @@ export default function StatsSummary({
               </h5>
               <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
                 <p><strong>Metric:</strong> Entropy Variance (σ) — measures how similar all agents&apos; strategies are</p>
-                <p><strong>Threshold:</strong> σ &lt; 0.01 (same for both groups for fair comparison)</p>
+                <p><strong>Threshold:</strong> σ &lt; 0.001 (same for both groups for fair comparison)</p>
                 <p><strong>Stability:</strong> 20+ consecutive generations below threshold required</p>
                 <p><strong>Method:</strong> Population must first diverge (σ ≥ threshold), then converge. Prevents false positives from identical initial agents.</p>
               </div>

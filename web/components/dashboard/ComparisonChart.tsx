@@ -266,10 +266,10 @@ export default function ComparisonChart({
             />
             {/* Nash Equilibrium threshold line - same for both groups */}
             <ReferenceLine
-              y={0.01}
+              y={0.001}
               stroke="#ef4444"
               strokeDasharray="5 5"
-              label={{ value: "Convergence Threshold (σ < 0.01)", position: "right", fontSize: 9 }}
+              label={{ value: "Convergence Threshold (σ < 0.001)", position: "right", fontSize: 9 }}
             />
           </>
         )}

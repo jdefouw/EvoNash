@@ -17,7 +17,7 @@ interface AnalysisData {
 }
 
 // Unified convergence threshold for all experiments (scientific best practice)
-const CONVERGENCE_THRESHOLD = 0.01
+const CONVERGENCE_THRESHOLD = 0.001
 
 export default function StatisticalSignificance({ experimentId, mutationMode }: StatisticalSignificanceProps) {
   // Same threshold for all experiments (fair comparison)

@@ -12,7 +12,7 @@ interface EntropyChartProps {
 
 // Unified convergence threshold for BOTH groups (scientific best practice)
 // Using the same threshold enables fair comparison of convergence generations
-const CONVERGENCE_THRESHOLD = 0.01
+const CONVERGENCE_THRESHOLD = 0.001
 
 // Stability window: require N consecutive generations below threshold
 // UI uses 10 for faster visual feedback; backend early stopping uses 20 for scientific rigor
@@ -50,7 +50,7 @@ export default function EntropyChart({ generations, experiment, isLive = false }
       gen: g.generation_number,
       variance: g.entropy_variance ?? 0
     }))
-    
+
     if (varianceData.length === 0) {
       return { isConverged: false, convergenceGen: null, hasDiverged: false, peakVariance: 0 }
     }
@@ -58,11 +58,11 @@ export default function EntropyChart({ generations, experiment, isLive = false }
     // Find peak variance
     const peakVariance = Math.max(...varianceData.map(d => d.variance))
     const peakIndex = varianceData.findIndex(d => d.variance === peakVariance)
-    
+
     // Consider "diverged" if peak variance is above a minimum threshold (0.0001)
     // This means the population actually evolved and differentiated
     const hasDiverged = peakVariance > 0.0001
-    
+
     if (!hasDiverged) {
       return { isConverged: false, convergenceGen: null, hasDiverged: false, peakVariance }
     }
@@ -73,10 +73,10 @@ export default function EntropyChart({ generations, experiment, isLive = false }
     // 10% provides a good balance between detecting true convergence and avoiding false positives
     const relativeThreshold = peakVariance * 0.10
     const effectiveThreshold = Math.max(convergenceThreshold, relativeThreshold)
-    
+
     // Get data after peak
     const afterPeak = varianceData.slice(peakIndex)
-    
+
     // Find first generation that starts a stable run of STABILITY_WINDOW generations below threshold
     let convergenceGen: number | null = null
     for (let i = 0; i <= afterPeak.length - STABILITY_WINDOW; i++) {
@@ -86,7 +86,7 @@ export default function EntropyChart({ generations, experiment, isLive = false }
         break
       }
     }
-    
+
     return {
       isConverged: convergenceGen !== null,
       convergenceGen,
@@ -114,17 +114,17 @@ export default function EntropyChart({ generations, experiment, isLive = false }
       <ResponsiveContainer width="100%" height={400}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-gray-300 dark:stroke-gray-700" />
-          <XAxis 
-            dataKey="generation" 
+          <XAxis
+            dataKey="generation"
             className="text-gray-600 dark:text-gray-400"
             label={{ value: 'Generation', position: 'insideBottom', offset: -5 }}
           />
-          <YAxis 
+          <YAxis
             className="text-gray-600 dark:text-gray-400"
             label={{ value: 'Policy Entropy', angle: -90, position: 'insideLeft' }}
           />
-          <Tooltip 
-            contentStyle={{ 
+          <Tooltip
+            contentStyle={{
               backgroundColor: 'rgba(255, 255, 255, 0.95)',
               border: '1px solid #e5e7eb',
               borderRadius: '8px'
@@ -133,12 +133,12 @@ export default function EntropyChart({ generations, experiment, isLive = false }
           <Legend />
           {/* Horizontal threshold line when population has diverged */}
           {convergenceInfo.hasDiverged && (
-            <ReferenceLine 
-              y={convergenceThreshold} 
-              stroke="#10b981" 
-              strokeDasharray="5 5" 
-              label={{ 
-                value: `Threshold (σ < ${convergenceThreshold})`, 
+            <ReferenceLine
+              y={convergenceThreshold}
+              stroke="#10b981"
+              strokeDasharray="5 5"
+              label={{
+                value: `Threshold (σ < ${convergenceThreshold})`,
                 position: "right",
                 fontSize: 10
               }}
@@ -146,13 +146,13 @@ export default function EntropyChart({ generations, experiment, isLive = false }
           )}
           {/* Vertical line marking Nash Equilibrium achievement */}
           {convergenceInfo.isConverged && convergenceInfo.convergenceGen !== null && (
-            <ReferenceLine 
-              x={convergenceInfo.convergenceGen} 
-              stroke="#22c55e" 
+            <ReferenceLine
+              x={convergenceInfo.convergenceGen}
+              stroke="#22c55e"
               strokeWidth={2}
               strokeDasharray="3 3"
-              label={{ 
-                value: `Nash Equilibrium (Gen ${convergenceInfo.convergenceGen})`, 
+              label={{
+                value: `Nash Equilibrium (Gen ${convergenceInfo.convergenceGen})`,
                 position: "top",
                 fontSize: 11,
                 fill: "#16a34a",
@@ -160,20 +160,20 @@ export default function EntropyChart({ generations, experiment, isLive = false }
               }}
             />
           )}
-          <Line 
-            type="monotone" 
-            dataKey="entropy" 
-            stroke="#10b981" 
+          <Line
+            type="monotone"
+            dataKey="entropy"
+            stroke="#10b981"
             strokeWidth={2}
             name="Policy Entropy"
             dot={false}
             animationDuration={300}
             isAnimationActive={isLive}
           />
-          <Line 
-            type="monotone" 
-            dataKey="entropyVariance" 
-            stroke="#f59e0b" 
+          <Line
+            type="monotone"
+            dataKey="entropyVariance"
+            stroke="#f59e0b"
             strokeWidth={2}
             name="Entropy Variance"
             dot={false}
@@ -197,7 +197,7 @@ export default function EntropyChart({ generations, experiment, isLive = false }
           )}
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-500">
-          <strong>Detection Method:</strong> Population must first diverge (σ ≥ threshold), then converge (σ &lt; threshold). 
+          <strong>Detection Method:</strong> Population must first diverge (σ ≥ threshold), then converge (σ &lt; threshold).
           This prevents false positives from generation 0 when all agents are identical clones.
         </p>
       </div>

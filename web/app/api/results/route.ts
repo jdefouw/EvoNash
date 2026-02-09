@@ -5,7 +5,7 @@ import { queryOne, queryAll, query, rpc, insertMany } from '@/lib/postgres'
 export const dynamic = 'force-dynamic'
 
 // Nash equilibrium detection constants
-const ABSOLUTE_THRESHOLD = 0.01     // Minimum floor for convergence threshold
+const ABSOLUTE_THRESHOLD = 0.001     // Minimum floor for convergence threshold
 const RELATIVE_THRESHOLD_PERCENT = 0.10  // 10% of peak variance
 const STABILITY_WINDOW = 20         // Consecutive generations below threshold required
 const POST_CONVERGENCE_BUFFER = 30  // Additional generations after convergence before completing

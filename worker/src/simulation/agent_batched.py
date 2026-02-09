@@ -315,8 +315,39 @@ class BatchedAgentProcessor:
                     outputs = self.network_ensemble.forward(input_vectors)
             else:
                 outputs = self.network_ensemble.forward(input_vectors)
-        
-        return outputs
+            
+            # CRITICAL FIX: Clamp outputs to match Agent.act() logic
+            # Raw network outputs can be large/negative, breaking physics assumptions
+            
+            # First clamp everything to [-1, 1] range (same as Agent.act generic clamp)
+            outputs = torch.clamp(outputs, min=-1.0, max=1.0)
+            
+            # Specific clamping per action channel is handled in Agent.act processing
+            # checking Agent.act:
+            # thrust = clip(0, 1)
+            # turn = clip(-1, 1)
+            # shoot = clip(0, 1)
+            # split = clip(0, 1)
+            
+            # We can apply these specific clamps here or rely on the physics engine using them correctly
+            # But VectorizedPhysics.apply_physics_step expects raw "actions" tensor
+            # Let's enforce the ranges here to be safe and consistent with CPU agent
+            
+            # Create a copy to avoid in-place modification issues if gradient tracking was on (not here though)
+            clamped_outputs = outputs.clone()
+            
+            # Channel 0: Thrust [0, 1]
+            clamped_outputs[:, 0] = torch.clamp(outputs[:, 0], 0.0, 1.0)
+            
+            # Channel 1: Turn [-1, 1] (already clamped by global -1,1)
+            
+            # Channel 2: Shoot [0, 1]
+            clamped_outputs[:, 2] = torch.clamp(outputs[:, 2], 0.0, 1.0)
+            
+            # Channel 3: Split [0, 1]
+            clamped_outputs[:, 3] = torch.clamp(outputs[:, 3], 0.0, 1.0)
+            
+            return clamped_outputs
     
     def batch_act_legacy(self, input_vectors: torch.Tensor, active_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """

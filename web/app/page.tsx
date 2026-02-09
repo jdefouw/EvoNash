@@ -31,7 +31,7 @@ export default function DashboardPage() {
       { name: "Generation Count", description: "Number of evolutionary generations", value: "Continuous" }
     ],
     dependent: [
-      { name: "Convergence Velocity", description: "Generations to reach Nash Equilibrium (Policy Entropy < 0.01)" },
+      { name: "Convergence Velocity", description: "Generations to reach Nash Equilibrium (Policy Entropy < 0.001)" },
       { name: "Policy Entropy", description: "Measure of strategy randomness (Shannon Entropy)" },
       { name: "Entropy Variance", description: "Stability of population strategies" },
       { name: "Fitness Score", description: "Relative skill level (Self-play performance)" }

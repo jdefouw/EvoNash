@@ -44,7 +44,7 @@ export async function GET(
     // This handles cases where variance never exceeds the absolute threshold but clearly converges
     //
     // Use same threshold for both groups for fair scientific comparison
-    const absoluteThreshold = 0.01
+    const absoluteThreshold = 0.001
 
     // Calculate convergence using relative threshold approach
     let convergence_gen = null

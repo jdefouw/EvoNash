@@ -78,7 +78,7 @@ export default function LiveViewLegend() {
                 </span>
               </div>
               <div className="ml-7 mt-1 text-xs text-gray-500 dark:text-gray-500 space-y-1">
-                <div>• <strong>Threshold:</strong> σ &lt; 0.01 — same for both groups for fair comparison</div>
+                <div>• <strong>Threshold:</strong> σ &lt; 0.001 — same for both groups for fair comparison</div>
                 <div>• <strong>Stability:</strong> 20+ consecutive generations below threshold required</div>
                 <div>• <strong>Detection:</strong> Population must first diverge (σ ≥ threshold), then converge. This prevents false positives from generation 0.</div>
               </div>

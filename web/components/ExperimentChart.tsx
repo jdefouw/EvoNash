@@ -12,7 +12,7 @@ interface ExperimentChartProps {
 
 // Unified convergence threshold for BOTH groups (scientific best practice)
 // Using the same threshold enables fair comparison of convergence generations
-const CONVERGENCE_THRESHOLD = 0.01
+const CONVERGENCE_THRESHOLD = 0.001
 
 // Stability window: require N consecutive generations below threshold
 // UI uses 10 for faster visual feedback; backend early stopping uses 20 for scientific rigor
