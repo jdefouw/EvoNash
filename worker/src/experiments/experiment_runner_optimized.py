@@ -343,6 +343,7 @@ class OptimizedExperimentRunner:
             self.vectorized_physics.energies.fill_(self.petri_dish.initial_energy)
             self.vectorized_physics.shoot_cooldowns.zero_()
             self.vectorized_physics.split_cooldowns.zero_()
+            self.vectorized_physics.lifetimes.zero_()  # Reset lifetimes
             self.vectorized_physics.active_mask.fill_(True)
         
         total_ticks = self.petri_dish.ticks_per_generation
@@ -438,10 +439,17 @@ class OptimizedExperimentRunner:
         if food_consumed_mask.any():
             self.petri_dish.food_consumed = self.petri_dish.food_consumed | food_consumed_mask
         
-        # Calculate fitness on GPU
-        self.tensor_buffers.fitness_scores = self.vectorized_physics.energies + (
-            total_ticks * (self.vectorized_physics.energies > 0).float()
-        )
+        # Calculate fitness (survival time + energy)
+        # Gradient fitness: reward surviving longer even if they die
+        final_energies = self.vectorized_physics.energies
+        lifetimes = self.vectorized_physics.lifetimes
+        
+        # Fitness = Lifetime + Final Energy
+        # This provides a smooth gradient: 
+        # - Die early: Low fitness (lifetime)
+        # - Die late: Medium fitness (higher lifetime)
+        # - Survive: High fitness (max lifetime + energy)
+        self.tensor_buffers.fitness_scores = lifetimes + final_energies
         
         # Sync to agents only at end (single CPU transfer)
         self.vectorized_physics.sync_to_agents(agents)
@@ -627,6 +635,7 @@ class OptimizedExperimentRunner:
             # Early stopping: detect Nash equilibrium convergence
             if ENABLE_EARLY_STOPPING and not early_stopped:
                 entropy_variance = stats.get('entropy_variance', float('inf'))
+                avg_fitness = stats.get('avg_fitness', 0.0)
                 
                 # First, check if population has diverged (required before convergence can be detected)
                 if not has_diverged and entropy_variance >= CONVERGENCE_THRESHOLD:
@@ -634,13 +643,18 @@ class OptimizedExperimentRunner:
                     print(f"  📈 Population divergence detected (entropy_variance={entropy_variance:.6f} >= {CONVERGENCE_THRESHOLD})")
                 
                 # Only check for convergence after divergence has occurred
+                # AND population is viable (avg_fitness > 50) to prevent "Mass Extinction" false positives
                 if has_diverged:
-                    if entropy_variance < CONVERGENCE_THRESHOLD:
+                    is_stable = entropy_variance < CONVERGENCE_THRESHOLD
+                    is_viable = avg_fitness > 50.0  # Viability Gate
+                    
+                    if is_stable and is_viable:
                         stability_counter += 1
                         if stability_counter >= STABILITY_WINDOW and convergence_detected_gen is None:
                             convergence_detected_gen = gen - STABILITY_WINDOW + 1
                             print(f"\n🎯 NASH EQUILIBRIUM DETECTED at generation {convergence_detected_gen}")
                             print(f"   Entropy variance stable below {CONVERGENCE_THRESHOLD} for {STABILITY_WINDOW} generations")
+                            print(f"   Population is viable (Avg Fitness: {avg_fitness:.2f} > 50.0)")
                             print(f"   Running {POST_CONVERGENCE_BUFFER} more generations for post-convergence data...")
                             
                             # Notify the API that equilibrium was reached
@@ -652,9 +666,10 @@ class OptimizedExperimentRunner:
                                 except Exception as e:
                                     print(f"   ⚠ Warning: Failed to notify API of equilibrium: {e}")
                     else:
-                        # Reset counter if variance goes back above threshold
+                        # Reset counter if variance goes up OR population is dying out
                         if stability_counter > 0:
-                            print(f"  📉 Stability counter reset (variance {entropy_variance:.6f} >= threshold)")
+                            reason = "variance high" if not is_stable else "invliable population"
+                            print(f"  📉 Stability counter reset ({reason})")
                         stability_counter = 0
                 
                 # Check if we should stop (convergence detected + buffer complete)

@@ -14,16 +14,16 @@
     "initial_energy": 50.0,
     "energy_decay_rate": 5.0,
     "movement_cost": 1.0,
-    "max_velocity": 5.0,
-    "thrust_force": 0.2,
+    "max_velocity": 20.0,
+    "thrust_force": 20.0,
     "turn_rate": 0.1,
     "shoot_cooldown": 30,
     "split_cooldown": 60
   },
   "food": {
     "radius": 5.0,
-    "energy_value": 10.0,
-    "spawn_count": 50,
+    "energy_value": 20.0,
+    "spawn_count": 100,
     "respawn_time": 300
   },
   "projectile": {

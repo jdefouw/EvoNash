@@ -174,6 +174,10 @@ class ExperimentRunner:
             agent.angle = np.random.uniform(0, 2 * np.pi)
             agent.energy = self.petri_dish.initial_energy
         
+        # Track lifetimes for fitness calculation
+        # Map agent_id -> ticks_survived
+        agent_lifetimes = {id(a): 0 for a in agents}
+        
         total_ticks = self.petri_dish.ticks_per_generation
         log_interval = max(1, total_ticks // 10)  # Log every 10%
         
@@ -329,13 +333,21 @@ class ExperimentRunner:
             if should_log:
                 print(f"  [SIM] Completed tick {tick}, moving to tick {tick + 1}...")
                 sys.stdout.flush()
+            
+            # Update lifetimes for active agents
+            for agent in agents:
+                if agent.energy > 0:
+                    agent_lifetimes[id(agent)] += 1
         
         sim_time = time.time() - start_time
         print(f"  [SIM] Simulation complete in {sim_time:.2f}s")
         
         # Calculate fitness (survival time + energy)
+        # Gradient fitness: reward surviving longer even if they die
         for agent in agents:
-            agent.fitness_score = agent.energy + (self.petri_dish.ticks_per_generation if agent.energy > 0 else 0)
+            lifetime = agent_lifetimes.get(id(agent), 0)
+            # Fitness = Lifetime + Final Energy
+            agent.fitness_score = lifetime + agent.energy
         
         survivors = sum(1 for a in agents if a.energy > 0)
         avg_energy = np.mean([a.energy for a in agents])
@@ -520,6 +532,7 @@ class ExperimentRunner:
             # Early stopping: detect Nash equilibrium convergence
             if self.ENABLE_EARLY_STOPPING and not early_stopped:
                 entropy_variance = stats.get('entropy_variance', float('inf'))
+                avg_fitness = stats.get('avg_fitness', 0.0)
                 
                 # First, check if population has diverged (required before convergence can be detected)
                 if not has_diverged and entropy_variance >= self.CONVERGENCE_THRESHOLD:
@@ -527,18 +540,24 @@ class ExperimentRunner:
                     print(f"  📈 Population divergence detected (entropy_variance={entropy_variance:.6f} >= {self.CONVERGENCE_THRESHOLD})")
                 
                 # Only check for convergence after divergence has occurred
+                # AND population is viable (avg_fitness > 50) to prevent "Mass Extinction" false positives
                 if has_diverged:
-                    if entropy_variance < self.CONVERGENCE_THRESHOLD:
+                    is_stable = entropy_variance < self.CONVERGENCE_THRESHOLD
+                    is_viable = avg_fitness > 50.0  # Viability Gate
+                    
+                    if is_stable and is_viable:
                         stability_counter += 1
                         if stability_counter >= self.STABILITY_WINDOW and convergence_detected_gen is None:
                             convergence_detected_gen = gen - self.STABILITY_WINDOW + 1
                             print(f"\n🎯 NASH EQUILIBRIUM DETECTED at generation {convergence_detected_gen}")
                             print(f"   Entropy variance stable below {self.CONVERGENCE_THRESHOLD} for {self.STABILITY_WINDOW} generations")
+                            print(f"   Population is viable (Avg Fitness: {avg_fitness:.2f} > 50.0)")
                             print(f"   Running {self.POST_CONVERGENCE_BUFFER} more generations for post-convergence data...")
                     else:
-                        # Reset counter if variance goes back above threshold
+                        # Reset counter if variance goes up OR population is dying out
                         if stability_counter > 0:
-                            print(f"  📉 Stability counter reset (variance {entropy_variance:.6f} >= threshold)")
+                            reason = "variance high" if not is_stable else "invliable population"
+                            print(f"  📉 Stability counter reset ({reason})")
                         stability_counter = 0
                 
                 # Check if we should stop (convergence detected + buffer complete)

@@ -429,6 +429,7 @@ class VectorizedPhysics:
         self.energies = torch.zeros(num_agents, dtype=torch.float32, device=self.device)
         self.shoot_cooldowns = torch.zeros(num_agents, dtype=torch.float32, device=self.device)
         self.split_cooldowns = torch.zeros(num_agents, dtype=torch.float32, device=self.device)
+        self.lifetimes = torch.zeros(num_agents, dtype=torch.float32, device=self.device)  # Track survival time
         
         # Active mask (which agents are alive)
         self.active_mask = torch.ones(num_agents, dtype=torch.bool, device=self.device)
@@ -536,6 +537,9 @@ class VectorizedPhysics:
         # Update cooldowns
         self.shoot_cooldowns = torch.clamp(self.shoot_cooldowns - 1.0, min=0.0)
         self.split_cooldowns = torch.clamp(self.split_cooldowns - 1.0, min=0.0)
+        
+        # Update lifetimes (for fitness calculation)
+        self.lifetimes += self.active_mask.float()
         
         # Update active mask
         self.active_mask = self.energies > 0.0

@@ -650,7 +650,7 @@ class StatisticalAnalyzer:
     # This prevents false positives from noise
     STABILITY_WINDOW = 20
     
-    def calculate_convergence_generation(self, df: pd.DataFrame, threshold: float = 0.01, stability_window: int = 20) -> Optional[int]:
+    def calculate_convergence_generation(self, df: pd.DataFrame, threshold: float = 0.001, stability_window: int = 20, fitness_threshold: float = 50.0) -> Optional[int]:
         """
         Calculate generation at which entropy variance drops below threshold AND stays there.
         
@@ -658,13 +658,15 @@ class StatisticalAnalyzer:
         At generation 0, all agents are identical (same seed), so variance is artificially low.
         True convergence = population evolved, diverged, then stabilized to Nash Equilibrium.
         
-        For scientific rigor, we require stability_window consecutive generations below
-        threshold before declaring convergence. This prevents false positives from noise.
+        For scientific rigor, we require:
+        1. stability_window consecutive generations below entropy threshold
+        2. Average fitness > fitness_threshold (ensure population is viable, not just dead)
         
         Args:
             df: DataFrame with generation data
-            threshold: Entropy variance threshold (default 0.01, same for all groups)
+            threshold: Entropy variance threshold (default 0.001)
             stability_window: Number of consecutive generations below threshold required (default 20)
+            fitness_threshold: Minimum average fitness for viability (default 50.0)
             
         Returns:
             Generation number where stable convergence began, or None if never converged
@@ -686,12 +688,23 @@ class StatisticalAnalyzer:
         if len(after_divergence) < stability_window:
             return None
         
-        # Find first generation that starts a stable run of stability_window generations below threshold
-        below_threshold = (after_divergence['entropy_variance'] < threshold).values
+        # Check stability conditions
+        entropy_stable = (after_divergence['entropy_variance'] < threshold).values
         
-        for i in range(len(below_threshold) - stability_window + 1):
+        # Check viability condition (if avg_fitness is available)
+        if 'avg_fitness' in after_divergence.columns:
+            population_viable = (after_divergence['avg_fitness'] > fitness_threshold).values
+        else:
+            # If fitness data not available, assume viable (prevent breaking legacy data)
+            population_viable = np.ones_like(entropy_stable, dtype=bool)
+            
+        # Both conditions must be met
+        conditions_met = entropy_stable & population_viable
+        
+        # Find first generation that starts a stable run
+        for i in range(len(conditions_met) - stability_window + 1):
             # Check if we have stability_window consecutive True values
-            if all(below_threshold[i:i + stability_window]):
+            if all(conditions_met[i:i + stability_window]):
                 return int(after_divergence.iloc[i]['generation'])
         
         return None
