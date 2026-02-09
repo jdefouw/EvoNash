@@ -356,6 +356,7 @@ class OptimizedExperimentRunner:
         energy_decay_rate = self.petri_dish.energy_decay_rate
         thrust_force = self.petri_dish.thrust_force
         turn_rate = self.petri_dish.turn_rate
+        movement_cost = self.petri_dish.movement_cost
         width = self.petri_dish.width
         height = self.petri_dish.height
         toroidal = self.petri_dish.toroidal
@@ -401,7 +402,8 @@ class OptimizedExperimentRunner:
                 max_velocity=max_velocity,
                 energy_decay=energy_decay_rate,
                 thrust_force=thrust_force,
-                turn_rate=turn_rate
+                turn_rate=turn_rate,
+                movement_cost=movement_cost
             )
             
             # Wrap positions (fully vectorized)

@@ -417,7 +417,7 @@ class ExperimentRunner:
     
     # Early stopping configuration for Nash equilibrium detection
     # These are scientifically-grounded values based on convergence research
-    CONVERGENCE_THRESHOLD = 0.01  # Entropy variance threshold
+    CONVERGENCE_THRESHOLD = 0.001  # Entropy variance threshold (Standardized to 0.001)
     STABILITY_WINDOW = 20  # Consecutive generations below threshold required
     POST_CONVERGENCE_BUFFER = 30  # Additional generations to run after convergence detection
     ENABLE_EARLY_STOPPING = True  # Set to False to disable early stopping

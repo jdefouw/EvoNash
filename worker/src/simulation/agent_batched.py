@@ -478,7 +478,8 @@ class VectorizedPhysics:
         max_velocity: float = 10.0,
         energy_decay: float = 0.1,
         thrust_force: float = 0.2,
-        turn_rate: float = 0.1
+        turn_rate: float = 0.1,
+        movement_cost: float = 0.0  # Added movement cost parameter
     ):
         """
         Apply physics step for all agents simultaneously on GPU.
@@ -491,6 +492,7 @@ class VectorizedPhysics:
             energy_decay: Energy decay per tick
             thrust_force: Thrust force multiplier
             turn_rate: Turn rate multiplier
+            movement_cost: Energy cost per unit of thrust
         """
         # Update angles
         self.angles += actions[:, 1] * turn_rate
@@ -524,7 +526,11 @@ class VectorizedPhysics:
         self.positions += self.velocities * dt
         
         # Update energy (only for active agents)
-        self.energies -= energy_decay * dt * self.active_mask.float()
+        # Base metabolic cost (energy_decay) + Movement cost (thrust * movement_cost)
+        movement_energy_loss = actions[:, 0] * movement_cost * dt * thrust_mask.float()
+        total_energy_loss = (energy_decay * dt + movement_energy_loss) * self.active_mask.float()
+        
+        self.energies -= total_energy_loss
         self.energies = torch.clamp(self.energies, min=0.0)
         
         # Update cooldowns

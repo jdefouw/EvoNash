@@ -644,7 +644,7 @@ class StatisticalAnalyzer:
     # Unified convergence threshold for BOTH groups (scientific best practice)
     # Using the same threshold enables fair comparison of convergence generations
     # The threshold is based on entropy variance stabilization
-    CONVERGENCE_THRESHOLD = 0.01
+    CONVERGENCE_THRESHOLD = 0.001
     
     # Stability window: require N consecutive generations below threshold
     # This prevents false positives from noise

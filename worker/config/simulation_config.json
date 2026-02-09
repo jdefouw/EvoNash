@@ -11,9 +11,9 @@
   },
   "agent": {
     "radius": 10.0,
-    "initial_energy": 100.0,
-    "energy_decay_rate": 0.1,
-    "movement_cost": 0.5,
+    "initial_energy": 50.0,
+    "energy_decay_rate": 5.0,
+    "movement_cost": 1.0,
     "max_velocity": 5.0,
     "thrust_force": 0.2,
     "turn_rate": 0.1,
@@ -39,6 +39,15 @@
   "raycast": {
     "count": 8,
     "max_distance": 200.0,
-    "angles": [0, 45, 90, 135, 180, 225, 270, 315]
+    "angles": [
+      0,
+      45,
+      90,
+      135,
+      180,
+      225,
+      270,
+      315
+    ]
   }
 }
