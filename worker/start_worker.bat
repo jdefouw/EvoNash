@@ -14,6 +14,21 @@ if %ERRORLEVEL% NEQ 0 (
     echo Please ensure Python is installed and in your PATH
     pause
     exit /b 1
+    exit /b 1
+)
+
+echo Checking for existing verification...
+python check_verification.py
+if %ERRORLEVEL% NEQ 0 (
+    echo Verification not found or check failed. Running verification suite...
+    call run_verification.bat
+    if %ERRORLEVEL% NEQ 0 (
+        echo Verification failed! Worker cannot start.
+        pause
+        exit /b 1
+    )
+) else (
+    echo Worker verified. Skipping verification tests.
 )
 
 REM Run the worker

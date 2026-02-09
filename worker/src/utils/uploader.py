@@ -3,6 +3,7 @@ import requests
 import json
 import logging
 import os
+import torch
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ class ExperimentUploader:
                 with open(config_path, 'r') as f:
                     config = json.load(f)
                     loaded_url = config.get('controller_url')
+                    self.worker_name = config.get('worker_name', f"Verification-{self.worker_id[:8] if self.worker_id else 'Unknown'}")
                     if loaded_url:
                         print(f"[Uploader] Loaded controller URL from config: {loaded_url}")
             except Exception as e:
@@ -61,6 +63,50 @@ class ExperimentUploader:
         except Exception as e:
             logger.warning(f"Could not load worker_id: {e}")
 
+    def _get_gpu_info(self):
+        """Get GPU type and VRAM information."""
+        try:
+            if torch.cuda.is_available():
+                gpu_name = torch.cuda.get_device_name(0)
+                vram_bytes = torch.cuda.get_device_properties(0).total_memory
+                vram_gb = int(vram_bytes / (1024 ** 3))
+                return gpu_name, vram_gb, "cuda"
+        except Exception:
+            pass
+        return "CPU", 0, "cpu"
+
+    def _register_worker(self):
+        """Register worker with controller."""
+        if not self.worker_id:
+            return False
+
+        try:
+            gpu_type, vram_gb, _ = self._get_gpu_info()
+            
+            payload = {
+                'worker_id': self.worker_id,
+                'worker_name': getattr(self, 'worker_name', "Verification-Worker"),
+                'gpu_type': gpu_type,
+                'vram_gb': vram_gb
+            }
+            
+            print(f"[Uploader] Auto-registering worker {self.worker_id}...")
+            response = requests.post(
+                f"{self.controller_url}/api/workers/register",
+                json=payload,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                print(f"[Uploader] Worker successfully registered")
+                return True
+            else:
+                print(f"[Uploader] Failed to register worker: {response.status_code} {response.text}")
+                return False
+        except Exception as e:
+            print(f"[Uploader] Error registering worker: {e}")
+            return False
+
     def upload_verification(self, test_suite: str, status: str, details: dict):
         """Upload verification test results."""
         endpoint = f"{self.controller_url}/api/verification"
@@ -76,6 +122,18 @@ class ExperimentUploader:
             if response.status_code == 200:
                 print(f"[Uploader] Successfully uploaded verification results for {test_suite}")
                 return True
+            elif response.status_code == 500:
+                # 500 Error likely means worker not found (FK violation). Try to register and retry.
+                print(f"[Uploader] Upload failed with 500. Attempting to register worker and retry...")
+                if self._register_worker():
+                    # Retry upload
+                    response = requests.post(endpoint, json=payload, timeout=10)
+                    if response.status_code == 200:
+                        print(f"[Uploader] Retry successful: uploaded verification results for {test_suite}")
+                        return True
+                
+                print(f"[Uploader] Failed to upload verification: {response.status_code} {response.text}")
+                return False
             else:
                 print(f"[Uploader] Failed to upload verification: {response.status_code} {response.text}")
                 return False
@@ -100,6 +158,18 @@ class ExperimentUploader:
             if response.status_code == 200:
                 print(f"[Uploader] Successfully uploaded calibration for {metric_name}")
                 return True
+            elif response.status_code == 500:
+                 # 500 Error likely means worker not found. Try to register and retry.
+                print(f"[Uploader] Upload failed with 500. Attempting to register worker and retry...")
+                if self._register_worker():
+                    # Retry upload
+                    response = requests.post(endpoint, json=payload, timeout=10)
+                    if response.status_code == 200:
+                        print(f"[Uploader] Retry successful: uploaded calibration for {metric_name}")
+                        return True
+
+                print(f"[Uploader] Failed to upload calibration: {response.status_code} {response.text}")
+                return False
             else:
                 print(f"[Uploader] Failed to upload calibration: {response.status_code} {response.text}")
                 return False
