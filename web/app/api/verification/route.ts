@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     } catch (error) {
         console.error('Error logging verification:', error);
         return NextResponse.json(
-            { error: 'Internal server error', details: error.message },
+            { error: 'Internal server error', details: (error as any).message },
             { status: 500 }
         );
     }
