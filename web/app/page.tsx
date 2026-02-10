@@ -335,23 +335,21 @@ export default function DashboardPage() {
               category="Digital Technology / Computing & Information Systems"
               abstract="This experiment investigates the efficiency of evolutionary algorithms in finding Nash Equilibrium in a competitive multi-agent environment (Tag). We compare a standard static mutation rate against a novel adaptive mutation strategy where the mutation rate scales inversely with an agent's fitness score. The hypothesis is that adaptive mutation—mimicking biological 'stress-induced mutagenesis'—will allow low-fitness populations to explore the solution space aggressively while high-fitness populations exploit their successful strategies, resulting in significantly faster convergence to a stable strategy (Nash Equilibrium)."
             />
-            <div className="space-y-6">
-              <ProblemStatement
-                problemStatement="Deep Reinforcement Learning (DRL) is computationally expensive and hyperparameter-sensitive. Simple evolutionary algorithms are robust but often slow to converge because a fixed mutation rate is inefficient: too high disrupts good policies, too low causes stagnation. finding the optimal balance is difficult."
-                backgroundConcepts={[
-                  { term: "Nash Equilibrium", definition: "A stable state in a game where no player can improve their outcome by unilaterally changing their strategy." },
-                  { term: "Adaptive Mutation", definition: "Dynamically adjusting the rate of genetic change based on performance (fitness). High stress (low fitness) = High mutation." },
-                  { term: "Policy Entropy", definition: "A measure of the randomness of an agent's actions. High entropy = exploration; Low entropy = exploitation/convergence." }
-                ]}
-              />
-              <HypothesisCard
-                ifStatement="the mutation rate of a neural network is dynamically scaled inversely to its fitness score,"
-                thenStatement="the population will reach a state of Policy Entropy stability (Nash Equilibrium) in fewer generations than a control group with a static mutation rate,"
-                becauseStatement="this mechanism mimics biological 'stress-induced mutagenesis,' allowing poor-performing agents to explore the solution space rapidly while high-performing agents preserve their successful traits, balancing exploration and exploitation more efficiently."
-                isSupported={hypothesisSupported}
-              />
-            </div>
+            <ProblemStatement
+              problemStatement="Deep Reinforcement Learning (DRL) is computationally expensive and hyperparameter-sensitive. Simple evolutionary algorithms are robust but often slow to converge because a fixed mutation rate is inefficient: too high disrupts good policies, too low causes stagnation. finding the optimal balance is difficult."
+              backgroundConcepts={[
+                { term: "Nash Equilibrium", definition: "A stable state in a game where no player can improve their outcome by unilaterally changing their strategy." },
+                { term: "Adaptive Mutation", definition: "Dynamically adjusting the rate of genetic change based on performance (fitness). High stress (low fitness) = High mutation." },
+                { term: "Policy Entropy", definition: "A measure of the randomness of an agent's actions. High entropy = exploration; Low entropy = exploitation/convergence." }
+              ]}
+            />
           </div>
+          <HypothesisCard
+            ifStatement="the mutation rate of a neural network is dynamically scaled inversely to its fitness score,"
+            thenStatement="the population will reach a state of Policy Entropy stability (Nash Equilibrium) in fewer generations than a control group with a static mutation rate,"
+            becauseStatement="this mechanism mimics biological 'stress-induced mutagenesis,' allowing poor-performing agents to explore the solution space rapidly while high-performing agents preserve their successful traits, balancing exploration and exploitation more efficiently."
+            isSupported={hypothesisSupported}
+          />
           <VariablesTable
             independent={variablesData.independent}
             dependent={variablesData.dependent}
