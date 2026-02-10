@@ -18,6 +18,8 @@ interface VerificationLog {
 
 interface CalibrationLog {
     id: string;
+    worker_id?: string;
+    worker_name?: string;
     metric_name: string;
     min_value: number;
     mean_value: number;
