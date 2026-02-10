@@ -1532,9 +1532,9 @@ export async function GET() {
       const placeholders = controlIdsForCharts.map((_: string, i: number) => `$${i + 1}`).join(', ')
       controlGenerations = (await queryAll<Generation>(
         `SELECT g.id, g.experiment_id, g.generation_number, g.created_at, g.population_size,
-                g.avg_fitness, g.avg_elo, g.peak_elo, g.min_elo, g.std_elo,
+                g.avg_fitness, g.peak_fitness, g.min_fitness, g.std_fitness,
                 g.policy_entropy, g.entropy_variance, g.win_rate_variance, g.population_diversity,
-                g.mutation_rate, g.min_fitness, g.max_fitness, g.std_fitness
+                g.mutation_rate
          FROM generations g
          INNER JOIN experiments e ON g.experiment_id = e.id AND e.experiment_group = 'CONTROL'
          WHERE g.experiment_id IN (${placeholders})
@@ -1546,9 +1546,9 @@ export async function GET() {
       const placeholders = experimentalIdsForCharts.map((_: string, i: number) => `$${i + 1}`).join(', ')
       experimentalGenerations = (await queryAll<Generation>(
         `SELECT g.id, g.experiment_id, g.generation_number, g.created_at, g.population_size,
-                g.avg_fitness, g.avg_elo, g.peak_elo, g.min_elo, g.std_elo,
+                g.avg_fitness, g.peak_fitness, g.min_fitness, g.std_fitness,
                 g.policy_entropy, g.entropy_variance, g.win_rate_variance, g.population_diversity,
-                g.mutation_rate, g.min_fitness, g.max_fitness, g.std_fitness
+                g.mutation_rate
          FROM generations g
          INNER JOIN experiments e ON g.experiment_id = e.id AND e.experiment_group = 'EXPERIMENTAL'
          WHERE g.experiment_id IN (${placeholders})
