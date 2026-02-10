@@ -44,9 +44,13 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
     try {
         const sql = `
-            SELECT * FROM system_verification
-            ORDER BY executed_at DESC
-            LIMIT 50
+            SELECT 
+                sv.*,
+                w.worker_name
+            FROM system_verification sv
+            LEFT JOIN workers w ON sv.worker_id = w.id
+            ORDER BY sv.executed_at DESC
+            LIMIT 100
         `;
         const result = await query(sql);
         return NextResponse.json(result.rows);
