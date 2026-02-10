@@ -27,9 +27,9 @@ interface Statistics {
 interface ScientificAbstractProps {
   title: string
   subtitle: string
-  studentName: string
-  division: string
-  category: string
+  studentName?: string
+  division?: string
+  category?: string
   abstract: string
   statistics?: Statistics | null
 }
@@ -93,14 +93,18 @@ export default function ScientificAbstract({
               150-word summary of the research
             </p>
           </div>
-          <div className="text-right text-sm">
-            <div className="text-gray-600 dark:text-gray-400">
-              <span className="font-medium text-gray-900 dark:text-white">{studentName}</span>
+          {studentName && (
+            <div className="text-right text-sm">
+              <div className="text-gray-600 dark:text-gray-400">
+                <span className="font-medium text-gray-900 dark:text-white">{studentName}</span>
+              </div>
+              {division && category && (
+                <div className="text-gray-500 dark:text-gray-500">
+                  {division} | {category}
+                </div>
+              )}
             </div>
-            <div className="text-gray-500 dark:text-gray-500">
-              {division} | {category}
-            </div>
-          </div>
+          )}
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">

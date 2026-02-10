@@ -276,7 +276,11 @@ export default function DashboardPage() {
               Investigating Adaptive Mutation Rates in Genetic Neural Networks
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col items-end gap-2">
+            <div className="text-right">
+              <div className="text-white font-medium text-sm">Joel deFouw</div>
+              <div className="text-white/60 text-xs">Junior - Grade 8 | Digital Technology / Computing & Information Systems</div>
+            </div>
             {hypothesisSupported !== null && (
               <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium backdrop-blur-sm ${hypothesisSupported
                 ? 'bg-green-500/20 text-green-100 border border-green-400/30'
@@ -330,9 +334,6 @@ export default function DashboardPage() {
             <ScientificAbstract
               title="EvoNash: Accelerating Convergence to Nash Equilibrium"
               subtitle="Investigating Adaptive Mutation Rates in Genetic Neural Networks"
-              studentName="Joel deFouw"
-              division="Junior - Grade 8"
-              category="Digital Technology / Computing & Information Systems"
               abstract="This experiment investigates the efficiency of evolutionary algorithms in finding Nash Equilibrium in a competitive multi-agent environment (Tag). We compare a standard static mutation rate against a novel adaptive mutation strategy where the mutation rate scales inversely with an agent's fitness score. The hypothesis is that adaptive mutation—mimicking biological 'stress-induced mutagenesis'—will allow low-fitness populations to explore the solution space aggressively while high-fitness populations exploit their successful strategies, resulting in significantly faster convergence to a stable strategy (Nash Equilibrium)."
             />
             <ProblemStatement
