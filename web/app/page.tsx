@@ -415,6 +415,10 @@ export default function DashboardPage() {
                     experimentalPeakFitness={stats?.experimentalPeakFitness ?? null}
                     totalGenerationsControl={stats?.totalGenerationsControl ?? 0}
                     totalGenerationsExperimental={stats?.totalGenerationsExperimental ?? 0}
+                    controlConvergedCount={stats?.controlConvergedCount ?? 0}
+                    experimentalConvergedCount={stats?.experimentalConvergedCount ?? 0}
+                    controlExperimentCount={stats?.controlExperimentCount ?? 0}
+                    experimentalExperimentCount={stats?.experimentalExperimentCount ?? 0}
                     convergencePValue={stats?.convergencePValue ?? null}
                     convergenceIsSignificant={stats?.convergenceIsSignificant ?? false}
                     convergenceTStatistic={stats?.convergenceTStatistic ?? null}
