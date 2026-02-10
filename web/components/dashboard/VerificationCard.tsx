@@ -208,11 +208,10 @@ export function VerificationCard() {
                                     </div>
                                 ))}
                             </div>
-                            </div>
                         )}
-                </TabsContent>
-            </Tabs>
-        </CardContent>
+                    </TabsContent>
+                </Tabs>
+            </CardContent>
         </Card >
     );
 }
