@@ -917,7 +917,9 @@ function welchTTest(sample1: number[], sample2: number[]): TTestResult {
     // If means are the same, there is no difference (p = 1).
     // Using a tiny epsilon for float comparison safety.
     const hasDiff = Math.abs(meanDiff) > 1e-10
-    const pValue = hasDiff ? 0 : 1
+    // Use Number.MIN_VALUE instead of 0 to ensure proper scientific notation display
+    // (e.g. 5e-324) rather than "0" or "0.00e+0"
+    const pValue = hasDiff ? Number.MIN_VALUE : 1
     const tStatistic = hasDiff ? (meanDiff > 0 ? Infinity : -Infinity) : 0
 
     return {
