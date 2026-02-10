@@ -130,15 +130,30 @@ export default function ExperimentsPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'RUNNING': return 'bg-blue-500 text-white'
+      case 'COMPLETED': return 'bg-emerald-500 text-white'
+      case 'FAILED': return 'bg-red-500 text-white'
+      case 'PENDING': return 'bg-amber-500 text-white'
+      case 'STOPPED': return 'bg-gray-500 text-white'
+      default: return 'bg-gray-500 text-white'
+    }
+  }
+
+  const getStatusDot = (status: string) => {
+    switch (status) {
       case 'RUNNING': return 'bg-blue-500'
-      case 'COMPLETED': return 'bg-green-500'
+      case 'COMPLETED': return 'bg-emerald-500'
       case 'FAILED': return 'bg-red-500'
+      case 'PENDING': return 'bg-amber-500'
+      case 'STOPPED': return 'bg-gray-500'
       default: return 'bg-gray-500'
     }
   }
 
-  const getGroupColor = (group: string) => {
-    return group === 'CONTROL' ? 'text-blue-600 dark:text-blue-400' : 'text-purple-600 dark:text-purple-400'
+  const getGroupBadge = (group: string) => {
+    return group === 'CONTROL'
+      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+      : 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
   }
 
   // Get sort priority for experiment status (lower = higher priority)
@@ -277,11 +292,15 @@ export default function ExperimentsPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen p-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <p className="mt-4 text-gray-600 dark:text-gray-400">Loading experiments...</p>
+      <main className="min-h-screen">
+        <div className="max-w-6xl mx-auto px-6 py-8">
+          <div className="space-y-4">
+            {/* Skeleton hero */}
+            <div className="skeleton h-32 w-full rounded-xl"></div>
+            {/* Skeleton cards */}
+            {[1, 2, 3].map(i => (
+              <div key={i} className="skeleton h-24 w-full rounded-xl"></div>
+            ))}
           </div>
         </div>
       </main>
@@ -289,186 +308,201 @@ export default function ExperimentsPage() {
   }
 
   return (
-    <main className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-6xl mx-auto">
+    <main className="min-h-screen">
+      <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
         {/* Breadcrumb */}
-        <div className="mb-6">
-          <Link
-            href="/"
-            className="text-blue-600 dark:text-blue-400 hover:underline text-sm flex items-center gap-1"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to EvoNash Experiment
-          </Link>
-        </div>
+        <nav className="breadcrumb">
+          <Link href="/">Dashboard</Link>
+          <span className="separator">/</span>
+          <span>Experiments</span>
+        </nav>
 
-        {/* Experiment counts by status and type */}
-        {summary && (
-          <div className="mb-6 p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Experiment counts</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Completed</span>
-                <div className="flex items-baseline gap-2 flex-wrap">
-                  <span className="text-blue-600 dark:text-blue-400 font-semibold">{summary.completed.control}</span>
-                  <span className="text-gray-400 dark:text-gray-500 text-sm">Control</span>
-                  <span className="text-purple-600 dark:text-purple-400 font-semibold">{summary.completed.experimental}</span>
-                  <span className="text-gray-400 dark:text-gray-500 text-sm">Experimental</span>
-                  <span className="text-gray-600 dark:text-gray-300 font-semibold ml-1">({summary.completed.total} total)</span>
-                </div>
+        {/* Hero Banner */}
+        <div className="hero-banner-sm animate-fade-in">
+          <div className="relative z-10">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                <h1 className="text-3xl md:text-4xl font-bold text-white mb-1">
+                  Experiments
+                </h1>
+                <p className="text-white/70 text-sm">
+                  Manage and monitor genetic algorithm experiments
+                </p>
               </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Pending</span>
-                <div className="flex items-baseline gap-2 flex-wrap">
-                  <span className="text-blue-600 dark:text-blue-400 font-semibold">{summary.pending.control}</span>
-                  <span className="text-gray-400 dark:text-gray-500 text-sm">Control</span>
-                  <span className="text-purple-600 dark:text-purple-400 font-semibold">{summary.pending.experimental}</span>
-                  <span className="text-gray-400 dark:text-gray-500 text-sm">Experimental</span>
-                  <span className="text-gray-600 dark:text-gray-300 font-semibold ml-1">({summary.pending.total} total)</span>
-                </div>
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">In progress</span>
-                <div className="flex items-baseline gap-2 flex-wrap">
-                  <span className="text-blue-600 dark:text-blue-400 font-semibold">{summary.running.control}</span>
-                  <span className="text-gray-400 dark:text-gray-500 text-sm">Control</span>
-                  <span className="text-purple-600 dark:text-purple-400 font-semibold">{summary.running.experimental}</span>
-                  <span className="text-gray-400 dark:text-gray-500 text-sm">Experimental</span>
-                  <span className="text-gray-600 dark:text-gray-300 font-semibold ml-1">({summary.running.total} total)</span>
-                </div>
+              <div className="flex gap-3">
+                {experiments.length > 0 && (
+                  <button
+                    onClick={handleDeleteAll}
+                    disabled={deletingAll}
+                    className="btn-danger text-sm !py-2 !px-4 !bg-red-500/20 !text-white/90 hover:!bg-red-500/40 !shadow-none !border !border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    {deletingAll ? 'Deleting...' : 'Delete All'}
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowWorkers(!showWorkers)}
+                  className={`text-sm inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all border ${showWorkers
+                    ? 'bg-white/20 text-white border-white/30'
+                    : 'bg-white/10 text-white/70 border-white/15 hover:bg-white/20 hover:text-white'
+                    }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                  </svg>
+                  Workers
+                  {workerStats.active > 0 && (
+                    <span className="px-1.5 py-0.5 text-xs rounded-full bg-emerald-400 text-white font-bold">
+                      {workerStats.active}
+                    </span>
+                  )}
+                </button>
+                <Link
+                  href="/experiments/new"
+                  className="text-sm inline-flex items-center gap-2 px-5 py-2 rounded-lg font-semibold transition-all bg-white text-indigo-600 hover:bg-white/90 shadow-lg shadow-indigo-500/20"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  New Experiment
+                </Link>
               </div>
             </div>
-          </div>
-        )}
 
-        <div className="flex justify-between items-start mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">Experiments</h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Manage and monitor genetic algorithm experiments
-            </p>
-          </div>
-          <div className="flex gap-3">
-            {experiments.length > 0 && (
-              <button
-                onClick={handleDeleteAll}
-                disabled={deletingAll}
-                className="px-5 py-3 rounded-lg font-medium transition-all flex items-center gap-2 bg-red-600 text-white hover:bg-red-700 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-                {deletingAll ? 'Deleting...' : 'Delete All'}
-              </button>
+            {/* Metrics Bar inside hero */}
+            {summary && (
+              <div className="metrics-bar mt-5">
+                <div className="metric-item">
+                  <div className="metric-value text-emerald-300">{summary.completed.total}</div>
+                  <div className="metric-label">Completed</div>
+                  <div className="text-[10px] text-white/50 mt-0.5">
+                    {summary.completed.control}C · {summary.completed.experimental}E
+                  </div>
+                </div>
+                <div className="metric-item">
+                  <div className="metric-value text-blue-300">{summary.running.total}</div>
+                  <div className="metric-label">Running</div>
+                  <div className="text-[10px] text-white/50 mt-0.5">
+                    {summary.running.control}C · {summary.running.experimental}E
+                  </div>
+                </div>
+                <div className="metric-item">
+                  <div className="metric-value text-amber-300">{summary.pending.total}</div>
+                  <div className="metric-label">Pending</div>
+                  <div className="text-[10px] text-white/50 mt-0.5">
+                    {summary.pending.control}C · {summary.pending.experimental}E
+                  </div>
+                </div>
+                <div className="metric-item">
+                  <div className="metric-value">{summary.completed.total + summary.running.total + summary.pending.total}</div>
+                  <div className="metric-label">Total</div>
+                </div>
+              </div>
             )}
-            <button
-              onClick={() => setShowWorkers(!showWorkers)}
-              className={`px-5 py-3 rounded-lg font-medium transition-all flex items-center gap-2 ${showWorkers
-                  ? 'bg-green-600 text-white hover:bg-green-700 shadow-md'
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-              </svg>
-              Workers
-              {workerStats.active > 0 && (
-                <span className={`px-2 py-0.5 text-xs rounded-full ${showWorkers
-                    ? 'bg-green-500 text-white'
-                    : 'bg-green-600 text-white'
-                  }`}>
-                  {workerStats.active}
-                </span>
-              )}
-            </button>
-            <Link
-              href="/experiments/new"
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-md"
-            >
-              New Experiment
-            </Link>
           </div>
         </div>
 
         {/* Workers Section - Collapsible */}
-        {showWorkers && <WorkerList className="mb-8" />}
+        {showWorkers && (
+          <div className="animate-fade-in">
+            <WorkerList className="" />
+          </div>
+        )}
 
-        <div className="grid gap-4">
+        {/* Experiment Cards */}
+        <div className="space-y-3">
           {error ? (
-            <div className="p-12 text-center border-2 border-dashed border-red-300 dark:border-red-700 rounded-xl bg-red-50 dark:bg-red-900/20">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
-                <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="sci-card p-12 text-center animate-fade-in">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-red-100 dark:bg-red-900/30 mb-4">
+                <svg className="w-7 h-7 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
-              <p className="text-red-600 dark:text-red-400 font-medium mb-2">Error Loading Experiments</p>
-              <p className="text-red-500 dark:text-red-400 text-sm mb-4">{error}</p>
+              <p className="text-lg font-semibold text-red-600 dark:text-red-400 mb-2">Error Loading Experiments</p>
+              <p className="text-sm text-red-500/80 dark:text-red-400/70 mb-4 max-w-md mx-auto">{error}</p>
               <button
                 onClick={() => window.location.reload()}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                className="btn-danger"
               >
                 Retry
               </button>
             </div>
           ) : sortedExperiments.length === 0 ? (
-            <div className="p-12 text-center border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800">
-              <p className="text-gray-600 dark:text-gray-400 mb-4">No experiments yet.</p>
+            <div className="sci-card p-16 text-center animate-fade-in">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-100 dark:bg-indigo-900/20 mb-4">
+                <svg className="w-8 h-8 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                </svg>
+              </div>
+              <p className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">No experiments yet</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Create your first experiment to get started</p>
               <Link
                 href="/experiments/new"
-                className="text-blue-600 dark:text-blue-400 hover:underline"
+                className="btn-primary"
               >
-                Create your first experiment
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Create Experiment
               </Link>
             </div>
           ) : (
             <>
-              {sortedExperiments.map((exp) => (
+              {sortedExperiments.map((exp, idx) => (
                 <Link
                   key={exp.id}
                   href={`/experiments/${exp.id}`}
-                  className="block p-6 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-md transition-all bg-white dark:bg-gray-800"
+                  className="experiment-card animate-fade-in"
+                  style={{ animationDelay: `${idx * 30}ms` }}
                 >
                   <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 mb-2.5">
+                        <div className={`w-2.5 h-2.5 rounded-full ${getStatusDot(exp.status)} ${exp.status === 'RUNNING' ? 'animate-pulse' : ''}`} />
+                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
                           {exp.experiment_name}
                         </h2>
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getGroupColor(exp.experiment_group)} bg-opacity-10`}>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${getGroupBadge(exp.experiment_group)}`}>
                           {exp.experiment_group}
                         </span>
+                        <span className={`status-badge ${getStatusColor(exp.status)}`}>
+                          {exp.status}
+                        </span>
                       </div>
-                      <div className="flex gap-6 text-sm text-gray-600 dark:text-gray-400">
-                        <span>Mutation: <strong>{exp.mutation_mode === 'STATIC' ? 'Static (ε=0.05)' : 'Adaptive (starts ~5%, scales by Fitness)'}</strong></span>
-                        <span>Population: <strong>{exp.population_size}</strong></span>
-                        <span>Max Generations: <strong>{exp.max_generations}</strong></span>
-                        <span>Seed: <strong>{exp.random_seed}</strong></span>
-                        <span>Created: {new Date(exp.created_at).toLocaleDateString()}</span>
+                      <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500 dark:text-gray-400 pl-5">
+                        <span>
+                          Mutation: <strong className="text-gray-700 dark:text-gray-300">{exp.mutation_mode === 'STATIC' ? 'Static (ε=0.05)' : 'Adaptive'}</strong>
+                        </span>
+                        <span>
+                          Pop: <strong className="text-gray-700 dark:text-gray-300">{exp.population_size}</strong>
+                        </span>
+                        <span>
+                          Gens: <strong className="text-gray-700 dark:text-gray-300">{exp.max_generations}</strong>
+                        </span>
+                        <span>
+                          Seed: <strong className="text-gray-700 dark:text-gray-300">{exp.random_seed}</strong>
+                        </span>
+                        <span>{new Date(exp.created_at).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className={`px-4 py-2 rounded-lg text-white text-sm font-medium ${getStatusColor(exp.status)}`}>
-                        {exp.status}
-                      </span>
-                      <button
-                        onClick={(e) => handleDelete(e, exp.id, exp.experiment_name, exp.status)}
-                        className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                        title="Delete experiment"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
+                    <button
+                      onClick={(e) => handleDelete(e, exp.id, exp.experiment_name, exp.status)}
+                      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex-shrink-0 ml-4"
+                      title="Delete experiment"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
                 </Link>
               ))}
 
               {/* Pagination Controls */}
               <div className="mt-6 flex flex-col items-center gap-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
                   Showing {sortedExperiments.length} experiment{sortedExperiments.length !== 1 ? 's' : ''}
                   {hasMore && ' (more available)'}
                 </p>
@@ -477,19 +511,19 @@ export default function ExperimentsPage() {
                   <button
                     onClick={loadMore}
                     disabled={loadingMore}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {loadingMore ? (
                       <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
                         Loading...
                       </>
                     ) : (
                       <>
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
-                        Load More Experiments
+                        Load More
                       </>
                     )}
                   </button>

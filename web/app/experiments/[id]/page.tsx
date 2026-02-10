@@ -235,11 +235,9 @@ export default function ExperimentDetailPage() {
                     vram_gb: matchingWorker.vram_gb
                   })
                 } else {
-                  // Worker not in workers table but has active job - show partial info
-                  // This can happen if the worker was cleaned up but is still processing
                   setProcessingWorker({
                     id: activeBatch.worker_id,
-                    worker_name: null, // Unknown - worker will re-register on next heartbeat
+                    worker_name: null,
                     gpu_type: null,
                     vram_gb: 0
                   })
@@ -247,7 +245,6 @@ export default function ExperimentDetailPage() {
               }
             } catch (workerErr) {
               console.error('Error fetching workers for fallback:', workerErr)
-              // Still show that there's a worker processing even if we can't get its info
               if (activeBatch.worker_id) {
                 setProcessingWorker({
                   id: activeBatch.worker_id,
@@ -325,8 +322,6 @@ export default function ExperimentDetailPage() {
   }, [experiment?.status, experimentId, generations.length, loading])
 
   // Set up polling when experiment is running or pending
-  // Standalone PostgreSQL uses polling instead of realtime subscriptions
-  // NOTE: Only depends on experiment?.status to avoid re-running on every state change
   useEffect(() => {
     const status = experiment?.status
 
@@ -356,11 +351,19 @@ export default function ExperimentDetailPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen p-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <p className="mt-4 text-gray-600 dark:text-gray-400">Loading experiment...</p>
+      <main className="min-h-screen">
+        <div className="max-w-[1920px] mx-auto px-6 py-8">
+          <div className="space-y-4">
+            <div className="skeleton h-10 w-48 rounded-lg"></div>
+            <div className="skeleton h-32 w-full rounded-xl"></div>
+            <div className="grid lg:grid-cols-[60%_40%] gap-6">
+              <div className="skeleton h-[500px] rounded-xl"></div>
+              <div className="space-y-4">
+                <div className="skeleton h-32 rounded-xl"></div>
+                <div className="skeleton h-32 rounded-xl"></div>
+                <div className="skeleton h-32 rounded-xl"></div>
+              </div>
+            </div>
           </div>
         </div>
       </main>
@@ -369,11 +372,16 @@ export default function ExperimentDetailPage() {
 
   if (!experiment) {
     return (
-      <main className="min-h-screen p-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center py-12">
-            <p className="text-red-600 dark:text-red-400">Experiment not found</p>
-            <Link href="/experiments" className="text-blue-600 dark:text-blue-400 hover:underline mt-4 inline-block">
+      <main className="min-h-screen">
+        <div className="max-w-6xl mx-auto px-6 py-12">
+          <div className="sci-card p-16 text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-red-100 dark:bg-red-900/20 mb-4">
+              <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <p className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Experiment not found</p>
+            <Link href="/experiments" className="btn-primary mt-4 inline-flex">
               Back to experiments
             </Link>
           </div>
@@ -383,7 +391,6 @@ export default function ExperimentDetailPage() {
   }
 
   // Extract agents from latest generation for visualization
-  // In a real implementation, this would come from match data or a separate endpoint
   const sampleAgents = latestGeneration ? Array.from({ length: Math.min(20, experiment.population_size) }, (_, i) => ({
     id: `agent-${i}`,
     x: Math.random() * 1000,
@@ -401,202 +408,209 @@ export default function ExperimentDetailPage() {
     consumed: Math.random() > 0.7
   }))
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'RUNNING': return 'bg-blue-500 text-white'
+      case 'COMPLETED': return 'bg-emerald-500 text-white'
+      case 'FAILED': return 'bg-red-500 text-white'
+      case 'PENDING': return 'bg-amber-500 text-white'
+      case 'STOPPED': return 'bg-gray-500 text-white'
+      default: return 'bg-gray-500 text-white'
+    }
+  }
+
+  const getBatchStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed': return 'bg-emerald-500'
+      case 'processing': return 'bg-blue-500'
+      case 'assigned': return 'bg-amber-500'
+      case 'failed': return 'bg-red-500'
+      default: return 'bg-gray-500'
+    }
+  }
+
   return (
-    <main className="min-h-screen p-4 md:p-8 bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-[1920px] mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center gap-2 text-sm mb-4">
-            <Link
-              href="/"
-              className="text-blue-600 dark:text-blue-400 hover:underline transition-colors"
-            >
-              Experiment
-            </Link>
-            <span className="text-gray-400">/</span>
-            <Link
-              href="/experiments"
-              className="text-blue-600 dark:text-blue-400 hover:underline transition-colors"
-            >
-              Experiments
-            </Link>
-            <span className="text-gray-400">/</span>
-            <span className="text-gray-600 dark:text-gray-400">Details</span>
-          </div>
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mt-4">
-            <div>
-              <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2">
-                {experiment.experiment_name}
-              </h1>
-              <div className="flex flex-wrap gap-4 text-sm items-center">
-                <span className="text-gray-600 dark:text-gray-400">
-                  Group: <strong className="text-gray-900 dark:text-white">
-                    {experiment.experiment_group === 'CONTROL' ? 'Control (Static Mutation)' : 'Experimental (Adaptive Mutation)'}
-                  </strong>
-                </span>
-                <StatusIndicator status={experiment.status} />
-                {/* Show processing worker info */}
-                {experiment.status === 'RUNNING' && processingWorker && (
-                  <div className="flex items-center gap-2 text-xs bg-green-50 dark:bg-green-900/20 px-3 py-1.5 rounded-full border border-green-200 dark:border-green-800">
-                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-green-700 dark:text-green-400">
-                      Processing by: <strong>{processingWorker.worker_name || 'Unnamed Worker'}</strong>
-                      {processingWorker.gpu_type && (
-                        <span className="text-green-600 dark:text-green-500 ml-1">
-                          ({processingWorker.gpu_type})
-                        </span>
-                      )}
+    <main className="min-h-screen">
+      <div className="max-w-[1920px] mx-auto px-4 md:px-6 py-6 space-y-6">
+        {/* Breadcrumb */}
+        <nav className="breadcrumb">
+          <Link href="/">Dashboard</Link>
+          <span className="separator">/</span>
+          <Link href="/experiments">Experiments</Link>
+          <span className="separator">/</span>
+          <span className="text-gray-600 dark:text-gray-400 truncate max-w-[200px]">{experiment.experiment_name}</span>
+        </nav>
+
+        {/* Hero Banner */}
+        <div className="hero-banner-sm animate-fade-in">
+          <div className="relative z-10">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-3 mb-2">
+                  <h1 className="text-2xl md:text-3xl font-bold text-white truncate">
+                    {experiment.experiment_name}
+                  </h1>
+                  <span className={`status-badge ${getStatusBadge(experiment.status)} ${experiment.status === 'RUNNING' ? 'animate-pulse-glow' : ''}`}>
+                    {experiment.status === 'RUNNING' && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
+                    {experiment.status}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-sm">
+                  <span className="text-white/70">
+                    Group: <strong className="text-white">{experiment.experiment_group === 'CONTROL' ? 'Control (Static)' : 'Experimental (Adaptive)'}</strong>
+                  </span>
+                  {/* Processing worker pill */}
+                  {experiment.status === 'RUNNING' && processingWorker && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 text-white/90 text-xs backdrop-blur-sm">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      {processingWorker.worker_name || 'Worker'}
+                      {processingWorker.gpu_type && <span className="text-white/60">({processingWorker.gpu_type})</span>}
                     </span>
-                  </div>
-                )}
-                {experiment.status === 'PENDING' && (
-                  <div className="flex items-center gap-2 text-xs bg-yellow-50 dark:bg-yellow-900/20 px-3 py-1.5 rounded-full border border-yellow-200 dark:border-yellow-800">
-                    <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
-                    <span className="text-yellow-700 dark:text-yellow-400">
-                      Waiting for available worker...
+                  )}
+                  {experiment.status === 'PENDING' && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-200 text-xs backdrop-blur-sm">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                      Waiting for worker…
                     </span>
-                  </div>
-                )}
-                {experiment.status === 'RUNNING' && !processingWorker && (
-                  <div className="flex items-center gap-2 text-xs bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 rounded-full border border-blue-200 dark:border-blue-800">
-                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                    <span className="text-blue-700 dark:text-blue-400">
-                      Worker connected
-                    </span>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="flex gap-3 items-center">
-              <button
-                onClick={async (e) => {
-                  e.preventDefault()
-                  if (experiment.status === 'RUNNING' || experiment.status === 'COMPLETED') {
-                    alert(`Cannot start experiment with status: ${experiment.status}`)
-                    return
-                  }
-                  try {
-                    const response = await fetch(`/api/experiments/${experimentId}/start`, { method: 'POST' })
-                    if (response.ok) {
-                      const data = await response.json()
-                      setExperiment({ ...experiment, status: 'PENDING' })
-                      alert(data.message || 'Experiment queued for GPU worker. Worker will pick it up within 30 seconds.')
-                      // Refresh after a short delay to show updated status
-                      setTimeout(() => {
-                        window.location.reload()
-                      }, 1000)
-                    } else {
-                      const error = await response.json()
-                      alert(`Failed to queue experiment: ${error.error || 'Unknown error'}`)
+              {/* Action Buttons */}
+              <div className="flex gap-2 flex-shrink-0">
+                <button
+                  onClick={async (e) => {
+                    e.preventDefault()
+                    if (experiment.status === 'RUNNING' || experiment.status === 'COMPLETED') {
+                      alert(`Cannot start experiment with status: ${experiment.status}`)
+                      return
                     }
-                  } catch (error) {
-                    alert(`Failed to queue experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
-                  }
-                }}
-                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={experiment.status === 'RUNNING' || experiment.status === 'COMPLETED'}
-                title={experiment.status === 'RUNNING' ? 'Experiment is already running' : experiment.status === 'COMPLETED' ? 'Experiment is completed' : 'Queue experiment for GPU worker'}
-              >
-                {experiment.status === 'RUNNING' ? 'Running...' : experiment.status === 'PENDING' ? 'Queued for Worker' : experiment.status === 'COMPLETED' ? 'Completed' : 'Start Experiment'}
-              </button>
-              {experiment.status === 'RUNNING' && (
-                <>
-                  <button
-                    onClick={async () => {
-                      if (!confirm('Are you sure you want to stop this experiment? The worker will finish the current generation before stopping.')) {
-                        return
+                    try {
+                      const response = await fetch(`/api/experiments/${experimentId}/start`, { method: 'POST' })
+                      if (response.ok) {
+                        const data = await response.json()
+                        setExperiment({ ...experiment, status: 'PENDING' })
+                        alert(data.message || 'Experiment queued for GPU worker. Worker will pick it up within 30 seconds.')
+                        setTimeout(() => { window.location.reload() }, 1000)
+                      } else {
+                        const error = await response.json()
+                        alert(`Failed to queue experiment: ${error.error || 'Unknown error'}`)
                       }
-                      try {
-                        const response = await fetch(`/api/experiments/${experimentId}/stop`, { method: 'POST' })
-                        if (response.ok) {
-                          const data = await response.json()
-                          setExperiment({ ...experiment, status: 'STOPPED' })
-                          // Refresh the page after a short delay to show updated status
-                          setTimeout(() => {
-                            window.location.reload()
-                          }, 500)
-                        } else {
-                          const error = await response.json()
-                          alert(`Failed to stop experiment: ${error.error || 'Unknown error'}`)
-                        }
-                      } catch (error) {
-                        alert(`Failed to stop experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
-                      }
-                    }}
-                    className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                  >
-                    Stop Experiment
-                  </button>
-                  {/* Show force complete button when experiment appears stuck at high progress */}
-                  {latestGeneration && latestGeneration.generation_number >= experiment.max_generations - 1 && (
+                    } catch (error) {
+                      alert(`Failed to queue experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
+                    }
+                  }}
+                  className="text-sm inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-all bg-white text-emerald-600 hover:bg-white/90 shadow-lg shadow-emerald-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={experiment.status === 'RUNNING' || experiment.status === 'COMPLETED'}
+                  title={experiment.status === 'RUNNING' ? 'Experiment is already running' : experiment.status === 'COMPLETED' ? 'Experiment is completed' : 'Queue experiment for GPU worker'}
+                >
+                  {experiment.status === 'RUNNING' ? 'Running…' : experiment.status === 'PENDING' ? 'Queued' : experiment.status === 'COMPLETED' ? 'Completed' : 'Start'}
+                </button>
+                {experiment.status === 'RUNNING' && (
+                  <>
                     <button
                       onClick={async () => {
-                        if (!confirm('Force-complete this experiment? Use this if all generations are done but the experiment is stuck as "Running".')) {
-                          return
-                        }
+                        if (!confirm('Are you sure you want to stop this experiment? The worker will finish the current generation before stopping.')) return
                         try {
-                          const response = await fetch(`/api/experiments/${experimentId}/complete`, { method: 'POST' })
+                          const response = await fetch(`/api/experiments/${experimentId}/stop`, { method: 'POST' })
                           if (response.ok) {
-                            const data = await response.json()
-                            setExperiment({ ...experiment, status: 'COMPLETED' })
-                            alert('Experiment marked as completed!')
-                            setTimeout(() => {
-                              window.location.reload()
-                            }, 500)
+                            setExperiment({ ...experiment, status: 'STOPPED' })
+                            setTimeout(() => { window.location.reload() }, 500)
                           } else {
                             const error = await response.json()
-                            alert(`Failed to complete experiment: ${error.error || 'Unknown error'}`)
+                            alert(`Failed to stop experiment: ${error.error || 'Unknown error'}`)
                           }
                         } catch (error) {
-                          alert(`Failed to complete experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
+                          alert(`Failed to stop experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
                         }
                       }}
-                      className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
-                      title="Force-complete this experiment if it's stuck at 100% progress"
+                      className="text-sm inline-flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold bg-red-500/20 text-white/90 hover:bg-red-500/40 border border-white/20 transition-all"
                     >
-                      Force Complete
+                      Stop
                     </button>
-                  )}
-                </>
-              )}
-              {/* Delete button - always visible but requires confirmation */}
-              <button
-                onClick={async () => {
-                  const warningMessage = experiment.status === 'RUNNING'
-                    ? `WARNING: This experiment is currently running!\n\nAre you sure you want to delete "${experiment.experiment_name}"?\n\nThis will permanently delete all generations, matches, and analysis data. This action cannot be undone.`
-                    : `Are you sure you want to delete "${experiment.experiment_name}"?\n\nThis will permanently delete all generations, matches, and analysis data. This action cannot be undone.`
-
-                  if (!confirm(warningMessage)) {
-                    return
-                  }
-                  try {
-                    const response = await fetch(`/api/experiments/${experimentId}`, { method: 'DELETE' })
-                    if (response.ok) {
-                      // Redirect to experiments list after successful deletion
-                      window.location.href = '/experiments'
-                    } else {
-                      const error = await response.json()
-                      alert(`Failed to delete experiment: ${error.error || 'Unknown error'}`)
+                    {latestGeneration && latestGeneration.generation_number >= experiment.max_generations - 1 && (
+                      <button
+                        onClick={async () => {
+                          if (!confirm('Force-complete this experiment? Use this if all generations are done but the experiment is stuck as "Running".')) return
+                          try {
+                            const response = await fetch(`/api/experiments/${experimentId}/complete`, { method: 'POST' })
+                            if (response.ok) {
+                              setExperiment({ ...experiment, status: 'COMPLETED' })
+                              alert('Experiment marked as completed!')
+                              setTimeout(() => { window.location.reload() }, 500)
+                            } else {
+                              const error = await response.json()
+                              alert(`Failed to complete experiment: ${error.error || 'Unknown error'}`)
+                            }
+                          } catch (error) {
+                            alert(`Failed to complete experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
+                          }
+                        }}
+                        className="text-sm inline-flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold bg-purple-500/20 text-white/90 hover:bg-purple-500/40 border border-white/20 transition-all"
+                        title="Force-complete this experiment if it's stuck at 100% progress"
+                      >
+                        Force Complete
+                      </button>
+                    )}
+                  </>
+                )}
+                <button
+                  onClick={async () => {
+                    const warningMessage = experiment.status === 'RUNNING'
+                      ? `WARNING: This experiment is currently running!\n\nAre you sure you want to delete "${experiment.experiment_name}"?\n\nThis will permanently delete all generations, matches, and analysis data. This action cannot be undone.`
+                      : `Are you sure you want to delete "${experiment.experiment_name}"?\n\nThis will permanently delete all generations, matches, and analysis data. This action cannot be undone.`
+                    if (!confirm(warningMessage)) return
+                    try {
+                      const response = await fetch(`/api/experiments/${experimentId}`, { method: 'DELETE' })
+                      if (response.ok) {
+                        window.location.href = '/experiments'
+                      } else {
+                        const error = await response.json()
+                        alert(`Failed to delete experiment: ${error.error || 'Unknown error'}`)
+                      }
+                    } catch (error) {
+                      alert(`Failed to delete experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
                     }
-                  } catch (error) {
-                    alert(`Failed to delete experiment: ${error instanceof Error ? error.message : 'Unknown error'}`)
-                  }
-                }}
-                className="px-6 py-3 bg-red-700 text-white rounded-lg hover:bg-red-800 transition-colors font-medium border-2 border-red-800"
-                title="Permanently delete this experiment and all its data"
-              >
-                Delete
-              </button>
+                  }}
+                  className="text-sm inline-flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold bg-red-500/20 text-white/90 hover:bg-red-500/40 border border-white/20 transition-all"
+                  title="Permanently delete this experiment and all its data"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+
+            {/* Config Metrics Bar */}
+            <div className="metrics-bar mt-5">
+              <div className="metric-item">
+                <div className="metric-value">{experiment.population_size}</div>
+                <div className="metric-label">Population</div>
+              </div>
+              <div className="metric-item">
+                <div className="metric-value">{experiment.max_generations}</div>
+                <div className="metric-label">Max Gens</div>
+              </div>
+              <div className="metric-item">
+                <div className="metric-value">{experiment.random_seed}</div>
+                <div className="metric-label">Seed</div>
+              </div>
+              <div className="metric-item">
+                <div className="metric-value text-sm">{experiment.mutation_mode === 'STATIC' ? 'Static' : 'Adaptive'}</div>
+                <div className="metric-label">Mutation</div>
+              </div>
+              <div className="metric-item">
+                <div className="metric-value">{experiment.selection_pressure}</div>
+                <div className="metric-label">Selection</div>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Error Banner */}
         {pollingError && retryCount < 5 && (
-          <div className="mb-4 p-4 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-400 dark:border-yellow-700 rounded-lg animate-fade-in">
+          <div className="sci-card p-4 !border-amber-300 dark:!border-amber-700 !bg-amber-50 dark:!bg-amber-900/10 animate-fade-in">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-yellow-800 dark:text-yellow-200 text-sm">
+                <span className="text-amber-700 dark:text-amber-300 text-sm">
                   ⚠️ {pollingError} (Retry {retryCount}/5)
                 </span>
               </div>
@@ -606,7 +620,7 @@ export default function ExperimentDetailPage() {
                   setRetryCount(0)
                   pollLiveData()
                 }}
-                className="text-xs text-yellow-800 dark:text-yellow-200 hover:underline"
+                className="text-xs text-amber-700 dark:text-amber-300 hover:underline font-medium"
               >
                 Retry Now
               </button>
@@ -615,9 +629,9 @@ export default function ExperimentDetailPage() {
         )}
 
         {pollingError && retryCount >= 5 && (
-          <div className="mb-4 p-4 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 rounded-lg animate-fade-in">
+          <div className="sci-card p-4 !border-red-300 dark:!border-red-700 !bg-red-50 dark:!bg-red-900/10 animate-fade-in">
             <div className="flex items-center gap-2">
-              <span className="text-red-800 dark:text-red-200 text-sm">
+              <span className="text-red-700 dark:text-red-300 text-sm">
                 ❌ Connection lost. Please refresh the page to resume live updates.
               </span>
             </div>
@@ -625,11 +639,17 @@ export default function ExperimentDetailPage() {
         )}
 
         {/* Split View: Simulation and Metrics */}
-        <div className="grid lg:grid-cols-[60%_40%] gap-6 mb-6">
+        <div className="grid lg:grid-cols-[60%_40%] gap-6">
           {/* Left: Petri Dish Visualization */}
-          <div className="space-y-4">
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-              <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+          <div className="space-y-4 animate-fade-in">
+            <div className="sci-card p-5">
+              <h2 className="section-heading !mb-4 !text-lg">
+                <span className="section-number">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                </span>
                 {experiment?.status === 'COMPLETED' ? 'Simulation Replay' : 'Live Simulation View'}
               </h2>
               {experiment?.status === 'COMPLETED' ? (
@@ -650,10 +670,19 @@ export default function ExperimentDetailPage() {
                   mode="live"
                 />
               ) : (
-                <div className="flex items-center justify-center h-[600px] bg-slate-900 rounded-lg border border-gray-700">
+                <div className="flex items-center justify-center h-[600px] bg-slate-900 rounded-xl border border-gray-700">
                   <div className="text-center text-gray-400">
-                    <p className="text-lg mb-2">
-                      {experiment?.status === 'RUNNING' ? 'Waiting for simulation data...' : 'Start experiment to view simulation'}
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gray-800 mb-4">
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <p className="text-lg mb-1 font-medium">
+                      {experiment?.status === 'RUNNING' ? 'Waiting for simulation data…' : 'Start experiment to view simulation'}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {experiment?.status === 'PENDING' ? 'Worker will begin processing shortly' : 'Click Start above to begin'}
                     </p>
                   </div>
                 </div>
@@ -662,12 +691,14 @@ export default function ExperimentDetailPage() {
 
             {/* Match Replay Section */}
             {selectedMatch && (
-              <MatchReplay match={selectedMatch} />
+              <div className="animate-fade-in">
+                <MatchReplay match={selectedMatch} />
+              </div>
             )}
           </div>
 
           {/* Right: Metrics Panel */}
-          <div className="space-y-4">
+          <div className="space-y-4 animate-fade-in" style={{ animationDelay: '100ms' }}>
             <LiveMetrics generation={latestGeneration} />
             <GenerationProgress
               experiment={experiment}
@@ -679,44 +710,44 @@ export default function ExperimentDetailPage() {
             {/* All Workers */}
             <WorkerList compact={true} />
 
-            {/* Worker Status Card */}
+            {/* Worker Status Cards */}
             {experiment.status === 'PENDING' && (
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
+              <div className="sci-card p-4 !border-amber-200 dark:!border-amber-800 !bg-amber-50 dark:!bg-amber-900/10">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-                  <span className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                    Queued for GPU Worker - Waiting for worker to pick up...
+                  <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                  <span className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                    Queued for GPU Worker
                   </span>
                 </div>
-                <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-1 pl-4">
                   Worker polls every 30 seconds. Status will update to RUNNING when worker starts.
                 </p>
               </div>
             )}
 
             {experiment.status === 'RUNNING' && latestGeneration && (
-              <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+              <div className="sci-card p-4 !border-emerald-200 dark:!border-emerald-800 !bg-emerald-50 dark:!bg-emerald-900/10">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                  <span className="text-sm font-medium text-green-800 dark:text-green-200">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                  <span className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
                     ✓ GPU Worker is Processing
                   </span>
                 </div>
-                <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1 pl-4">
                   Generation {latestGeneration.generation_number} completed. Worker is actively running on GPU.
                 </p>
               </div>
             )}
 
             {experiment.status === 'RUNNING' && !latestGeneration && (
-              <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="sci-card p-4 !border-blue-200 dark:!border-blue-800 !bg-blue-50 dark:!bg-blue-900/10">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
                   <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                    GPU Worker Started - Waiting for first generation...
+                    GPU Worker Started
                   </span>
                 </div>
-                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1 pl-4">
                   Worker has claimed the job and is initializing. First generation data will appear shortly.
                 </p>
               </div>
@@ -724,30 +755,25 @@ export default function ExperimentDetailPage() {
 
             {/* Batch Assignments */}
             {experiment.status === 'RUNNING' && batches.length > 0 && (
-              <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+              <div className="sci-card p-5">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                  <span className="section-number text-[10px]">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                    </svg>
+                  </span>
                   Generation Batches
                 </h4>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {batches.map((batch: any) => {
                     const worker = batch.workers
-                    const getStatusColor = (status: string) => {
-                      switch (status) {
-                        case 'completed': return 'bg-green-500'
-                        case 'processing': return 'bg-blue-500'
-                        case 'assigned': return 'bg-yellow-500'
-                        case 'failed': return 'bg-red-500'
-                        default: return 'bg-gray-500'
-                      }
-                    }
-
                     return (
                       <div
                         key={batch.id}
-                        className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900 rounded text-xs"
+                        className="flex items-center justify-between p-2.5 bg-gray-50 dark:bg-gray-800/50 rounded-lg text-xs"
                       >
                         <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${getStatusColor(batch.status)} ${batch.status === 'processing' ? 'animate-pulse' : ''}`} />
+                          <div className={`w-2 h-2 rounded-full ${getBatchStatusColor(batch.status)} ${batch.status === 'processing' ? 'animate-pulse' : ''}`} />
                           <span className="font-medium text-gray-900 dark:text-white">
                             Gens {batch.generation_start}-{batch.generation_end}
                           </span>
@@ -770,46 +796,54 @@ export default function ExperimentDetailPage() {
             )}
 
             {/* Configuration Card */}
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
-              <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Configuration</h2>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-600 dark:text-gray-400">Population Size:</span>
+            <div className="sci-card p-5">
+              <h2 className="section-heading !text-base !mb-3">
+                <span className="section-number text-[10px]">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </span>
+                Configuration
+              </h2>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="flex justify-between items-center p-2.5 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                  <span className="text-gray-500 dark:text-gray-400 text-xs">Population</span>
                   <Tooltip content="Number of neural network agents in each generation">
-                    <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{experiment.population_size}</span>
+                    <span className="font-semibold text-gray-900 dark:text-white cursor-help">{experiment.population_size}</span>
                   </Tooltip>
                 </div>
-                <div>
-                  <span className="text-gray-600 dark:text-gray-400">Max Generations:</span>
+                <div className="flex justify-between items-center p-2.5 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                  <span className="text-gray-500 dark:text-gray-400 text-xs">Max Gens</span>
                   <Tooltip content="Total number of generations the experiment will run">
-                    <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{experiment.max_generations}</span>
+                    <span className="font-semibold text-gray-900 dark:text-white cursor-help">{experiment.max_generations}</span>
                   </Tooltip>
                 </div>
-                <div>
-                  <span className="text-gray-600 dark:text-gray-400">Random Seed:</span>
+                <div className="flex justify-between items-center p-2.5 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                  <span className="text-gray-500 dark:text-gray-400 text-xs">Seed</span>
                   <Tooltip content="Random seed value ensuring reproducible starting conditions">
-                    <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{experiment.random_seed}</span>
+                    <span className="font-semibold text-gray-900 dark:text-white cursor-help">{experiment.random_seed}</span>
                   </Tooltip>
                 </div>
-                <div>
-                  <span className="text-gray-600 dark:text-gray-400">Selection Pressure:</span>
-                  <Tooltip content="Strength of selection favoring high-performing agents (higher = stronger selection)">
-                    <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{experiment.selection_pressure}</span>
+                <div className="flex justify-between items-center p-2.5 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                  <span className="text-gray-500 dark:text-gray-400 text-xs">Selection</span>
+                  <Tooltip content="Strength of selection favoring high-performing agents">
+                    <span className="font-semibold text-gray-900 dark:text-white cursor-help">{experiment.selection_pressure}</span>
                   </Tooltip>
                 </div>
                 {experiment.mutation_mode === 'STATIC' && experiment.mutation_rate && (
-                  <div>
-                    <span className="text-gray-600 dark:text-gray-400">Mutation Rate:</span>
+                  <div className="flex justify-between items-center p-2.5 bg-gray-50 dark:bg-gray-800/50 rounded-lg col-span-2">
+                    <span className="text-gray-500 dark:text-gray-400 text-xs">Mutation Rate</span>
                     <Tooltip content="Fixed mutation rate for static mode - probability of random genetic changes">
-                      <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{experiment.mutation_rate}</span>
+                      <span className="font-semibold text-gray-900 dark:text-white cursor-help">{experiment.mutation_rate}</span>
                     </Tooltip>
                   </div>
                 )}
                 {experiment.mutation_mode === 'ADAPTIVE' && experiment.mutation_base && (
-                  <div>
-                    <span className="text-gray-600 dark:text-gray-400">Mutation Base:</span>
+                  <div className="flex justify-between items-center p-2.5 bg-gray-50 dark:bg-gray-800/50 rounded-lg col-span-2">
+                    <span className="text-gray-500 dark:text-gray-400 text-xs">Mutation Base</span>
                     <Tooltip content="Base rate for adaptive mutation. Default 0.0615 is calibrated so effective rate starts at ~5% (same as static) at initial fitness, ensuring fair comparison. Rate then scales by fitness.">
-                      <span className="ml-2 font-medium text-gray-900 dark:text-white cursor-help">{experiment.mutation_base}</span>
+                      <span className="font-semibold text-gray-900 dark:text-white cursor-help">{experiment.mutation_base}</span>
                     </Tooltip>
                   </div>
                 )}
@@ -818,21 +852,28 @@ export default function ExperimentDetailPage() {
 
             {/* Recent Matches */}
             {matches.length > 0 && (
-              <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
-                <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Recent Matches</h2>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
+              <div className="sci-card p-5">
+                <h2 className="section-heading !text-base !mb-3">
+                  <span className="section-number text-[10px]">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </span>
+                  Recent Matches
+                </h2>
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
                   {matches.slice(-10).reverse().map((match, idx) => (
                     <button
                       key={idx}
                       onClick={() => setSelectedMatch(match)}
-                      className="w-full text-left p-3 bg-gray-50 dark:bg-gray-900 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                      className="w-full text-left p-2.5 bg-gray-50 dark:bg-gray-800/50 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/10 transition-colors border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800"
                     >
                       <div className="text-sm">
-                        <div className="font-medium text-gray-900 dark:text-white">
+                        <div className="font-medium text-gray-900 dark:text-white text-xs">
                           Match {matches.length - idx}
                         </div>
-                        <div className="text-gray-600 dark:text-gray-400 text-xs mt-1">
-                          {match.winner_id ? `Winner: ${match.winner_id.slice(0, 8)}...` : 'Draw'}
+                        <div className="text-gray-600 dark:text-gray-400 text-xs mt-0.5">
+                          {match.winner_id ? `Winner: ${match.winner_id.slice(0, 8)}…` : 'Draw'}
                         </div>
                       </div>
                     </button>
@@ -845,25 +886,39 @@ export default function ExperimentDetailPage() {
 
         {/* Charts Section */}
         {generations.length > 0 && (
-          <div className="space-y-6">
-            <ExperimentChart
-              generations={generations}
-              experiment={experiment}
-              isLive={experiment.status === 'RUNNING'}
-            />
-            <EntropyChart
-              generations={generations}
-              experiment={experiment}
-              isLive={experiment.status === 'RUNNING'}
-            />
-            <StatisticalSignificance experimentId={experimentId} mutationMode={experiment.mutation_mode} />
+          <div className="space-y-6 animate-fade-in" style={{ animationDelay: '200ms' }}>
+            <div className="sci-card p-5">
+              <ExperimentChart
+                generations={generations}
+                experiment={experiment}
+                isLive={experiment.status === 'RUNNING'}
+              />
+            </div>
+            <div className="sci-card p-5">
+              <EntropyChart
+                generations={generations}
+                experiment={experiment}
+                isLive={experiment.status === 'RUNNING'}
+              />
+            </div>
+            <div className="sci-card p-5">
+              <StatisticalSignificance experimentId={experimentId} mutationMode={experiment.mutation_mode} />
+            </div>
           </div>
         )}
 
         {generations.length === 0 && (
-          <div className="bg-white dark:bg-gray-800 p-12 text-center rounded-lg border border-gray-200 dark:border-gray-700">
-            <p className="text-gray-600 dark:text-gray-400">
-              No generation data available yet. Start the experiment to begin collecting data.
+          <div className="sci-card p-16 text-center animate-fade-in">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-800 mb-4">
+              <svg className="w-7 h-7 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+            <p className="text-gray-600 dark:text-gray-400 font-medium">
+              No generation data available yet
+            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
+              Start the experiment to begin collecting data
             </p>
           </div>
         )}

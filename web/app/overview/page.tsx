@@ -18,41 +18,44 @@ const sectionIds = {
   aiFuture: 'ai-future',
 } as const
 
-const tocItems: { id: string; label: string }[] = [
-  { id: sectionIds.neuralNetwork, label: 'What is a neural network?' },
-  { id: sectionIds.howNetworksWork, label: 'How do neural networks work?' },
-  { id: sectionIds.keyTerms, label: 'Key terms' },
-  { id: sectionIds.experimentNetworks, label: 'How does this experiment implement neural networks?' },
-  { id: sectionIds.petriDish, label: 'Why did we choose a petri dish?' },
-  { id: sectionIds.organisms, label: 'What are the organisms?' },
-  { id: sectionIds.brainsMotivations, label: 'How do their brains work and what are their motivations?' },
-  { id: sectionIds.whyTheyAct, label: 'Why do they act the way they do?' },
-  { id: sectionIds.methodology, label: 'How do we conduct the experiment?' },
-  { id: sectionIds.gameTheoryNash, label: 'Game theory and Nash equilibrium' },
-  { id: sectionIds.nashDetectionTechnical, label: 'How we detect Nash equilibrium (technical)' },
-  { id: sectionIds.gpuWorkers, label: 'Why do we need GPU workers?' },
-  { id: sectionIds.measuring, label: 'What are we measuring?' },
-  { id: sectionIds.aiFuture, label: 'Why is this relevant for the future of AI?' },
+const tocItems: { id: string; label: string; num: number }[] = [
+  { id: sectionIds.neuralNetwork, label: 'What is a neural network?', num: 1 },
+  { id: sectionIds.howNetworksWork, label: 'How do neural networks work?', num: 2 },
+  { id: sectionIds.keyTerms, label: 'Key terms', num: 3 },
+  { id: sectionIds.experimentNetworks, label: 'How does this experiment implement neural networks?', num: 4 },
+  { id: sectionIds.petriDish, label: 'Why did we choose a petri dish?', num: 5 },
+  { id: sectionIds.organisms, label: 'What are the organisms?', num: 6 },
+  { id: sectionIds.brainsMotivations, label: 'How do their brains work and what are their motivations?', num: 7 },
+  { id: sectionIds.whyTheyAct, label: 'Why do they act the way they do?', num: 8 },
+  { id: sectionIds.methodology, label: 'How do we conduct the experiment?', num: 9 },
+  { id: sectionIds.gameTheoryNash, label: 'Game theory and Nash equilibrium', num: 10 },
+  { id: sectionIds.nashDetectionTechnical, label: 'How we detect Nash equilibrium (technical)', num: 11 },
+  { id: sectionIds.gpuWorkers, label: 'Why do we need GPU workers?', num: 12 },
+  { id: sectionIds.measuring, label: 'What are we measuring?', num: 13 },
+  { id: sectionIds.aiFuture, label: 'Why is this relevant for the future of AI?', num: 14 },
 ]
 
 function SectionCard({
   id,
+  num,
   title,
   children,
 }: {
   id: string
+  num: number
   title: string
   children: React.ReactNode
 }) {
   return (
     <section
       id={id}
-      className="scroll-mt-24 bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl p-6 md:p-8 shadow-sm"
+      className="scroll-mt-24 sci-card p-6 md:p-8 animate-fade-in"
     >
-      <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-200 dark:border-gray-600">
+      <h2 className="section-heading">
+        <span className="section-number">{num}</span>
         {title}
       </h2>
-      <div className="text-gray-700 dark:text-gray-300 leading-relaxed space-y-4 text-base md:text-lg">
+      <div className="text-gray-700 dark:text-gray-300 leading-relaxed space-y-4 text-base md:text-lg pl-10">
         {children}
       </div>
     </section>
@@ -61,26 +64,51 @@ function SectionCard({
 
 export default function OverviewPage() {
   return (
-    <main className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-4xl mx-auto px-4 py-8 md:py-12 space-y-10 md:space-y-12">
-        {/* Page title and intro */}
-        <header id={sectionIds.intro} className="scroll-mt-24">
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
-            Experiment Overview
-          </h1>
-          <p className="text-lg md:text-xl text-gray-600 dark:text-gray-400 leading-relaxed max-w-3xl">
-            This page explains the EvoNash experiment in plain language: what we do, why we do it,
-            and how it connects to game theory, neural networks, and the future of AI. No prior
-            background is required.
-          </p>
-        </header>
+    <main className="min-h-screen">
+      <div className="max-w-5xl mx-auto px-4 md:px-6 py-8 md:py-12 space-y-8">
+        {/* Breadcrumb */}
+        <nav className="breadcrumb">
+          <Link href="/">Dashboard</Link>
+          <span className="separator">/</span>
+          <span>Overview</span>
+        </nav>
 
-        {/* Comprehensive opening: project summary for science fair (grade 9) */}
-        <section className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl p-6 md:p-8 shadow-sm">
-          <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white mb-6 pb-2 border-b border-gray-200 dark:border-gray-600">
+        {/* Hero Banner */}
+        <div className="hero-banner-sm animate-fade-in">
+          <div className="relative z-10">
+            <h1 className="text-3xl md:text-4xl font-bold text-white mb-3">
+              Experiment Overview
+            </h1>
+            <p className="text-base md:text-lg text-white/75 leading-relaxed max-w-3xl">
+              This page explains the EvoNash experiment in plain language: what we do, why we do it,
+              and how it connects to game theory, neural networks, and the future of AI. No prior
+              background is required.
+            </p>
+            <div className="flex items-center gap-3 mt-4">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-white/90 text-xs font-medium backdrop-blur-sm">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                {tocItems.length} sections
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-white/90 text-xs font-medium backdrop-blur-sm">
+                ~15 min read
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* About This Project — Feature Card */}
+        <section className="sci-card p-6 md:p-8 animate-fade-in">
+          <h2 className="section-heading">
+            <span className="section-number">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </span>
             About This Project: The Science Fair Experiment at a Glance
           </h2>
-          <div className="text-gray-700 dark:text-gray-300 leading-relaxed space-y-6 text-base md:text-lg">
+          <div className="text-gray-700 dark:text-gray-300 leading-relaxed space-y-6 text-base md:text-lg pl-10">
             <p>
               <strong>EvoNash</strong> is a science fair project that asks a simple question: if we
               let digital &quot;organisms&quot; with tiny artificial brains evolve in a mini world,
@@ -91,8 +119,9 @@ export default function OverviewPage() {
               question. Below we explain every part of the experiment in simple terms.
             </p>
 
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            <div className="sci-card p-5 !border-indigo-200 dark:!border-indigo-800/50 !bg-indigo-50/50 dark:!bg-indigo-900/10">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
                 Abstract (What We Did in One Paragraph)
               </h3>
               <p>
@@ -113,7 +142,8 @@ export default function OverviewPage() {
             </div>
 
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                 The Problem (Why We Did This)
               </h3>
               <p>
@@ -133,7 +163,8 @@ export default function OverviewPage() {
             </div>
 
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                 The Hypothesis (What We Think Will Happen)
               </h3>
               <p>
@@ -149,7 +180,8 @@ export default function OverviewPage() {
             </div>
 
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
                 Methodology (How We Run the Experiment)
               </h3>
               <p>
@@ -175,7 +207,8 @@ export default function OverviewPage() {
             </div>
 
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
                 Why We Use the Same Seed (Fair Start)
               </h3>
               <p>
@@ -195,7 +228,8 @@ export default function OverviewPage() {
             </div>
 
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-pink-500"></span>
                 Variables (What We Change, What We Measure, What We Keep the Same)
               </h3>
               <p>
@@ -209,7 +243,8 @@ export default function OverviewPage() {
             </div>
 
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
                 Why This Matters
               </h3>
               <p>
@@ -225,30 +260,33 @@ export default function OverviewPage() {
           </div>
         </section>
 
-        {/* Table of contents */}
+        {/* Table of Contents */}
         <nav
           aria-label="Table of contents"
-          className="bg-gray-100 dark:bg-gray-800/70 border border-gray-200 dark:border-gray-700 rounded-xl p-6"
+          className="sci-card p-6 animate-fade-in"
         >
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-4">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-4 flex items-center gap-2">
+            <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+            </svg>
             Contents
           </h2>
-          <ul className="space-y-2">
-            {tocItems.map(({ id, label }) => (
-              <li key={id}>
-                <Link
-                  href={`#${id}`}
-                  className="text-blue-600 dark:text-blue-400 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
-                >
-                  {label}
-                </Link>
-              </li>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+            {tocItems.map(({ id, label, num }) => (
+              <Link
+                key={id}
+                href={`#${id}`}
+                className="toc-link flex items-center gap-3"
+              >
+                <span className="section-number text-xs">{num}</span>
+                <span>{label}</span>
+              </Link>
             ))}
-          </ul>
+          </div>
         </nav>
 
-        {/* Section 1: What is a neural network? */}
-        <SectionCard id={sectionIds.neuralNetwork} title="What is a neural network?">
+        {/* Sections */}
+        <SectionCard num={1} id={sectionIds.neuralNetwork} title="What is a neural network?">
           <p>
             A <strong>neural network</strong> is a computer model inspired by how brain cells
             work. It is made of many simple &quot;cells&quot; (called neurons) that receive
@@ -265,8 +303,7 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        {/* Section 2: How do neural networks work? */}
-        <SectionCard id={sectionIds.howNetworksWork} title="How do neural networks work?">
+        <SectionCard num={2} id={sectionIds.howNetworksWork} title="How do neural networks work?">
           <p>
             The <strong>inputs</strong> are numbers that represent what the organism
             &quot;knows&quot;—for example, how far away the nearest food is, or how close the
@@ -285,15 +322,14 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        {/* Section 2a: Key terms */}
-        <SectionCard id={sectionIds.keyTerms} title="Key terms">
+        <SectionCard num={3} id={sectionIds.keyTerms} title="Key terms">
           <p className="mb-6">
             The following terms are used throughout this overview. They are defined here so you can
             refer back anytime.
           </p>
 
           <div className="space-y-6">
-            <div>
+            <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                 Raycasts
               </h3>
@@ -309,7 +345,7 @@ export default function OverviewPage() {
               </p>
             </div>
 
-            <div>
+            <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                 The four actions
               </h3>
@@ -335,7 +371,7 @@ export default function OverviewPage() {
               </ul>
             </div>
 
-            <div>
+            <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Moving</h3>
               <p>
                 <strong>Moving</strong> in the experiment is the result of thrust and the
@@ -345,7 +381,7 @@ export default function OverviewPage() {
               </p>
             </div>
 
-            <div>
+            <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                 Fitness Score (in depth)
               </h3>
@@ -375,7 +411,7 @@ export default function OverviewPage() {
               </p>
             </div>
 
-            <div>
+            <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                 Other terms
               </h3>
@@ -402,11 +438,7 @@ export default function OverviewPage() {
           </div>
         </SectionCard>
 
-        {/* Section 3: How does this experiment implement neural networks? */}
-        <SectionCard
-          id={sectionIds.experimentNetworks}
-          title="How does this experiment implement neural networks?"
-        >
+        <SectionCard num={4} id={sectionIds.experimentNetworks} title="How does this experiment implement neural networks?">
           <p>
             Each organism has exactly one neural network as its brain. That network has 24 inputs
             from raycasts (virtual beams in 8 directions that report how far the nearest wall,
@@ -422,8 +454,7 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        {/* Section 4: Why did we choose a petri dish? */}
-        <SectionCard id={sectionIds.petriDish} title="Why did we choose a petri dish?">
+        <SectionCard num={5} id={sectionIds.petriDish} title="Why did we choose a petri dish?">
           <p>
             The <strong>petri dish</strong> is our controlled mini-world for the experiment. Think
             of a real petri dish in biology: a simple, closed environment where we can watch life
@@ -442,8 +473,7 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        {/* Section 5: What are the organisms? */}
-        <SectionCard id={sectionIds.organisms} title="What are the organisms?">
+        <SectionCard num={6} id={sectionIds.organisms} title="What are the organisms?">
           <p>
             The <strong>organisms</strong> (also called agents) are digital creatures represented
             as circles moving in the 2D petri dish. Each has <strong>energy</strong>—like health or
@@ -463,11 +493,7 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        {/* Section 6: Brains and motivations */}
-        <SectionCard
-          id={sectionIds.brainsMotivations}
-          title="How do their neural network brains work and what are their motivations?"
-        >
+        <SectionCard num={7} id={sectionIds.brainsMotivations} title="How do their neural network brains work and what are their motivations?">
           <p>
             Each moment (tick), every organism gets a list of 24 numbers: from 8 directions, how
             far to the nearest wall, food, and enemy (and sometimes enemy size), plus a few
@@ -488,8 +514,7 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        {/* Section 7: Why do they act the way they do? */}
-        <SectionCard id={sectionIds.whyTheyAct} title="Why do they act the way they do?">
+        <SectionCard num={8} id={sectionIds.whyTheyAct} title="Why do they act the way they do?">
           <p>
             We do not tell the organisms how to behave. We only select the best performers (top
             20% by fitness score), copy their neural network weights to create offspring, and randomly
@@ -506,8 +531,7 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        {/* Section 8: Methodology */}
-        <SectionCard id={sectionIds.methodology} title="How do we conduct the experiment?">
+        <SectionCard num={9} id={sectionIds.methodology} title="How do we conduct the experiment?">
           <p>
             We run two groups of experiments, identical in every way except how much we mutate the
             offspring.
@@ -537,11 +561,7 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        {/* Section 8a: Game theory and Nash equilibrium */}
-        <SectionCard
-          id={sectionIds.gameTheoryNash}
-          title="What is game theory? What is Nash equilibrium? Why is it the key metric?"
-        >
+        <SectionCard num={10} id={sectionIds.gameTheoryNash} title="What is game theory? What is Nash equilibrium? Why is it the key metric?">
           <p>
             <strong>Game theory</strong> is the study of situations where multiple
             decision-makers (players) choose actions, and each person&apos;s outcome depends not
@@ -584,11 +604,7 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        {/* Section 8b: Nash equilibrium detection (technical / experiment methodology) */}
-        <SectionCard
-          id={sectionIds.nashDetectionTechnical}
-          title="How we detect Nash equilibrium (technical)"
-        >
+        <SectionCard num={11} id={sectionIds.nashDetectionTechnical} title="How we detect Nash equilibrium (technical)">
           <p>
             <strong>Detection criterion.</strong> Nash equilibrium is detected using
             <strong> entropy variance</strong> across the population, not mean policy entropy.
@@ -611,8 +627,7 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        {/* Section 9: GPU workers */}
-        <SectionCard id={sectionIds.gpuWorkers} title="Why do we need GPU workers?">
+        <SectionCard num={12} id={sectionIds.gpuWorkers} title="Why do we need GPU workers?">
           <p>
             We have 1,000 organisms, each with a neural network that does many multiplications every
             moment, and we run hundreds of generations. Doing that on an ordinary computer (CPU)
@@ -632,8 +647,7 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        {/* Section 10: What are we measuring? */}
-        <SectionCard id={sectionIds.measuring} title="What are we measuring?">
+        <SectionCard num={13} id={sectionIds.measuring} title="What are we measuring?">
           <p>
             The <strong>primary</strong> metric for proving our hypothesis is how many generations
             it takes to reach Nash equilibrium (convergence velocity). The other metrics (peak
@@ -679,11 +693,7 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        {/* Section 11: AI future */}
-        <SectionCard
-          id={sectionIds.aiFuture}
-          title="Why is this relevant for the future of AI, and how could it be expanded?"
-        >
+        <SectionCard num={14} id={sectionIds.aiFuture} title="Why is this relevant for the future of AI, and how could it be expanded?">
           <p>
             <strong>Relevance:</strong> This experiment combines evolution (trial and error over
             generations), game theory (Nash equilibrium—when no one benefits by changing strategy
