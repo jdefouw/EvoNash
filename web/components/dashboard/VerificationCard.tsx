@@ -192,19 +192,27 @@ export function VerificationCard() {
                                 <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
                                     <Database className="h-4 w-4" /> Calibration History
                                 </h4>
-                                <div className="space-y-2">
-                                    {calibrations.slice(0, 3).map(cal => (
-                                        <div key={cal.id} className="text-xs flex justify-between">
-                                            <span>{new Date(cal.executed_at).toLocaleString()}</span>
-                                            <span className="font-mono">{cal.metric_name}: {cal.min_value.toExponential(2)}</span>
+                                {calibrations.slice(0, 10).map(cal => (
+                                    <div key={cal.id} className="text-xs flex justify-between items-center py-2 border-b last:border-0 border-border/50">
+                                        <div>
+                                            <div className="font-medium text-foreground">
+                                                {(cal as any).worker_name || (cal.worker_id ? cal.worker_id.substring(0, 8) : 'Unknown')}
+                                            </div>
+                                            <div className="text-muted-foreground">
+                                                {new Date(cal.executed_at).toLocaleString()}
+                                            </div>
                                         </div>
-                                    ))}
-                                </div>
+                                        <span className="font-mono bg-muted/50 px-2 py-1 rounded text-foreground">
+                                            {cal.metric_name}: {cal.min_value.toExponential(2)}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
                             </div>
                         )}
-                    </TabsContent>
-                </Tabs>
-            </CardContent>
-        </Card>
+                </TabsContent>
+            </Tabs>
+        </CardContent>
+        </Card >
     );
 }

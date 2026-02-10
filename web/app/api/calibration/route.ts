@@ -54,9 +54,13 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
     try {
         const sql = `
-            SELECT * FROM calibration_logs
-            ORDER BY executed_at DESC
-            LIMIT 50
+            SELECT 
+                cl.*, 
+                w.worker_name
+            FROM calibration_logs cl
+            LEFT JOIN workers w ON cl.worker_id = w.id
+            ORDER BY cl.executed_at DESC
+            LIMIT 100
         `;
         const result = await query(sql);
         return NextResponse.json(result.rows);
