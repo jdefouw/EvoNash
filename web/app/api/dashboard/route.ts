@@ -1258,6 +1258,9 @@ export interface DashboardData {
     control: DistributionStats
     experimental: DistributionStats
   }
+  // Temporary: Convergence detection diagnostics
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  _convergenceDebug?: any
 }
 
 // =============================================================================
@@ -1645,14 +1648,30 @@ export async function GET() {
     // =========================================================================
 
     // Get convergence generation for each individual experiment
-    const getExperimentConvergenceGens = (experiments: Experiment[], generations: Generation[]): number[] => {
-      return experiments.map(exp => {
+    // Returns { convergenceGens, debugInfo } for diagnostics
+    const getExperimentConvergenceGensWithDebug = (experiments: Experiment[], generations: Generation[], label: string) => {
+      const debugPerExperiment: Array<{
+        expId: string
+        totalGens: number
+        reason: string
+        varianceDataLength?: number
+        peakVariance?: number
+        afterPeakLength?: number
+        sampleVariances?: number[]
+        threshold?: number
+        minVarianceAfterPeak?: number
+      }> = []
+
+      const convergenceGens = experiments.map(exp => {
         // Get all generations for this experiment, sorted
         const expGens = generations
-          .filter(g => g.experiment_id === exp.id)
+          .filter(g => String(g.experiment_id) === String(exp.id))
           .sort((a, b) => Number(a.generation_number) - Number(b.generation_number))
 
-        if (expGens.length < 10) return null
+        if (expGens.length < 10) {
+          debugPerExperiment.push({ expId: exp.id, totalGens: expGens.length, reason: `too few gens (${expGens.length} < 10)` })
+          return null
+        }
 
         // Apply the same convergence detection logic as findConvergenceGeneration
         const varianceData = expGens.slice(5)
@@ -1662,31 +1681,75 @@ export async function GET() {
             variance: Number(g.entropy_variance)
           }))
 
-        if (varianceData.length === 0) return null
+        if (varianceData.length === 0) {
+          const nullCount = expGens.filter(g => g.entropy_variance == null).length
+          debugPerExperiment.push({ expId: exp.id, totalGens: expGens.length, reason: `no variance data after slice(5). ${nullCount}/${expGens.length} gens have null entropy_variance` })
+          return null
+        }
 
         const peakVariance = Math.max(...varianceData.map(d => d.variance))
         const peakIndex = varianceData.findIndex(d => d.variance === peakVariance)
 
-        if (peakVariance <= 0.0001) return null
+        if (peakVariance <= 0.0001) {
+          debugPerExperiment.push({
+            expId: exp.id, totalGens: expGens.length, reason: `peakVariance too low`,
+            varianceDataLength: varianceData.length, peakVariance,
+            sampleVariances: varianceData.slice(0, 5).map(d => d.variance)
+          })
+          return null
+        }
 
         const effectiveThreshold = CONVERGENCE_THRESHOLD
         const afterPeak = varianceData.slice(peakIndex)
+        const minAfterPeak = Math.min(...afterPeak.map(d => d.variance))
 
         // Find stable convergence window
         for (let i = 0; i <= afterPeak.length - STABILITY_WINDOW; i++) {
           const window = afterPeak.slice(i, i + STABILITY_WINDOW)
           if (window.every(d => d.variance < effectiveThreshold)) {
+            debugPerExperiment.push({
+              expId: exp.id, totalGens: expGens.length, reason: `CONVERGED at gen ${window[0].gen}`,
+              varianceDataLength: varianceData.length, peakVariance, afterPeakLength: afterPeak.length,
+              threshold: effectiveThreshold
+            })
             return window[0].gen
           }
         }
 
+        // Count how many individual gens are below threshold
+        const belowThresholdCount = afterPeak.filter(d => d.variance < effectiveThreshold).length
+        debugPerExperiment.push({
+          expId: exp.id, totalGens: expGens.length,
+          reason: `NOT CONVERGED - ${belowThresholdCount}/${afterPeak.length} gens below threshold, need ${STABILITY_WINDOW} consecutive`,
+          varianceDataLength: varianceData.length, peakVariance,
+          afterPeakLength: afterPeak.length, threshold: effectiveThreshold,
+          minVarianceAfterPeak: minAfterPeak,
+          sampleVariances: afterPeak.slice(-10).map(d => d.variance)
+        })
         return null
       }).filter((gen): gen is number => gen !== null)
+
+      return {
+        convergenceGens,
+        debug: {
+          label,
+          totalExperiments: experiments.length,
+          totalGenerations: generations.length,
+          convergedCount: convergenceGens.length,
+          sampleExpId: experiments.length > 0 ? experiments[0].id : null,
+          sampleGenExpId: generations.length > 0 ? { raw: generations[0].experiment_id, type: typeof generations[0].experiment_id } : null,
+          sampleGenEntropy: generations.length > 0 ? { raw: generations[0].entropy_variance, type: typeof generations[0].entropy_variance, asNumber: Number(generations[0].entropy_variance) } : null,
+          perExperiment: debugPerExperiment.slice(0, 5)  // First 5 experiments for diagnostics
+        }
+      }
     }
 
     // Use ALL completed experiments for convergence statistics (not just chart subset)
-    const controlConvergenceGens = getExperimentConvergenceGens(allControlExperiments, allControlGenerations)
-    const experimentalConvergenceGens = getExperimentConvergenceGens(allExperimentalExperiments, allExperimentalGenerations)
+    const controlResult = getExperimentConvergenceGensWithDebug(allControlExperiments, allControlGenerations, 'CONTROL')
+    const experimentalResult = getExperimentConvergenceGensWithDebug(allExperimentalExperiments, allExperimentalGenerations, 'EXPERIMENTAL')
+    const controlConvergenceGens = controlResult.convergenceGens
+    const experimentalConvergenceGens = experimentalResult.convergenceGens
+    const _convergenceDebug = { control: controlResult.debug, experimental: experimentalResult.debug, threshold: CONVERGENCE_THRESHOLD, stabilityWindow: STABILITY_WINDOW }
 
     // T-test on convergence generations (PRIMARY hypothesis test)
     let convergenceTTestResult: TTestResult | null = null
@@ -1901,7 +1964,8 @@ export async function GET() {
       effectSizes,
       powerAnalysis: powerAnalysisResult,
       bootstrapCI: bootstrapCIResult,
-      distributionData
+      distributionData,
+      _convergenceDebug
     }
 
     return NextResponse.json(response, {
