@@ -11,8 +11,8 @@
   },
   "agent": {
     "radius": 10.0,
-    "initial_energy": 50.0,
-    "energy_decay_rate": 5.0,
+    "initial_energy": 100.0,
+    "energy_decay_rate": 1.0,
     "movement_cost": 1.0,
     "max_velocity": 20.0,
     "thrust_force": 20.0,
@@ -22,9 +22,9 @@
   },
   "food": {
     "radius": 5.0,
-    "energy_value": 20.0,
-    "spawn_count": 100,
-    "respawn_time": 300
+    "energy_value": 25.0,
+    "spawn_count": 500,
+    "respawn_time": 200
   },
   "projectile": {
     "radius": 3.0,

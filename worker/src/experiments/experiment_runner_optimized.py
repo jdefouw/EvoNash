@@ -367,6 +367,11 @@ class OptimizedExperimentRunner:
         
         # Main simulation loop - optimized for GPU
         for tick in range(total_ticks):
+            # Respawn food periodically (matches PetriDish.step() behavior)
+            if tick > 0 and tick % self.petri_dish.food_respawn_time == 0:
+                self.petri_dish._spawn_food()
+                self.petri_dish._update_food_tensors()
+            
             # Get active agents mask (reference, not copy)
             active_mask = self.vectorized_physics.active_mask
             
