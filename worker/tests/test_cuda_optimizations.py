@@ -324,11 +324,11 @@ def run_all_tests():
         print(" SOME TESTS FAILED - Review implementations")
     print("="*70 + "\n")
     
-    return all_passed
+    return all_passed, results
 
 
 if __name__ == '__main__':
-    success = run_all_tests()
+    success, results = run_all_tests()
     
     # Upload results
     try:
@@ -336,7 +336,12 @@ if __name__ == '__main__':
         uploader = ExperimentUploader()
         if uploader.worker_id:
             status = "PASS" if success else "FAIL"
-            details = {"full_suite_pass": success}
+            details = {
+                "full_suite_pass": success,
+                "tests_run": len(results),
+                "tests_passed": sum(1 for v in results.values() if v),
+                "results": {name: "PASS" if passed else "FAIL" for name, passed in results.items()}
+            }
             print("\nUploading verification results...")
             uploader.upload_verification("test_cuda_optimizations.py", status, details)
         else:
@@ -345,3 +350,4 @@ if __name__ == '__main__':
         print(f"Failed to upload results: {e}")
         
     sys.exit(0 if success else 1)
+

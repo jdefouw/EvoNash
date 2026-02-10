@@ -184,7 +184,7 @@ function jarqueBeraTest(data: number[]): NormalityTestResult {
   const m4 = cleanData.reduce((sum, x) => sum + Math.pow(x - mean, 4), 0) / n
 
   const std = Math.sqrt(m2)
-  if (std === 0) {
+  if (std < 1e-10) {
     return {
       statistic: 0,
       pValue: 1,
@@ -410,10 +410,11 @@ function mannWhitneyUTest(group1: number[], group2: number[]): MannWhitneyResult
   const U2 = n1 * n2 - U1
   const U = Math.min(U1, U2)
 
-  // Normal approximation for p-value (valid for n1, n2 > 10)
+  // Normal approximation for p-value with continuity correction
+  // Continuity correction improves accuracy for small samples
   const meanU = (n1 * n2) / 2
   const stdU = Math.sqrt((n1 * n2 * (n1 + n2 + 1)) / 12)
-  const z = (U - meanU) / stdU
+  const z = (Math.abs(U - meanU) - 0.5) / stdU  // continuity correction
   const pValue = 2 * normalCDF(-Math.abs(z))
 
   const isSignificant = pValue < 0.05
@@ -547,70 +548,6 @@ function commonLanguageEffectSize(group1: number[], group2: number[]): CLESResul
 }
 
 // =============================================================================
-// NON-CENTRAL T-DISTRIBUTION CDF
-// =============================================================================
-// 
-// The non-central t-distribution with df degrees of freedom and non-centrality
-// parameter δ (ncp) is used for power calculations.
-// 
-// This implementation uses a series expansion that converges well for most
-// practical values of δ and df.
-// 
-// Reference: Algorithm AS 243 - Lenth, R.V. (1989)
-// =============================================================================
-function nonCentralTCDF(t: number, df: number, ncp: number): number {
-  if (df <= 0) return NaN
-  if (ncp === 0) return tDistributionCDF(t, df)
-
-  // Handle negative t by symmetry
-  if (t < 0) {
-    return 1 - nonCentralTCDF(-t, df, -ncp)
-  }
-
-  // Use series expansion
-  const x = t * t / (df + t * t)
-  const maxIterations = 1000
-  const tolerance = 1e-12
-
-  // Calculate using the weighted sum of incomplete beta functions
-  let sum = 0
-  let term: number
-  const lambda = ncp * ncp / 2
-
-  // Poisson weight: exp(-λ) * λ^j / j!
-  let poissonWeight = Math.exp(-lambda)
-
-  for (let j = 0; j < maxIterations; j++) {
-    // Calculate the incomplete beta term
-    // I_x((df + 1)/2 + j, 1/2) for odd terms
-    // I_x(df/2 + j, 1/2) for even terms
-
-    const beta1 = incompleteBeta(x, (df + 1) / 2 + j, 0.5)
-    const beta2 = incompleteBeta(x, df / 2 + j, 0.5)
-
-    // Contribution from this term
-    const contrib1 = poissonWeight * (1 - beta1) / 2
-    const contrib2 = (j > 0 ? lambda / j : 0) * poissonWeight * (1 - beta2) / 2
-
-    term = contrib1
-    sum += term
-
-    if (j > 0 && Math.abs(term) < tolerance * Math.abs(sum)) {
-      break
-    }
-
-    // Update Poisson weight for next iteration
-    poissonWeight *= lambda / (j + 1)
-  }
-
-  // Add the central part
-  const centralCDF = normalCDF(-ncp)
-
-  // The non-central t CDF
-  return centralCDF + sum
-}
-
-// =============================================================================
 // STATISTICAL POWER CALCULATION
 // =============================================================================
 // 
@@ -621,9 +558,12 @@ function nonCentralTCDF(t: number, df: number, ncp: number): number {
 //   df = n1 + n2 - 2
 //   ncp = δ * sqrt(n1 * n2 / (n1 + n2))  where δ is the effect size
 // 
-// Power = 1 - F_nct(t_crit, df, ncp) + F_nct(-t_crit, df, ncp)
+// We use the normal approximation to the non-central t-distribution:
+//   Power ≈ 1 - Φ(z_crit - ncp) + Φ(-z_crit - ncp)
 // 
-// where F_nct is the non-central t CDF.
+// This approximation is accurate for the sample sizes in this project and
+// avoids the complexity of a full non-central t series expansion.
+// Reference: Cohen, J. (1988). Statistical Power Analysis.
 // =============================================================================
 function calculatePower(n1: number, n2: number, effectSize: number | null, alpha: number = 0.05): PowerAnalysisResult {
   if (n1 < 2 || n2 < 2 || effectSize === null) {
@@ -636,29 +576,12 @@ function calculatePower(n1: number, n2: number, effectSize: number | null, alpha
     }
   }
 
-  const df = n1 + n2 - 2
-
   // Non-centrality parameter
   const ncp = Math.abs(effectSize) * Math.sqrt((n1 * n2) / (n1 + n2))
 
-  // Critical t-value for two-tailed test
-  const tCrit = tDistributionQuantile(1 - alpha / 2, df)
-
-  // Power using non-central t-distribution
-  // Power = P(|T| > tCrit) = P(T > tCrit) + P(T < -tCrit)
-  //       = 1 - F_nct(tCrit, df, ncp) + F_nct(-tCrit, df, ncp)
-  let power: number
-
-  // For small ncp or large df, the non-central t calculation can be unstable
-  // Use a simpler approximation in those cases
-  if (df > 100 || ncp < 0.01) {
-    // Normal approximation (accurate for large df)
-    const zCrit = normalQuantile(1 - alpha / 2)
-    power = 1 - normalCDF(zCrit - ncp) + normalCDF(-zCrit - ncp)
-  } else {
-    // Use non-central t-distribution
-    power = 1 - nonCentralTCDF(tCrit, df, ncp) + nonCentralTCDF(-tCrit, df, ncp)
-  }
+  // Normal approximation for power (accurate and numerically stable)
+  const zCrit = normalQuantile(1 - alpha / 2)
+  let power = 1 - normalCDF(zCrit - ncp) + normalCDF(-zCrit - ncp)
 
   // Clamp power to [0, 1]
   power = Math.max(0, Math.min(1, power))
@@ -694,7 +617,7 @@ function requiredSampleSize(effectSize: number | null, targetPower: number = 0.8
   }
 
   // Using normal approximation
-  const zAlpha = 1.96  // Two-tailed α = 0.05
+  const zAlpha = normalQuantile(1 - alpha / 2)  // Use actual alpha, not hardcoded
   const zBeta = normalQuantile(targetPower)
 
   const nPerGroup = Math.ceil(2 * Math.pow((zAlpha + zBeta) / Math.abs(effectSize), 2))
@@ -784,16 +707,21 @@ function getDistributionStats(data: number[]): DistributionStats {
   const variance = n > 1 ? cleanData.reduce((sum, x) => sum + Math.pow(x - mean, 2), 0) / (n - 1) : 0
   const std = Math.sqrt(variance)
 
-  // Skewness and kurtosis
+  // Skewness and kurtosis (using unbiased sample formulas)
   let skewness: number | null = null
   let kurtosis: number | null = null
   if (n > 2 && std > 0) {
-    const m3 = cleanData.reduce((sum, x) => sum + Math.pow(x - mean, 3), 0) / n
-    skewness = m3 / Math.pow(std, 3)
+    // Adjusted Fisher-Pearson standardized moment coefficient (unbiased)
+    // G₁ = [n / ((n-1)(n-2))] × Σ((xᵢ - x̄)/s)³
+    const m3sum = cleanData.reduce((sum, x) => sum + Math.pow((x - mean) / std, 3), 0)
+    skewness = (n / ((n - 1) * (n - 2))) * m3sum
   }
   if (n > 3 && std > 0) {
-    const m4 = cleanData.reduce((sum, x) => sum + Math.pow(x - mean, 4), 0) / n
-    kurtosis = m4 / Math.pow(std, 4) - 3  // Excess kurtosis
+    // Excess kurtosis with bias correction
+    // G₂ = [(n(n+1)) / ((n-1)(n-2)(n-3))] × Σ((xᵢ - x̄)/s)⁴ - [3(n-1)² / ((n-2)(n-3))]
+    const m4sum = cleanData.reduce((sum, x) => sum + Math.pow((x - mean) / std, 4), 0)
+    kurtosis = ((n * (n + 1)) / ((n - 1) * (n - 2) * (n - 3))) * m4sum
+      - (3 * Math.pow(n - 1, 2)) / ((n - 2) * (n - 3))
   }
 
   const Q1 = percentile(sorted, 25)
@@ -841,18 +769,14 @@ function bootstrapCI(
 
   const originalDiff = g2.reduce((a, b) => a + b, 0) / n2 - g1.reduce((a, b) => a + b, 0) / n1
 
-  // Bootstrap resampling (using seeded random for reproducibility)
+  // Bootstrap resampling using Math.random() (xorshift128+ in modern engines)
+  // Provides much better dispersion than a simple LCG
   const bootstrapDiffs: number[] = []
-  let seed = 42
-  const random = () => {
-    seed = (seed * 1103515245 + 12345) % 2147483648
-    return seed / 2147483648
-  }
 
   for (let i = 0; i < nBootstrap; i++) {
     // Resample with replacement
-    const bootG1 = Array.from({ length: n1 }, () => g1[Math.floor(random() * n1)])
-    const bootG2 = Array.from({ length: n2 }, () => g2[Math.floor(random() * n2)])
+    const bootG1 = Array.from({ length: n1 }, () => g1[Math.floor(Math.random() * n1)])
+    const bootG2 = Array.from({ length: n2 }, () => g2[Math.floor(Math.random() * n2)])
 
     const bootDiff = bootG2.reduce((a, b) => a + b, 0) / n2 - bootG1.reduce((a, b) => a + b, 0) / n1
     bootstrapDiffs.push(bootDiff)
@@ -1003,8 +927,9 @@ function welchTTest(sample1: number[], sample2: number[]): TTestResult {
     }
   }
 
-  // Welch's t-statistic
-  const tStatistic = (mean1 - mean2) / pooledSE
+  // Welch's t-statistic: (Experimental - Control) / SE
+  // Sign convention matches meanDifference = mean2 - mean1 (Experimental − Control)
+  const tStatistic = (mean2 - mean1) / pooledSE
 
   // Welch-Satterthwaite degrees of freedom
   const df = Math.pow(se1 + se2, 2) / (Math.pow(se1, 2) / (n1 - 1) + Math.pow(se2, 2) / (n2 - 1))
@@ -1639,8 +1564,9 @@ export async function GET() {
       return null
     }
 
-    const controlConvergenceGen = findConvergenceGeneration(controlGenerations, CONVERGENCE_THRESHOLD)
-    const experimentalConvergenceGen = findConvergenceGeneration(experimentalGenerations, CONVERGENCE_THRESHOLD)
+    // Use ALL completed experiment generations (not chart subset) for hero convergence display
+    const controlConvergenceGen = findConvergenceGeneration(allControlGenerations, CONVERGENCE_THRESHOLD)
+    const experimentalConvergenceGen = findConvergenceGeneration(allExperimentalGenerations, CONVERGENCE_THRESHOLD)
 
     // Calculate convergence improvement
     let convergenceImprovement: number | null = null

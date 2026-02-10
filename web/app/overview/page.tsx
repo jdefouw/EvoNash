@@ -337,11 +337,11 @@ export default function OverviewPage() {
                 &quot;Raycast&quot; is not a common word—it comes from computer graphics. In this
                 experiment, <strong>raycasts</strong> are virtual beams or sensors. The organism
                 sends out 8 &quot;beams&quot; in different directions (like headlights or radar).
-                Each beam reports how far the nearest wall, food pellet, or other organism is (and
+                Each beam reports how far the nearest food pellet or other organism is (and
                 sometimes the size of the other organism). So the organism does not
-                &quot;see&quot; pictures; it gets 24 numbers (8 directions × 3 types of distance).
-                Imagine shooting a beam of light in one direction and it tells you how many steps
-                until you hit a wall, food, or another creature—that is one raycast.
+                &quot;see&quot; pictures; it gets 24 numbers (8 directions × 3 types of data).
+                Since the world wraps around, there are no walls to hit—the raycasts go on forever
+                until they find something or reach maximum range.
               </p>
             </div>
 
@@ -441,8 +441,8 @@ export default function OverviewPage() {
         <SectionCard num={4} id={sectionIds.experimentNetworks} title="How does this experiment implement neural networks?">
           <p>
             Each organism has exactly one neural network as its brain. That network has 24 inputs
-            from raycasts (virtual beams in 8 directions that report how far the nearest wall,
-            food, or other organism is). It has one hidden layer of 64 neurons—a middle layer that
+            from raycasts (virtual beams in 8 directions that report how far the nearest
+            food or other organism is). It has one hidden layer of 64 neurons—a middle layer that
             mixes the 24 inputs into 64 new numbers, giving the network room to learn patterns. It
             has 4 outputs: thrust (move forward), turn (rotate), shoot (fire a projectile to steal
             energy from others), and split (see Key terms).
@@ -465,8 +465,9 @@ export default function OverviewPage() {
           </p>
           <p>
             The world is 2D (flat, like a tabletop) and continuous (organisms can be anywhere,
-            not just on a grid), with wrap-around borders: going off one edge brings you back on the
-            other side, so there are no corners to get stuck in. The physics are simple (movement
+            not just on a grid), with wrap-around borders (toroidal geometry): going off one edge
+            brings you back on the other side. This means there are no walls or corners to hide
+            in—organisms must survive in the open. The physics are simple (movement
             and collisions) so the computer can simulate thousands of organisms without extra
             complexity. The petri dish is our lab bench—simple, repeatable, and designed so we can
             learn about evolution and mutation, not about the environment.
@@ -496,7 +497,7 @@ export default function OverviewPage() {
         <SectionCard num={7} id={sectionIds.brainsMotivations} title="How do their neural network brains work and what are their motivations?">
           <p>
             Each moment (tick), every organism gets a list of 24 numbers: from 8 directions, how
-            far to the nearest wall, food, and enemy (and sometimes enemy size), plus a few
+            far to the nearest food and enemy (and sometimes enemy size), plus a few
             numbers about itself (energy level, speed, whether it is on cooldown for shooting or
             splitting). That list is the input to its neural network. The network outputs 4 numbers
             that control thrust, turn, shoot, and split.
