@@ -20,7 +20,6 @@ import {
   VerificationCard
 } from "@/components/dashboard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 
 // Match the DashboardData interface from the API
 interface DashboardData {
@@ -181,8 +180,6 @@ export default function DashboardPage() {
   const experimentalGenerations = dashboardData?.experimentalGenerations ?? [];
 
   // Dynamically compute hypothesis supported from actual results
-  // Hypothesis: Adaptive mutation converges faster (fewer generations)
-  // Supported if: convergence is statistically significant AND experimental mean is lower (faster)
   const hypothesisSupported = stats
     ? (stats.convergenceIsSignificant &&
       stats.convergenceControlMean !== null &&
@@ -190,8 +187,8 @@ export default function DashboardPage() {
       stats.convergenceExperimentalMean < stats.convergenceControlMean)
       ? true
       : (stats.controlConvergedCount >= 2 && stats.experimentalConvergedCount >= 2)
-        ? false  // We have enough data but it's not significant
-        : null   // Not enough data yet
+        ? false
+        : null
     : null;
 
   // Dynamically generate key findings from actual data
@@ -254,36 +251,82 @@ export default function DashboardPage() {
       ? 'The static mutation rate appears sufficient for this environment. Further investigation with different mutation scaling functions or more complex game environments may be warranted.'
       : 'If supported, this research could provide a computationally efficient method for training agents in competitive environments.';
 
+  // Hero metric values
+  const totalExperiments = (stats?.controlExperimentCount ?? 0) + (stats?.experimentalExperimentCount ?? 0);
+  const totalConverged = (stats?.controlConvergedCount ?? 0) + (stats?.experimentalConvergedCount ?? 0);
+  const convergenceRate = totalExperiments > 0 ? Math.round((totalConverged / totalExperiments) * 100) : 0;
+  const powerLabel = stats?.statisticalPowerLevel
+    ? { insufficient: 'Low', minimum: 'Minimum', recommended: 'Good', robust: 'Robust' }[stats.statisticalPowerLevel]
+    : '—';
+
   return (
-    <div className="container mx-auto py-8 px-4 space-y-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">
-            EvoNash Scientific Dashboard
-          </h1>
-          <p className="text-muted-foreground mt-2 text-lg">
-            Investigating Adaptive Mutation Rates in Genetic Neural Networks
-          </p>
+    <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+      {/* ── HERO BANNER ── */}
+      <div className="hero-banner px-8 py-8 animate-fade-in">
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-6">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/15 backdrop-blur-sm rounded-full text-white/90 text-xs font-medium mb-3">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              CWSF 2026 Candidate
+            </div>
+            <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
+              EvoNash Scientific Dashboard
+            </h1>
+            <p className="text-white/70 mt-1.5 text-sm max-w-xl">
+              Investigating Adaptive Mutation Rates in Genetic Neural Networks
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {hypothesisSupported !== null && (
+              <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium backdrop-blur-sm ${hypothesisSupported
+                  ? 'bg-green-500/20 text-green-100 border border-green-400/30'
+                  : 'bg-red-500/20 text-red-100 border border-red-400/30'
+                }`}>
+                <span>{hypothesisSupported ? '✓' : '✗'}</span>
+                {hypothesisSupported ? 'Hypothesis Supported' : 'Hypothesis Not Supported'}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex gap-2 items-center">
-          <Badge variant="outline" className="text-sm py-1 h-fit">
-            CWSF 2026 Candidate
-          </Badge>
-          <VerificationCard />
+
+        {/* Metrics bar */}
+        <div className="relative z-10 metrics-bar">
+          <div className="metric-item">
+            <div className="metric-value">{loading ? '—' : totalExperiments}</div>
+            <div className="metric-label">Experiments</div>
+          </div>
+          <div className="metric-item">
+            <div className="metric-value">{loading ? '—' : `${convergenceRate}%`}</div>
+            <div className="metric-label">Convergence Rate</div>
+          </div>
+          <div className="metric-item">
+            <div className="metric-value">{loading ? '—' : (stats?.convergenceImprovement !== null ? `${stats?.convergenceImprovement?.toFixed(1)}%` : '—')}</div>
+            <div className="metric-label">Speed Improvement</div>
+          </div>
+          <div className="metric-item">
+            <div className="metric-value">{loading ? '—' : powerLabel}</div>
+            <div className="metric-label">Statistical Power</div>
+          </div>
+          <div className="metric-item">
+            <div className="metric-value">{loading ? '—' : (stats?.convergencePValue !== null ? (stats.convergencePValue < 0.0001 ? '<.0001' : `p=${stats.convergencePValue.toFixed(3)}`) : '—')}</div>
+            <div className="metric-label">Significance</div>
+          </div>
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto md:h-10">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="methodology">Methodology</TabsTrigger>
-          <TabsTrigger value="results">Results & Analysis</TabsTrigger>
-          <TabsTrigger value="data">Raw Data</TabsTrigger>
-          <TabsTrigger value="conclusion">Conclusion</TabsTrigger>
+      {/* ── TAB NAVIGATION ── */}
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList className="sci-tabs">
+          <TabsTrigger value="overview" className="sci-tab">Overview</TabsTrigger>
+          <TabsTrigger value="methodology" className="sci-tab">Methodology</TabsTrigger>
+          <TabsTrigger value="results" className="sci-tab">Results & Analysis</TabsTrigger>
+          <TabsTrigger value="data" className="sci-tab">Raw Data</TabsTrigger>
+          <TabsTrigger value="conclusion" className="sci-tab">Conclusion</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* ── OVERVIEW TAB ── */}
+        <TabsContent value="overview" className="space-y-6 animate-fade-in">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <ScientificAbstract
               title="EvoNash: Accelerating Convergence to Nash Equilibrium"
               subtitle="Investigating Adaptive Mutation Rates in Genetic Neural Networks"
@@ -316,27 +359,37 @@ export default function DashboardPage() {
           />
         </TabsContent>
 
-        <TabsContent value="methodology" className="space-y-6">
+        {/* ── METHODOLOGY TAB ── */}
+        <TabsContent value="methodology" className="space-y-6 animate-fade-in">
           <MethodologyTimeline
             steps={methodologyData.steps}
             materialsAndApparatus={methodologyData.materialsAndApparatus}
           />
+          {/* System Verification & Calibration – scientific integrity checks */}
+          <VerificationCard />
         </TabsContent>
 
-        <TabsContent value="results" className="space-y-6">
+        {/* ── RESULTS & ANALYSIS TAB ── */}
+        <TabsContent value="results" className="space-y-6 animate-fade-in">
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <div className="text-center">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-4"></div>
-                <p className="text-gray-600 dark:text-gray-400">Loading results data...</p>
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center space-y-3">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-indigo-200 border-t-indigo-600" />
+                <p className="text-sm text-gray-500 dark:text-gray-400">Loading results data…</p>
               </div>
             </div>
           ) : error ? (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 text-center">
-              <p className="text-red-600 dark:text-red-400">Failed to load dashboard data: {error}</p>
+            <div className="sci-card p-8 text-center border-red-200 dark:border-red-800">
+              <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <p className="text-red-600 dark:text-red-400 font-medium mb-1">Failed to load dashboard data</p>
+              <p className="text-sm text-red-500 dark:text-red-400/70 mb-4">{error}</p>
               <button
                 onClick={() => window.location.reload()}
-                className="mt-3 text-sm text-red-600 dark:text-red-400 hover:underline"
+                className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
               >
                 Retry
               </button>
@@ -445,12 +498,13 @@ export default function DashboardPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="data" className="space-y-6">
+        {/* ── RAW DATA TAB ── */}
+        <TabsContent value="data" className="space-y-6 animate-fade-in">
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <div className="text-center">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-4"></div>
-                <p className="text-gray-600 dark:text-gray-400">Loading experiment data...</p>
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center space-y-3">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-indigo-200 border-t-indigo-600" />
+                <p className="text-sm text-gray-500 dark:text-gray-400">Loading experiment data…</p>
               </div>
             </div>
           ) : (
@@ -463,7 +517,8 @@ export default function DashboardPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="conclusion" className="space-y-6">
+        {/* ── CONCLUSION TAB ── */}
+        <TabsContent value="conclusion" className="space-y-6 animate-fade-in">
           <ConclusionCard
             summary={conclusionSummary}
             hypothesisSupported={hypothesisSupported}
