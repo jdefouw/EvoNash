@@ -21,9 +21,102 @@ import {
 } from "@/components/dashboard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Generation, Experiment } from "@/types/protocol";
+
+// Match the DashboardData interface from the API
+interface DashboardData {
+  controlExperiments: any[]
+  experimentalExperiments: any[]
+  controlGenerations: any[]
+  experimentalGenerations: any[]
+  statistics: {
+    controlConvergenceGen: number | null
+    experimentalConvergenceGen: number | null
+    convergenceImprovement: number | null
+    controlFinalFitness: number | null
+    experimentalFinalFitness: number | null
+    controlPeakFitness: number | null
+    experimentalPeakFitness: number | null
+    convergencePValue: number | null
+    convergenceTStatistic: number | null
+    convergenceIsSignificant: boolean
+    convergenceControlMean: number | null
+    convergenceExperimentalMean: number | null
+    convergenceCohensD: number | null
+    convergenceConfidenceInterval: { lower: number; upper: number } | null
+    convergenceDegreesOfFreedom: number | null
+    convergenceControlStd: number | null
+    convergenceExperimentalStd: number | null
+    convergenceMeanDifference: number | null
+    pValue: number | null
+    tStatistic: number | null
+    isSignificant: boolean
+    degreesOfFreedom: number | null
+    cohensD: number | null
+    confidenceInterval: { lower: number; upper: number } | null
+    controlMean: number | null
+    experimentalMean: number | null
+    controlStd: number | null
+    experimentalStd: number | null
+    meanDifference: number | null
+    totalGenerationsControl: number
+    totalGenerationsExperimental: number
+    controlExperimentCount: number
+    experimentalExperimentCount: number
+    controlAvgGenerations: number
+    experimentalAvgGenerations: number
+    statisticalPowerLevel: 'insufficient' | 'minimum' | 'recommended' | 'robust'
+    controlConvergedCount: number
+    experimentalConvergedCount: number
+  }
+  assumptionChecks?: any
+  nonParametricTest?: any
+  effectSizes?: {
+    hedgesG: any
+    cles: any
+  }
+  powerAnalysis?: {
+    achievedPower: any
+    requiredFor80: any
+    requiredFor90: any
+    requiredFor95: any
+  }
+  bootstrapCI?: any
+  distributionData?: {
+    control: any
+    experimental: any
+  }
+}
 
 export default function DashboardPage() {
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch dashboard data from API
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch('/api/dashboard');
+        if (!res.ok) {
+          throw new Error(`Failed to fetch dashboard data: ${res.status}`);
+        }
+        const data = await res.json();
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        setDashboardData(data);
+        setError(null);
+      } catch (err) {
+        console.error('Dashboard fetch error:', err);
+        setError(err instanceof Error ? err.message : 'Unknown error');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
   // Data for VariablesTable
   const variablesData = {
     independent: [
@@ -80,11 +173,86 @@ export default function DashboardPage() {
     }
   };
 
-  // Experiment Data (Placeholder until DB connection is live in component)
-  const controlExperiments: Experiment[] = [];
-  const experimentalExperiments: Experiment[] = [];
-  const controlGenerations: Generation[] = [];
-  const experimentalGenerations: Generation[] = [];
+  // Extract values from API data (with safe defaults)
+  const stats = dashboardData?.statistics;
+  const controlExperiments = dashboardData?.controlExperiments ?? [];
+  const experimentalExperiments = dashboardData?.experimentalExperiments ?? [];
+  const controlGenerations = dashboardData?.controlGenerations ?? [];
+  const experimentalGenerations = dashboardData?.experimentalGenerations ?? [];
+
+  // Dynamically compute hypothesis supported from actual results
+  // Hypothesis: Adaptive mutation converges faster (fewer generations)
+  // Supported if: convergence is statistically significant AND experimental mean is lower (faster)
+  const hypothesisSupported = stats
+    ? (stats.convergenceIsSignificant &&
+      stats.convergenceControlMean !== null &&
+      stats.convergenceExperimentalMean !== null &&
+      stats.convergenceExperimentalMean < stats.convergenceControlMean)
+      ? true
+      : (stats.controlConvergedCount >= 2 && stats.experimentalConvergedCount >= 2)
+        ? false  // We have enough data but it's not significant
+        : null   // Not enough data yet
+    : null;
+
+  // Dynamically generate key findings from actual data
+  const keyFindings: string[] = [];
+  if (stats) {
+    const controlCount = stats.controlExperimentCount;
+    const expCount = stats.experimentalExperimentCount;
+    if (controlCount > 0 || expCount > 0) {
+      keyFindings.push(
+        `${controlCount} Control and ${expCount} Experimental experiments completed (${stats.controlConvergedCount} and ${stats.experimentalConvergedCount} converged to Nash Equilibrium, respectively).`
+      );
+    }
+    if (stats.convergenceControlMean !== null && stats.convergenceExperimentalMean !== null) {
+      keyFindings.push(
+        `Mean convergence: Control = ${stats.convergenceControlMean.toFixed(1)} generations, Experimental = ${stats.convergenceExperimentalMean.toFixed(1)} generations.`
+      );
+    }
+    if (stats.convergenceImprovement !== null) {
+      const faster = stats.convergenceImprovement > 0;
+      keyFindings.push(
+        `Adaptive mutation is ${faster ? '' : 'not '}faster: ${Math.abs(stats.convergenceImprovement).toFixed(1)}% ${faster ? 'improvement' : 'slower'} in convergence speed.`
+      );
+    }
+    if (stats.convergencePValue !== null) {
+      const pStr = stats.convergencePValue < 0.0001
+        ? '< 0.0001'
+        : stats.convergencePValue.toFixed(4);
+      keyFindings.push(
+        `Welch's t-test: p = ${pStr} (${stats.convergenceIsSignificant ? 'statistically significant at α = 0.05' : 'not statistically significant'}).`
+      );
+    }
+    if (stats.convergenceCohensD !== null) {
+      const absD = Math.abs(stats.convergenceCohensD);
+      const sizeLabel = absD >= 0.8 ? 'large' : absD >= 0.5 ? 'medium' : absD >= 0.2 ? 'small' : 'negligible';
+      keyFindings.push(
+        `Effect size: Cohen's d = ${stats.convergenceCohensD.toFixed(3)} (${sizeLabel}).`
+      );
+    }
+    if (dashboardData?.powerAnalysis?.achievedPower?.power !== null && dashboardData?.powerAnalysis?.achievedPower?.power !== undefined) {
+      const powerPct = (dashboardData.powerAnalysis.achievedPower.power * 100).toFixed(1);
+      keyFindings.push(
+        `Statistical power: ${powerPct}% (${dashboardData.powerAnalysis.achievedPower.isAdequate ? 'adequate' : 'below 80% threshold'}).`
+      );
+    }
+  }
+
+  // Dynamic summary for conclusion
+  const conclusionSummary = stats
+    ? hypothesisSupported === true
+      ? `The experimental data supports the hypothesis. Adaptive mutation significantly accelerated convergence to Nash Equilibrium compared to static mutation (p = ${stats.convergencePValue !== null ? (stats.convergencePValue < 0.0001 ? '< 0.0001' : stats.convergencePValue.toFixed(4)) : 'N/A'}), with a ${Math.abs(stats.convergenceImprovement ?? 0).toFixed(1)}% improvement in convergence speed.`
+      : hypothesisSupported === false
+        ? `The experimental data does not support the hypothesis. While both groups converged to Nash Equilibrium, the difference in convergence speed between adaptive and static mutation was not statistically significant (p = ${stats.convergencePValue !== null ? stats.convergencePValue.toFixed(4) : 'N/A'}).`
+        : `The experiment is still in progress. ${stats.controlExperimentCount + stats.experimentalExperimentCount} experiments have been completed so far (${stats.controlConvergedCount + stats.experimentalConvergedCount} converged). More data is needed for a definitive conclusion.`
+    : 'Waiting for experiment data...';
+
+  // Dynamic implications
+  const implications = hypothesisSupported === true
+    ? 'The adaptive mutation strategy could provide a computationally efficient method for training agents in competitive environments, reducing the number of generations needed to reach strategic equilibrium.'
+    : hypothesisSupported === false
+      ? 'The static mutation rate appears sufficient for this environment. Further investigation with different mutation scaling functions or more complex game environments may be warranted.'
+      : 'If supported, this research could provide a computationally efficient method for training agents in competitive environments.';
 
   return (
     <div className="container mx-auto py-8 px-4 space-y-8">
@@ -137,7 +305,7 @@ export default function DashboardPage() {
                 ifStatement="the mutation rate of a neural network is dynamically scaled inversely to its fitness score,"
                 thenStatement="the population will reach a state of Policy Entropy stability (Nash Equilibrium) in fewer generations than a control group with a static mutation rate,"
                 becauseStatement="this mechanism mimics biological 'stress-induced mutagenesis,' allowing poor-performing agents to explore the solution space rapidly while high-performing agents preserve their successful traits, balancing exploration and exploitation more efficiently."
-                isSupported={null}
+                isSupported={hypothesisSupported}
               />
             </div>
           </div>
@@ -156,102 +324,153 @@ export default function DashboardPage() {
         </TabsContent>
 
         <TabsContent value="results" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="space-y-6">
-              <SampleSizeGuidance
-                controlExperimentCount={0}
-                experimentalExperimentCount={0}
-                controlAvgGenerations={0}
-                experimentalAvgGenerations={0}
-                statisticalPowerLevel="insufficient"
-              />
-              <StatsSummary
-                controlConvergenceGen={null}
-                experimentalConvergenceGen={null}
-                convergenceImprovement={null}
-                controlFinalFitness={null}
-                experimentalFinalFitness={null}
-                controlPeakFitness={null}
-                experimentalPeakFitness={null}
-                totalGenerationsControl={0}
-                totalGenerationsExperimental={0}
-                convergencePValue={null}
-                convergenceIsSignificant={false}
-              />
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-4"></div>
+                <p className="text-gray-600 dark:text-gray-400">Loading results data...</p>
+              </div>
             </div>
-            <div className="space-y-6">
-              <ComparisonChart
-                controlGenerations={controlGenerations}
-                experimentalGenerations={experimentalGenerations}
-                metric="fitness"
-              />
-              <ComparisonChart
-                controlGenerations={controlGenerations}
-                experimentalGenerations={experimentalGenerations}
-                metric="entropy"
-              />
+          ) : error ? (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 text-center">
+              <p className="text-red-600 dark:text-red-400">Failed to load dashboard data: {error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-3 text-sm text-red-600 dark:text-red-400 hover:underline"
+              >
+                Retry
+              </button>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-6">
+                  <SampleSizeGuidance
+                    controlExperimentCount={stats?.controlExperimentCount ?? 0}
+                    experimentalExperimentCount={stats?.experimentalExperimentCount ?? 0}
+                    controlAvgGenerations={stats?.controlAvgGenerations ?? 0}
+                    experimentalAvgGenerations={stats?.experimentalAvgGenerations ?? 0}
+                    statisticalPowerLevel={stats?.statisticalPowerLevel ?? 'insufficient'}
+                    achievedPower={dashboardData?.powerAnalysis?.achievedPower?.power ?? null}
+                  />
+                  <StatsSummary
+                    controlConvergenceGen={stats?.controlConvergenceGen ?? null}
+                    experimentalConvergenceGen={stats?.experimentalConvergenceGen ?? null}
+                    convergenceImprovement={stats?.convergenceImprovement ?? null}
+                    controlFinalFitness={stats?.controlFinalFitness ?? null}
+                    experimentalFinalFitness={stats?.experimentalFinalFitness ?? null}
+                    controlPeakFitness={stats?.controlPeakFitness ?? null}
+                    experimentalPeakFitness={stats?.experimentalPeakFitness ?? null}
+                    totalGenerationsControl={stats?.totalGenerationsControl ?? 0}
+                    totalGenerationsExperimental={stats?.totalGenerationsExperimental ?? 0}
+                    convergencePValue={stats?.convergencePValue ?? null}
+                    convergenceIsSignificant={stats?.convergenceIsSignificant ?? false}
+                    convergenceTStatistic={stats?.convergenceTStatistic ?? null}
+                    convergenceDegreesOfFreedom={stats?.convergenceDegreesOfFreedom ?? null}
+                    convergenceCohensD={stats?.convergenceCohensD ?? null}
+                    convergenceConfidenceInterval={stats?.convergenceConfidenceInterval ?? null}
+                    convergenceControlMean={stats?.convergenceControlMean ?? null}
+                    convergenceExperimentalMean={stats?.convergenceExperimentalMean ?? null}
+                    convergenceControlStd={stats?.convergenceControlStd ?? null}
+                    convergenceExperimentalStd={stats?.convergenceExperimentalStd ?? null}
+                    convergenceMeanDifference={stats?.convergenceMeanDifference ?? null}
+                    pValue={stats?.pValue ?? null}
+                    isSignificant={stats?.isSignificant ?? false}
+                    tStatistic={stats?.tStatistic ?? null}
+                    degreesOfFreedom={stats?.degreesOfFreedom ?? null}
+                    cohensD={stats?.cohensD ?? null}
+                    confidenceInterval={stats?.confidenceInterval ?? null}
+                    controlMean={stats?.controlMean ?? null}
+                    experimentalMean={stats?.experimentalMean ?? null}
+                    controlStd={stats?.controlStd ?? null}
+                    experimentalStd={stats?.experimentalStd ?? null}
+                    meanDifference={stats?.meanDifference ?? null}
+                  />
+                </div>
+                <div className="space-y-6">
+                  <ComparisonChart
+                    controlGenerations={controlGenerations}
+                    experimentalGenerations={experimentalGenerations}
+                    metric="fitness"
+                  />
+                  <ComparisonChart
+                    controlGenerations={controlGenerations}
+                    experimentalGenerations={experimentalGenerations}
+                    metric="entropy"
+                  />
+                </div>
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <BoxPlotChart
-              title="Convergence Speed Distribution"
-              controlData={null}
-              experimentalData={null}
-            />
-            <QQPlot
-              controlValues={[]}
-              experimentalValues={[]}
-            />
-          </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <BoxPlotChart
+                  title="Convergence Speed Distribution"
+                  controlData={dashboardData?.distributionData?.control ?? null}
+                  experimentalData={dashboardData?.distributionData?.experimental ?? null}
+                />
+                <QQPlot
+                  controlValues={dashboardData?.distributionData?.control?.values ?? []}
+                  experimentalValues={dashboardData?.distributionData?.experimental?.values ?? []}
+                />
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <AssumptionChecksCard
-              normalityControl={null}
-              normalityExperimental={null}
-              varianceEquality={null}
-              outlierControl={null}
-              outlierExperimental={null}
-              bothNormal={false}
-              anyOutliers={false}
-              recommendation="non_parametric"
-              recommendationText="Insufficient data"
-            />
-            <PowerAnalysisCard
-              achievedPower={null}
-              requiredFor80={null}
-              requiredFor90={null}
-              requiredFor95={null}
-              currentControlN={0}
-              currentExperimentalN={0}
-              effectSize={null}
-            />
-          </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <AssumptionChecksCard
+                  normalityControl={dashboardData?.assumptionChecks?.normalityControl ?? null}
+                  normalityExperimental={dashboardData?.assumptionChecks?.normalityExperimental ?? null}
+                  varianceEquality={dashboardData?.assumptionChecks?.varianceEquality ?? null}
+                  outlierControl={dashboardData?.assumptionChecks?.outlierControl ?? null}
+                  outlierExperimental={dashboardData?.assumptionChecks?.outlierExperimental ?? null}
+                  bothNormal={dashboardData?.assumptionChecks?.bothNormal ?? false}
+                  anyOutliers={dashboardData?.assumptionChecks?.anyOutliers ?? false}
+                  recommendation={dashboardData?.assumptionChecks?.recommendation ?? 'non_parametric'}
+                  recommendationText={dashboardData?.assumptionChecks?.recommendationText ?? 'Insufficient data'}
+                />
+                <PowerAnalysisCard
+                  achievedPower={dashboardData?.powerAnalysis?.achievedPower ?? null}
+                  requiredFor80={dashboardData?.powerAnalysis?.requiredFor80 ?? null}
+                  requiredFor90={dashboardData?.powerAnalysis?.requiredFor90 ?? null}
+                  requiredFor95={dashboardData?.powerAnalysis?.requiredFor95 ?? null}
+                  currentControlN={stats?.controlConvergedCount ?? 0}
+                  currentExperimentalN={stats?.experimentalConvergedCount ?? 0}
+                  effectSize={dashboardData?.effectSizes?.hedgesG?.hedgesG ?? stats?.convergenceCohensD ?? null}
+                />
+              </div>
 
-          <EffectSizeCard
-            hedgesG={null}
-            cles={null}
-            cohensD={null}
-          />
+              <EffectSizeCard
+                hedgesG={dashboardData?.effectSizes?.hedgesG ?? null}
+                cles={dashboardData?.effectSizes?.cles ?? null}
+                cohensD={dashboardData?.effectSizes?.hedgesG?.cohensD ?? stats?.convergenceCohensD ?? null}
+              />
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="data" className="space-y-6">
-          <ExperimentDataTable
-            controlExperiments={controlExperiments}
-            experimentalExperiments={experimentalExperiments}
-            controlGenerations={controlGenerations}
-            experimentalGenerations={experimentalGenerations}
-          />
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-4"></div>
+                <p className="text-gray-600 dark:text-gray-400">Loading experiment data...</p>
+              </div>
+            </div>
+          ) : (
+            <ExperimentDataTable
+              controlExperiments={controlExperiments}
+              experimentalExperiments={experimentalExperiments}
+              controlGenerations={controlGenerations}
+              experimentalGenerations={experimentalGenerations}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="conclusion" className="space-y-6">
           <ConclusionCard
-            summary="The experiment is currently in progress. Preliminary data suggests that..."
-            hypothesisSupported={null}
-            keyFindings={[]}
-            implications="If supported, this research could provide a computationally efficient method for training agents in competitive environments."
-            sourcesOfError={["Simulation randomization", "Network initialization variance"]}
-            futureWork="Testing on more complex games; analyzing different mutation scaling functions."
+            summary={conclusionSummary}
+            hypothesisSupported={hypothesisSupported}
+            keyFindings={keyFindings.length > 0 ? keyFindings : ['Experiment is in progress. No findings available yet.']}
+            implications={implications}
+            sourcesOfError={["Simulation randomization", "Network initialization variance", "Environmental noise across runs"]}
+            futureWork="Testing on more complex games; analyzing different mutation scaling functions; investigating the effect of population size on convergence."
           />
         </TabsContent>
       </Tabs>
