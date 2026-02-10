@@ -1534,7 +1534,7 @@ export async function GET() {
         .filter((g: Generation) => g.entropy_variance != null)
         .map((g: Generation) => ({
           gen: g.generation_number,
-          variance: g.entropy_variance as number
+          variance: Number(g.entropy_variance)  // Ensure numeric (pg can return strings)
         }))
 
       if (varianceData.length === 0) return null
@@ -1645,32 +1645,51 @@ export async function GET() {
     // =========================================================================
 
     // Get convergence generation for each experiment
-    const getExperimentConvergenceGens = (experiments: Experiment[], generations: Generation[]): number[] => {
-      return experiments.map(exp => {
+    const getExperimentConvergenceGens = (experiments: Experiment[], generations: Generation[], label: string): number[] => {
+      console.log(`[CONVERGENCE DEBUG] ${label}: ${experiments.length} experiments, ${generations.length} total generations`)
+
+      // Log a sample generation to see actual data types
+      if (generations.length > 0) {
+        const sample = generations[0]
+        console.log(`[CONVERGENCE DEBUG] ${label} sample gen: id=${sample.id}, exp_id=${sample.experiment_id} (type: ${typeof sample.experiment_id}), gen_num=${sample.generation_number}, entropy_variance=${sample.entropy_variance} (type: ${typeof sample.entropy_variance})`)
+      }
+      if (experiments.length > 0) {
+        console.log(`[CONVERGENCE DEBUG] ${label} sample exp: id=${experiments[0].id} (type: ${typeof experiments[0].id})`)
+      }
+
+      const results = experiments.map(exp => {
         // Get all generations for this experiment, sorted
         const expGens = generations
           .filter(g => g.experiment_id === exp.id)
           .sort((a, b) => a.generation_number - b.generation_number)
 
-        if (expGens.length < 10) return null
+        if (expGens.length < 10) {
+          console.log(`[CONVERGENCE DEBUG] ${label} exp ${exp.id}: SKIP - only ${expGens.length} gens (need >= 10)`)
+          return null
+        }
 
         // Apply the same convergence detection logic as findConvergenceGeneration
         const varianceData = expGens.slice(5)
           .filter(g => g.entropy_variance != null)
           .map(g => ({
             gen: g.generation_number,
-            variance: g.entropy_variance as number
+            variance: Number(g.entropy_variance)  // Ensure numeric
           }))
 
-        if (varianceData.length === 0) return null
+        if (varianceData.length === 0) {
+          console.log(`[CONVERGENCE DEBUG] ${label} exp ${exp.id}: SKIP - no entropy_variance data after slice(5). Total gens: ${expGens.length}, with ev != null: ${expGens.filter(g => g.entropy_variance != null).length}`)
+          return null
+        }
 
         const peakVariance = Math.max(...varianceData.map(d => d.variance))
         const peakIndex = varianceData.findIndex(d => d.variance === peakVariance)
 
-        if (peakVariance <= 0.0001) return null
+        if (peakVariance <= 0.0001) {
+          console.log(`[CONVERGENCE DEBUG] ${label} exp ${exp.id}: SKIP - peakVariance=${peakVariance} too low (<= 0.0001). varianceData sample: ${JSON.stringify(varianceData.slice(0, 3))}`)
+          return null
+        }
 
         // Use the fixed threshold for convergence detection
-        // This matches the documented methodology: σ < 0.01 after initial divergence
         const effectiveThreshold = CONVERGENCE_THRESHOLD
 
         const afterPeak = varianceData.slice(peakIndex)
@@ -1679,17 +1698,22 @@ export async function GET() {
         for (let i = 0; i <= afterPeak.length - STABILITY_WINDOW; i++) {
           const window = afterPeak.slice(i, i + STABILITY_WINDOW)
           if (window.every(d => d.variance < effectiveThreshold)) {
+            console.log(`[CONVERGENCE DEBUG] ${label} exp ${exp.id}: CONVERGED at gen ${window[0].gen}`)
             return window[0].gen
           }
         }
 
+        console.log(`[CONVERGENCE DEBUG] ${label} exp ${exp.id}: NOT CONVERGED - afterPeak.length=${afterPeak.length}, need ${STABILITY_WINDOW} stable gens below ${effectiveThreshold}. Last 5 variances: ${afterPeak.slice(-5).map(d => d.variance.toFixed(6)).join(', ')}`)
         return null
       }).filter((gen): gen is number => gen !== null)
+
+      console.log(`[CONVERGENCE DEBUG] ${label}: ${results.length}/${experiments.length} experiments converged. Values: [${results.join(', ')}]`)
+      return results
     }
 
     // Use ALL completed experiments for convergence statistics (not just chart subset)
-    const controlConvergenceGens = getExperimentConvergenceGens(allControlExperiments, allControlGenerations)
-    const experimentalConvergenceGens = getExperimentConvergenceGens(allExperimentalExperiments, allExperimentalGenerations)
+    const controlConvergenceGens = getExperimentConvergenceGens(allControlExperiments, allControlGenerations, 'CONTROL')
+    const experimentalConvergenceGens = getExperimentConvergenceGens(allExperimentalExperiments, allExperimentalGenerations, 'EXPERIMENTAL')
 
     // T-test on convergence generations (PRIMARY hypothesis test)
     let convergenceTTestResult: TTestResult | null = null
