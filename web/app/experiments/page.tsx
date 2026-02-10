@@ -457,19 +457,13 @@ export default function ExperimentsPage() {
                   className="experiment-card animate-fade-in"
                   style={{ animationDelay: `${idx * 30}ms` }}
                 >
-                  <div className="flex justify-between items-start">
+                  <div className="flex justify-between items-center">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-2.5">
-                        <div className={`w-2.5 h-2.5 rounded-full ${getStatusDot(exp.status)} ${exp.status === 'RUNNING' ? 'animate-pulse' : ''}`} />
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${getStatusDot(exp.status)} ${exp.status === 'RUNNING' ? 'animate-pulse' : ''}`} />
                         <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
                           {exp.experiment_name}
                         </h2>
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${getGroupBadge(exp.experiment_group)}`}>
-                          {exp.experiment_group}
-                        </span>
-                        <span className={`status-badge ${getStatusColor(exp.status)}`}>
-                          {exp.status}
-                        </span>
                       </div>
                       <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500 dark:text-gray-400 pl-5">
                         <span>
@@ -487,15 +481,23 @@ export default function ExperimentsPage() {
                         <span>{new Date(exp.created_at).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    <button
-                      onClick={(e) => handleDelete(e, exp.id, exp.experiment_name, exp.status)}
-                      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex-shrink-0 ml-4"
-                      title="Delete experiment"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${getGroupBadge(exp.experiment_group)}`}>
+                        {exp.experiment_group}
+                      </span>
+                      <span className={`status-badge ${getStatusColor(exp.status)}`}>
+                        {exp.status}
+                      </span>
+                      <button
+                        onClick={(e) => handleDelete(e, exp.id, exp.experiment_name, exp.status)}
+                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                        title="Delete experiment"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </Link>
               ))}
