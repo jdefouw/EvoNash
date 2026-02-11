@@ -75,21 +75,21 @@ export default function PowerAnalysisCard({
             {powerPct !== null ? `${powerPct.toFixed(1)}%` : 'N/A'}
           </span>
         </div>
-        
+
         {/* Progress bar */}
         <div className="relative h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
           {/* Threshold markers */}
           <div className="absolute top-0 bottom-0 left-[40%] w-px bg-gray-400 dark:bg-gray-500 z-10" />
           <div className="absolute top-0 bottom-0 left-[60%] w-px bg-gray-400 dark:bg-gray-500 z-10" />
           <div className="absolute top-0 bottom-0 left-[80%] w-px bg-green-600 z-10" />
-          
+
           {/* Fill */}
-          <div 
+          <div
             className={`h-full transition-all duration-500 ${getPowerColor(power)}`}
             style={{ width: `${Math.min(powerPct ?? 0, 100)}%` }}
           />
         </div>
-        
+
         {/* Scale labels */}
         <div className="flex justify-between mt-1 text-[10px] text-gray-500">
           <span>0%</span>
@@ -102,23 +102,20 @@ export default function PowerAnalysisCard({
 
       {/* Status Badge */}
       {achievedPower && (
-        <div className={`p-3 rounded-lg mb-4 ${
-          achievedPower.isAdequate 
-            ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
-            : 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800'
-        }`}>
-          <div className={`text-sm font-medium ${
-            achievedPower.isAdequate 
-              ? 'text-green-700 dark:text-green-400'
-              : 'text-yellow-700 dark:text-yellow-400'
+        <div className={`p-3 rounded-lg mb-4 ${achievedPower.isAdequate
+          ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+          : 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800'
           }`}>
+          <div className={`text-sm font-medium ${achievedPower.isAdequate
+            ? 'text-green-700 dark:text-green-400'
+            : 'text-yellow-700 dark:text-yellow-400'
+            }`}>
             {achievedPower.isAdequate ? '✓ ' : '⚠ '}{achievedPower.interpretation}
           </div>
-          <div className={`text-xs mt-1 ${
-            achievedPower.isAdequate 
-              ? 'text-green-600 dark:text-green-500'
-              : 'text-yellow-600 dark:text-yellow-500'
-          }`}>
+          <div className={`text-xs mt-1 ${achievedPower.isAdequate
+            ? 'text-green-600 dark:text-green-500'
+            : 'text-yellow-600 dark:text-yellow-500'
+            }`}>
             {achievedPower.recommendation}
           </div>
         </div>
@@ -137,9 +134,20 @@ export default function PowerAnalysisCard({
             <div className="text-lg font-bold text-gray-900 dark:text-white">n = {currentExperimentalN}</div>
           </div>
         </div>
+
+        {/* Effect Size Context */}
         {effectSize !== null && (
-          <div className="text-xs text-gray-500 mt-2">
-            Based on effect size d = {effectSize.toFixed(3)}
+          <div className="mt-3 space-y-2">
+            <div className="text-xs text-gray-500">
+              Observed effect size: <strong>d = {effectSize.toFixed(3)}</strong>
+            </div>
+
+            {/* Warning if we are using a fallback target for planning because observed is too small */}
+            {requiredFor80?.effectSizeUsed && Math.abs(effectSize) < 0.1 && requiredFor80.effectSizeUsed > Math.abs(effectSize) && (
+              <div className="p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-xs text-amber-800 dark:text-amber-200">
+                <strong>Note:</strong> Observed effect is negligible. Sample size targets below are for detecting a <strong>Medium Effect (d={requiredFor80.effectSizeUsed})</strong>.
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -152,47 +160,49 @@ export default function PowerAnalysisCard({
           <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900/50 rounded">
             <span className="text-xs text-gray-600 dark:text-gray-400">For 80% power:</span>
             <span className="text-sm font-medium text-gray-900 dark:text-white">
-              {requiredFor80?.nPerGroup != null 
+              {requiredFor80?.nPerGroup != null
                 ? `n = ${requiredFor80?.nPerGroup} per group`
                 : 'Cannot calculate'}
             </span>
           </div>
-          
+
           {/* 90% Power */}
           <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900/50 rounded">
             <span className="text-xs text-gray-600 dark:text-gray-400">For 90% power:</span>
             <span className="text-sm font-medium text-gray-900 dark:text-white">
-              {requiredFor90?.nPerGroup != null 
+              {requiredFor90?.nPerGroup != null
                 ? `n = ${requiredFor90?.nPerGroup} per group`
                 : 'Cannot calculate'}
             </span>
           </div>
-          
+
           {/* 95% Power */}
           <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900/50 rounded">
             <span className="text-xs text-gray-600 dark:text-gray-400">For 95% power:</span>
             <span className="text-sm font-medium text-gray-900 dark:text-white">
-              {requiredFor95?.nPerGroup != null 
+              {requiredFor95?.nPerGroup != null
                 ? `n = ${requiredFor95?.nPerGroup} per group`
                 : 'Cannot calculate'}
             </span>
           </div>
         </div>
-        
+
         {/* Progress towards goal */}
         {requiredFor80?.nPerGroup != null && (
           <div className="mt-3">
             <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-              Progress to 80% power goal:
+              {Math.abs(effectSize ?? 0) < 0.1 && (requiredFor80?.effectSizeUsed ?? 0) > 0.1
+                ? `Progress to goal (for d=${requiredFor80?.effectSizeUsed}):`
+                : 'Progress to 80% power goal:'}
             </div>
             <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-              <div 
+              <div
                 className="h-full bg-blue-500 transition-all"
-                style={{ 
+                style={{
                   width: `${Math.min(
-                    (Math.min(currentControlN, currentExperimentalN) / (requiredFor80?.nPerGroup ?? 1)) * 100, 
+                    (Math.min(currentControlN, currentExperimentalN) / (requiredFor80?.nPerGroup ?? 1)) * 100,
                     100
-                  )}%` 
+                  )}%`
                 }}
               />
             </div>
