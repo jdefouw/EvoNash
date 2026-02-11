@@ -1654,13 +1654,31 @@ export async function GET() {
     // not just the subset used for chart visualization.
     // =========================================================================
 
-    // Get convergence generation for each individual experiment
-    const getExperimentConvergenceGens = (experiments: Experiment[], generations: Generation[]): number[] => {
+    // Optimized generation lookup using Map to avoid O(N*M) filtering
+    // Group generations by experiment_id
+    const groupGenerationsByExperiment = (gens: Generation[]) => {
+      const map = new Map<string, Generation[]>()
+      for (const gen of gens) {
+        const expId = String(gen.experiment_id)
+        if (!map.has(expId)) {
+          map.set(expId, [])
+        }
+        map.get(expId)!.push(gen)
+      }
+      return map
+    }
+
+    const controlGenerationsMap = groupGenerationsByExperiment(allControlGenerations)
+    const experimentalGenerationsMap = groupGenerationsByExperiment(allExperimentalGenerations)
+
+    // Get convergence generation for each individual experiment using Map
+    const getExperimentConvergenceGens = (experiments: Experiment[], genMap: Map<string, Generation[]>): number[] => {
       return experiments.map(exp => {
-        // Get all generations for this experiment, sorted
-        const expGens = generations
-          .filter(g => String(g.experiment_id) === String(exp.id))
-          .sort((a, b) => Number(a.generation_number) - Number(b.generation_number))
+        // Get all generations for this experiment from Map
+        const expGens = genMap.get(String(exp.id)) || []
+
+        // Sort by generation number
+        expGens.sort((a, b) => Number(a.generation_number) - Number(b.generation_number))
 
         if (expGens.length < 10) return null
 
@@ -1695,8 +1713,8 @@ export async function GET() {
     }
 
     // Use ALL completed experiments for convergence statistics (not just chart subset)
-    const controlConvergenceGens = getExperimentConvergenceGens(allControlExperiments, allControlGenerations)
-    const experimentalConvergenceGens = getExperimentConvergenceGens(allExperimentalExperiments, allExperimentalGenerations)
+    const controlConvergenceGens = getExperimentConvergenceGens(allControlExperiments, controlGenerationsMap)
+    const experimentalConvergenceGens = getExperimentConvergenceGens(allExperimentalExperiments, experimentalGenerationsMap)
 
     // T-test on convergence generations (PRIMARY hypothesis test)
     let convergenceTTestResult: TTestResult | null = null
@@ -1824,15 +1842,32 @@ export async function GET() {
         cles: clesResult
       }
 
-      const effectSizeForPower = hedgesGResult.hedgesG ?? convergenceCohensD
+      const exactEffectSize = hedgesGResult.hedgesG ?? convergenceCohensD ?? 0
+
+      // Calculate actual power based on observed effect size (can be small)
       const achievedPower = calculatePower(
         controlConvergenceGens.length,
         experimentalConvergenceGens.length,
-        effectSizeForPower
+        exactEffectSize
       )
-      const requiredFor80 = requiredSampleSize(effectSizeForPower, 0.80)
-      const requiredFor90 = requiredSampleSize(effectSizeForPower, 0.90)
-      const requiredFor95 = requiredSampleSize(effectSizeForPower, 0.95)
+
+      // For required sample sizes, use observed effect size IF it's meaningful.
+      // If observed effect is negligible (< 0.1), use a medium effect size (d=0.5) as fallback 
+      // so the user gets useful guidance instead of "Cannot calculate".
+      const isNegligible = Math.abs(exactEffectSize) < 0.1
+      const effectSizeForPlanning = isNegligible ? 0.5 : exactEffectSize
+
+      const requiredFor80 = requiredSampleSize(effectSizeForPlanning, 0.80)
+      const requiredFor90 = requiredSampleSize(effectSizeForPlanning, 0.90)
+      const requiredFor95 = requiredSampleSize(effectSizeForPlanning, 0.95)
+
+      // Add a note if we used fallback
+      if (isNegligible) {
+        const note = ` (Estimated for Medium Effect d=0.5, as observed d=${exactEffectSize.toFixed(3)} is negligible)`
+        if (requiredFor80.interpretation) requiredFor80.interpretation += note
+        if (requiredFor90.interpretation) requiredFor90.interpretation += note
+        if (requiredFor95.interpretation) requiredFor95.interpretation += note
+      }
 
       powerAnalysisResult = {
         achievedPower,
