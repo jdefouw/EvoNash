@@ -12,27 +12,24 @@ interface StatsSummaryProps {
   experimentalPeakFitness: number | null
   totalGenerationsControl: number
   totalGenerationsExperimental: number
-  // Primary: convergence-generation t-test (hypothesis test)
   convergencePValue: number | null           // Two-tailed
   convergencePValueOneTailed?: number | null  // One-tailed (directional)
   convergenceIsSignificant: boolean
   convergenceTStatistic?: number | null
   convergenceDegreesOfFreedom?: number | null
-  convergenceCohensD?: number | null         // Signed: negative = experimental faster
+  convergenceCohensD?: number | null
   convergenceConfidenceInterval?: { lower: number; upper: number } | null
   convergenceControlMean?: number | null
   convergenceExperimentalMean?: number | null
   convergenceControlStd?: number | null
   convergenceExperimentalStd?: number | null
   convergenceMeanDifference?: number | null
-  // Descriptive statistics
   convergenceControlMedian?: number | null
   convergenceExperimentalMedian?: number | null
   convergenceControlIQR?: { Q1: number; Q3: number } | null
   convergenceExperimentalIQR?: { Q1: number; Q3: number } | null
   controlConvergedCount?: number
   experimentalConvergedCount?: number
-  // Statistical power and sample size (from convergence analysis)
   controlExperimentCount?: number
   experimentalExperimentCount?: number
   statisticalPowerLevel?: StatisticalPowerLevel
@@ -70,7 +67,6 @@ export default function StatsSummary({
   experimentalExperimentCount = 0,
   statisticalPowerLevel = 'insufficient'
 }: StatsSummaryProps) {
-  // Effect size interpretation (Cohen's conventions) - use convergence for primary display
   const getEffectSizeLabel = (d: number | null): { label: string; color: string } => {
     if (d === null) return { label: 'N/A', color: 'text-gray-500' }
     const absD = Math.abs(d)
@@ -84,21 +80,20 @@ export default function StatsSummary({
   const convergedN = controlConvergedCount ?? controlExperimentCount
   const convergedM = experimentalConvergedCount ?? experimentalExperimentCount
 
-  // Show exact p-value: scientific notation when very small, fixed otherwise
+  // Primary p-value: use TWO-TAILED (more conservative, standard)
+  const primaryP = convergencePValue
+  const secondaryP = convergencePValueOneTailed
+
   const formatPValue = (p: number, fixedDecimals = 4) =>
     p < 0.0001 ? p.toExponential(2) : p.toFixed(fixedDecimals)
   const hasData = totalGenerationsControl > 0 || totalGenerationsExperimental > 0
 
   const getConfidenceLabel = (level: StatisticalPowerLevel) => {
     switch (level) {
-      case 'robust':
-        return { label: 'High Confidence', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-900/30' }
-      case 'recommended':
-        return { label: 'Moderate Confidence', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30' }
-      case 'minimum':
-        return { label: 'Limited Confidence', color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-100 dark:bg-yellow-900/30' }
-      case 'insufficient':
-        return { label: 'Insufficient Data', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-100 dark:bg-red-900/30' }
+      case 'robust': return { label: 'High Confidence', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20' }
+      case 'recommended': return { label: 'Moderate Confidence', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20' }
+      case 'minimum': return { label: 'Limited Confidence', color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-900/20' }
+      case 'insufficient': return { label: 'Insufficient Data', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20' }
     }
   }
 
@@ -136,22 +131,22 @@ export default function StatsSummary({
     }
 
     return (
-      <div className={`p-4 rounded-lg ${highlight ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' : 'bg-gray-50 dark:bg-gray-900/50'}`}>
-        <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
+      <div className={`p-3 rounded-lg ${highlight ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' : 'bg-gray-50 dark:bg-gray-900/50'}`}>
+        <div className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
           {label}
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <div className="text-xs text-blue-600 dark:text-blue-400 mb-1">Control</div>
-            <div className={`text-lg font-bold ${controlBetter ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-white'}`}>
-              {controlValue !== null ? `${controlValue}${unit}` : '-'}
+            <div className="text-[10px] text-blue-600 dark:text-blue-400 mb-0.5">Control</div>
+            <div className={`text-base font-bold ${controlBetter ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-white'}`}>
+              {controlValue !== null ? `${controlValue}${unit}` : '—'}
               {controlBetter && <span className="ml-1 text-xs">✓</span>}
             </div>
           </div>
           <div>
-            <div className="text-xs text-purple-600 dark:text-purple-400 mb-1">Experimental</div>
-            <div className={`text-lg font-bold ${experimentalBetter ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-white'}`}>
-              {experimentalValue !== null ? `${experimentalValue}${unit}` : '-'}
+            <div className="text-[10px] text-purple-600 dark:text-purple-400 mb-0.5">Experimental</div>
+            <div className={`text-base font-bold ${experimentalBetter ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-white'}`}>
+              {experimentalValue !== null ? `${experimentalValue}${unit}` : '—'}
               {experimentalBetter && <span className="ml-1 text-xs">✓</span>}
             </div>
           </div>
@@ -162,32 +157,29 @@ export default function StatsSummary({
 
   return (
     <section id="statistics" className="scroll-mt-20">
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-          Statistical Significance
-        </h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-          Comparison of key metrics between Control and Experimental groups
-        </p>
-        <p className="text-xs text-gray-600 dark:text-gray-400 mb-6">
-          Paired-seed design: each random seed generates a matched Control and Experimental run to
-          isolate the mutation strategy as the only independent variable. Convergence is inferred
-          from entropy variance stability (behavioral convergence), which is distinct from fitness
-          dispersion. Both are reported for scientific context.
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+        <div className="flex items-baseline justify-between mb-1">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Statistical Significance
+          </h3>
+          <span className="text-[10px] text-gray-400 dark:text-gray-500">Welch&apos;s two-sample t-test</span>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          Paired-seed comparison of convergence speed (generations to Nash equilibrium)
         </p>
 
         {hasData ? (
           <>
-            {/* Main Result Banner - Generations to Nash equilibrium */}
-            <div className={`mb-6 p-6 rounded-xl ${convergenceIsSignificant
+            {/* Main Result Banner */}
+            <div className={`mb-4 p-4 sm:p-5 rounded-xl ${convergenceIsSignificant
               ? 'bg-gradient-to-r from-green-500 to-emerald-500'
               : convergenceImprovement !== null && convergenceImprovement < 0
                 ? 'bg-gradient-to-r from-amber-500 to-orange-500'
                 : 'bg-gradient-to-r from-slate-500 to-slate-600'
               } text-white`}>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <div>
-                  <h4 className="text-2xl font-bold mb-1">
+                  <h4 className="text-xl sm:text-2xl font-bold mb-0.5">
                     {convergenceIsSignificant && convergenceImprovement !== null && convergenceImprovement > 0
                       ? `${convergenceImprovement.toFixed(0)}% Faster Convergence`
                       : convergenceImprovement !== null && convergenceImprovement < -1
@@ -195,193 +187,166 @@ export default function StatsSummary({
                         : 'No Significant Difference Detected'
                     }
                   </h4>
-                  <p className="text-white/90">
-                    {convergenceIsSignificant && (convergencePValueOneTailed ?? convergencePValue) !== null
-                      ? `Statistically significant (p = ${formatPValue(convergencePValueOneTailed ?? convergencePValue!)} < 0.05, one-tailed)`
-                      : (convergencePValueOneTailed ?? convergencePValue) !== null
-                        ? `Not statistically significant (p = ${formatPValue(convergencePValueOneTailed ?? convergencePValue!)}, one-tailed, α = 0.05)`
+                  <p className="text-white/80 text-sm">
+                    {convergenceIsSignificant && primaryP !== null
+                      ? `Statistically significant (p = ${formatPValue(primaryP)} < 0.05, two-tailed)`
+                      : primaryP !== null
+                        ? `Not statistically significant (p = ${formatPValue(primaryP)}, two-tailed, α = 0.05)`
                         : 'Awaiting converged experiments for analysis'
                     }
                   </p>
                 </div>
-                <div className="text-right">
-                  <div className="text-4xl font-bold">
-                    {(convergencePValueOneTailed ?? convergencePValue) !== null
-                      ? `p = ${formatPValue((convergencePValueOneTailed ?? convergencePValue)!, 3)}`
-                      : 'p = —'}
+                <div className="text-left sm:text-right shrink-0">
+                  <div className="text-3xl sm:text-4xl font-bold font-mono">
+                    {primaryP !== null ? `p = ${formatPValue(primaryP, 3)}` : 'p = —'}
                   </div>
-                  <div className="text-sm text-white/80">
-                    {convergenceIsSignificant ? 'Significant (one-tailed)' : 'Not Significant'}
+                  <div className="text-xs text-white/70">
+                    {convergenceIsSignificant ? 'Significant' : 'Not Significant'} (two-tailed)
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Confidence Level Indicator */}
-            <div className={`mb-6 p-4 rounded-lg flex items-center justify-between ${confidence.bg}`}>
-              <div className="flex items-center gap-3">
-                <div className={`font-semibold ${confidence.color}`}>
-                  {confidence.label}
-                </div>
-                <span className="text-gray-500 dark:text-gray-400 text-sm">
-                  Based on {convergedN} control + {convergedM} experimental experiments that reached Nash equilibrium
+            {/* Confidence Indicator */}
+            <div className={`mb-4 px-4 py-3 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 ${confidence.bg}`}>
+              <div className="flex items-center gap-2">
+                <span className={`text-sm font-semibold ${confidence.color}`}>{confidence.label}</span>
+                <span className="text-gray-500 dark:text-gray-400 text-xs">
+                  {convergedN} ctrl + {convergedM} exp converged
                 </span>
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                Power Level: {statisticalPowerLevel.charAt(0).toUpperCase() + statisticalPowerLevel.slice(1)}
-              </div>
-            </div>
-
-            {/* Understanding the p-value */}
-            <div className="mb-6 p-4 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
-              <h5 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
-                Understanding the p-value
-              </h5>
-              <div className="text-sm text-gray-600 dark:text-gray-400 space-y-3">
-                <p>
-                  <strong className="text-gray-700 dark:text-gray-300">What is a p-value?</strong> The p-value (probability value) is the probability of seeing a difference as large as the one observed—or larger—between the two groups, <em>if in reality there were no true difference</em> (i.e., if the null hypothesis were true). A small p-value means the observed result would be very unlikely by chance alone, so we have evidence against &quot;no difference.&quot;
-                </p>
-                <p>
-                  <strong className="text-gray-700 dark:text-gray-300">One-tailed test:</strong> Because our hypothesis predicts a specific direction — that adaptive mutation converges <em>faster</em> (in fewer generations) — we use a <strong>one-tailed test</strong>. This tests H₁: μ<sub>experimental</sub> &lt; μ<sub>control</sub> directly, and is more statistically powerful for directional hypotheses than a two-tailed test. Both one-tailed and two-tailed p-values are reported for transparency.
-                </p>
-                <p>
-                  <strong className="text-gray-700 dark:text-gray-300">How it&apos;s calculated here:</strong> We use Welch&apos;s two-sample t-test on <strong>generations to Nash equilibrium</strong>: one value per experiment (control vs experimental). The test compares the mean number of generations each group took to reach Nash. The one-tailed p-value answers: &quot;If adaptive mutation had no real effect, how likely would the experimental group converge faster to this degree or more, just from random variation?&quot;
-                </p>
-                <p>
-                  <strong className="text-gray-700 dark:text-gray-300">Why it supports the hypothesis:</strong> When p &lt; 0.05 (one-tailed), we reject the null hypothesis and conclude the observed faster convergence is statistically significant—i.e., unlikely to be due to chance. A very small p-value (e.g. &lt; 0.0001) indicates strong evidence that the adaptive strategy genuinely reduces generations to Nash.
-                </p>
-              </div>
+              <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                Power: {statisticalPowerLevel.charAt(0).toUpperCase() + statisticalPowerLevel.slice(1)}
+              </span>
             </div>
 
             {/* Stats Grid */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
               <StatCard
-                label="Convergence Generation"
+                label="Convergence Gen"
                 controlValue={controlConvergenceGen}
                 experimentalValue={experimentalConvergenceGen}
                 comparison="lower-better"
                 highlight={experimentalConvergenceGen !== null && controlConvergenceGen !== null && experimentalConvergenceGen < controlConvergenceGen}
               />
               <StatCard
-                label="Final Average Fitness (descriptive)"
-                controlValue={controlFinalFitness?.toFixed(2) ?? null}
-                experimentalValue={experimentalFinalFitness?.toFixed(2) ?? null}
+                label="Final Avg Fitness"
+                controlValue={controlFinalFitness?.toFixed(1) ?? null}
+                experimentalValue={experimentalFinalFitness?.toFixed(1) ?? null}
                 comparison="higher-better"
               />
               <StatCard
-                label="Peak Fitness Achieved (descriptive)"
-                controlValue={controlPeakFitness?.toFixed(2) ?? null}
-                experimentalValue={experimentalPeakFitness?.toFixed(2) ?? null}
+                label="Peak Fitness"
+                controlValue={controlPeakFitness?.toFixed(1) ?? null}
+                experimentalValue={experimentalPeakFitness?.toFixed(1) ?? null}
                 comparison="higher-better"
               />
               <StatCard
-                label="Total Generations Run"
+                label="Total Generations"
                 controlValue={totalGenerationsControl}
                 experimentalValue={totalGenerationsExperimental}
               />
             </div>
 
-            {/* Welch's t-test: Generations to Nash equilibrium (hypothesis test) */}
-            <div className="mt-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-900/50">
-              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
-                Welch&apos;s Two-Sample T-Test: Generations to Nash Equilibrium (experiment-level)
+            {/* T-Test Details */}
+            <div className="p-3 sm:p-4 rounded-lg bg-gray-50 dark:bg-gray-900/50">
+              <div className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                Welch&apos;s T-Test Details
               </div>
 
               {(convergedN < 5 || convergedM < 5) && (
                 <div className="mb-3 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded text-xs text-yellow-700 dark:text-yellow-400">
-                  <strong>Sample size:</strong> n={convergedN} control and n={convergedM} experimental experiments reached Nash equilibrium. Aim for n≥5 per group for reliable significance testing.
+                  <strong>Note:</strong> n={convergedN} ctrl, n={convergedM} exp. Aim for n≥5 per group.
                 </div>
               )}
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mb-3">
                 <div>
-                  <div className="text-gray-500 dark:text-gray-400">t-Statistic</div>
-                  <div className="font-mono font-bold text-gray-900 dark:text-white">
-                    {convergenceTStatistic !== null ? convergenceTStatistic.toFixed(4) : '-'}
+                  <div className="text-xs text-gray-400">t-Statistic</div>
+                  <div className="font-mono font-bold text-gray-900 dark:text-white text-sm">
+                    {convergenceTStatistic !== null ? convergenceTStatistic.toFixed(4) : '—'}
                   </div>
                 </div>
                 <div>
-                  <div className="text-gray-500 dark:text-gray-400">Degrees of Freedom</div>
-                  <div className="font-mono font-bold text-gray-900 dark:text-white">
-                    {convergenceDegreesOfFreedom !== null ? convergenceDegreesOfFreedom.toFixed(2) : '-'}
+                  <div className="text-xs text-gray-400">Degrees of Freedom</div>
+                  <div className="font-mono font-bold text-gray-900 dark:text-white text-sm">
+                    {convergenceDegreesOfFreedom !== null ? convergenceDegreesOfFreedom.toFixed(2) : '—'}
                   </div>
                 </div>
                 <div>
-                  <div className="text-gray-500 dark:text-gray-400">p-Value (one-tailed)</div>
-                  <div className="font-mono font-bold text-gray-900 dark:text-white">
-                    {convergencePValueOneTailed !== null ? formatPValue(convergencePValueOneTailed) : (convergencePValue !== null ? formatPValue(convergencePValue) : '-')}
+                  <div className="text-xs text-gray-400">p-Value (two-tailed)</div>
+                  <div className="font-mono font-bold text-gray-900 dark:text-white text-sm">
+                    {primaryP !== null ? formatPValue(primaryP) : '—'}
                   </div>
-                  <div className="text-xs text-gray-400 dark:text-gray-500">H₁: exp &lt; ctrl</div>
                 </div>
                 <div>
-                  <div className="text-gray-500 dark:text-gray-400">Significance (α = 0.05)</div>
-                  <div className={`font-bold ${convergenceIsSignificant ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`}>
-                    {(convergencePValueOneTailed ?? convergencePValue) !== null ? (convergenceIsSignificant ? 'Reject H₀ → Supports H₁' : 'Fail to Reject H₀') : '-'}
+                  <div className="text-xs text-gray-400">Significance (α = 0.05)</div>
+                  <div className={`font-bold text-sm ${convergenceIsSignificant ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}`}>
+                    {primaryP !== null ? (convergenceIsSignificant ? 'Reject H₀' : 'Fail to Reject H₀') : '—'}
                   </div>
                 </div>
               </div>
 
-              {/* Two-tailed p-value for transparency */}
-              {convergencePValue !== null && convergencePValueOneTailed !== null && (
-                <div className="mb-4 text-xs text-gray-500 dark:text-gray-400">
-                  Two-tailed p-value: {formatPValue(convergencePValue)} (reported for transparency; one-tailed is primary because the hypothesis is directional)
+              {/* One-tailed for transparency */}
+              {secondaryP !== null && (
+                <div className="text-[11px] text-gray-400 dark:text-gray-500 mb-3">
+                  One-tailed p = {formatPValue(secondaryP)} (directional H₁: exp &lt; ctrl; reported for reference)
                 </div>
               )}
 
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm border-t border-gray-200 dark:border-gray-700 pt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm border-t border-gray-200 dark:border-gray-700 pt-3">
                 <div>
-                  <div className="text-gray-500 dark:text-gray-400">Cohen&apos;s d (Effect Size)</div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-gray-900 dark:text-white">
-                      {convergenceCohensD !== null ? (convergenceCohensD > 0 ? '+' : '') + convergenceCohensD.toFixed(3) : '-'}
+                  <div className="text-xs text-gray-400">Cohen&apos;s d</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-bold text-gray-900 dark:text-white text-sm">
+                      {convergenceCohensD !== null ? (convergenceCohensD > 0 ? '+' : '') + convergenceCohensD.toFixed(3) : '—'}
                     </span>
-                    <span className={`text-xs font-medium ${effectSize.color}`}>
-                      ({effectSize.label}{convergenceCohensD !== null ? (convergenceCohensD < 0 ? ', favoring experimental' : convergenceCohensD > 0 ? ', favoring control' : '') : ''})
+                    <span className={`text-[10px] font-medium ${effectSize.color}`}>
+                      {effectSize.label}{convergenceCohensD !== null ? (convergenceCohensD < 0 ? ' (→exp)' : convergenceCohensD > 0 ? ' (→ctrl)' : '') : ''}
                     </span>
                   </div>
-                  <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Negative = experimental converges in fewer generations</div>
                 </div>
                 <div>
-                  <div className="text-gray-500 dark:text-gray-400">Mean Difference (Ctrl − Exp) generations</div>
-                  <div className="font-mono font-bold text-gray-900 dark:text-white">
-                    {convergenceMeanDifference !== null ? (convergenceMeanDifference > 0 ? '+' : '') + convergenceMeanDifference.toFixed(0) : '-'}
+                  <div className="text-xs text-gray-400">Mean Diff (Ctrl − Exp)</div>
+                  <div className="font-mono font-bold text-gray-900 dark:text-white text-sm">
+                    {convergenceMeanDifference !== null ? (convergenceMeanDifference > 0 ? '+' : '') + convergenceMeanDifference.toFixed(0) + ' gen' : '—'}
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">Positive = experimental faster</div>
                 </div>
                 <div>
-                  <div className="text-gray-500 dark:text-gray-400">95% Confidence Interval</div>
-                  <div className="font-mono font-bold text-gray-900 dark:text-white">
+                  <div className="text-xs text-gray-400">95% CI</div>
+                  <div className="font-mono font-bold text-gray-900 dark:text-white text-sm">
                     {convergenceConfidenceInterval
                       ? `[${convergenceConfidenceInterval.lower.toFixed(0)}, ${convergenceConfidenceInterval.upper.toFixed(0)}]`
-                      : '-'}
+                      : '—'}
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 text-sm border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+              {/* Group descriptive stats */}
+              <div className="grid grid-cols-2 gap-3 text-sm border-t border-gray-200 dark:border-gray-700 pt-3 mt-3">
                 <div>
-                  <div className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">Control: generations to Nash (n={convergedN})</div>
-                  <div className="text-gray-600 dark:text-gray-400">
-                    Mean: <span className="font-mono font-bold text-gray-900 dark:text-white">{convergenceControlMean !== null ? convergenceControlMean.toFixed(0) : '-'}</span>
-                    {' '}± <span className="font-mono">{convergenceControlStd !== null ? convergenceControlStd.toFixed(0) : '-'}</span>
+                  <div className="text-[10px] text-blue-600 dark:text-blue-400 font-medium mb-0.5">Control (n={convergedN})</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    Mean: <span className="font-mono font-bold text-gray-900 dark:text-white">{convergenceControlMean !== null ? convergenceControlMean.toFixed(0) : '—'}</span>
+                    {' '}± <span className="font-mono">{convergenceControlStd !== null ? convergenceControlStd.toFixed(0) : '—'}</span>
                   </div>
-                  <div className="text-gray-600 dark:text-gray-400">
-                    Median: <span className="font-mono font-bold text-gray-900 dark:text-white">{convergenceControlMedian !== null ? convergenceControlMedian.toFixed(0) : '-'}</span>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    Median: <span className="font-mono font-bold text-gray-900 dark:text-white">{convergenceControlMedian !== null ? convergenceControlMedian.toFixed(0) : '—'}</span>
                     {convergenceControlIQR && (
-                      <span className="text-xs ml-1">(IQR: {convergenceControlIQR.Q1.toFixed(0)}–{convergenceControlIQR.Q3.toFixed(0)})</span>
+                      <span className="text-[10px] ml-1">(IQR: {convergenceControlIQR.Q1.toFixed(0)}–{convergenceControlIQR.Q3.toFixed(0)})</span>
                     )}
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs text-purple-600 dark:text-purple-400 font-medium mb-1">Experimental: generations to Nash (n={convergedM})</div>
-                  <div className="text-gray-600 dark:text-gray-400">
-                    Mean: <span className="font-mono font-bold text-gray-900 dark:text-white">{convergenceExperimentalMean !== null ? convergenceExperimentalMean.toFixed(0) : '-'}</span>
-                    {' '}± <span className="font-mono">{convergenceExperimentalStd !== null ? convergenceExperimentalStd.toFixed(0) : '-'}</span>
+                  <div className="text-[10px] text-purple-600 dark:text-purple-400 font-medium mb-0.5">Experimental (n={convergedM})</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    Mean: <span className="font-mono font-bold text-gray-900 dark:text-white">{convergenceExperimentalMean !== null ? convergenceExperimentalMean.toFixed(0) : '—'}</span>
+                    {' '}± <span className="font-mono">{convergenceExperimentalStd !== null ? convergenceExperimentalStd.toFixed(0) : '—'}</span>
                   </div>
-                  <div className="text-gray-600 dark:text-gray-400">
-                    Median: <span className="font-mono font-bold text-gray-900 dark:text-white">{convergenceExperimentalMedian !== null ? convergenceExperimentalMedian.toFixed(0) : '-'}</span>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    Median: <span className="font-mono font-bold text-gray-900 dark:text-white">{convergenceExperimentalMedian !== null ? convergenceExperimentalMedian.toFixed(0) : '—'}</span>
                     {convergenceExperimentalIQR && (
-                      <span className="text-xs ml-1">(IQR: {convergenceExperimentalIQR.Q1.toFixed(0)}–{convergenceExperimentalIQR.Q3.toFixed(0)})</span>
+                      <span className="text-[10px] ml-1">(IQR: {convergenceExperimentalIQR.Q1.toFixed(0)}–{convergenceExperimentalIQR.Q3.toFixed(0)})</span>
                     )}
                   </div>
                 </div>
@@ -389,16 +354,16 @@ export default function StatsSummary({
             </div>
 
             {/* Interpretation */}
-            <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <h4 className="font-semibold text-blue-800 dark:text-blue-300 mb-2">
+            <div className="mt-4 p-3 sm:p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <h4 className="font-semibold text-blue-800 dark:text-blue-300 mb-1.5 text-sm">
                 Interpretation
               </h4>
-              <p className="text-sm text-blue-700 dark:text-blue-400">
+              <p className="text-sm text-blue-700 dark:text-blue-400 leading-relaxed">
                 {convergenceIsSignificant ? (
                   <>
-                    The experimental group (Adaptive Mutation) reached Nash equilibrium in significantly fewer generations than the control group (p = {(convergencePValueOneTailed ?? convergencePValue) != null ? formatPValue((convergencePValueOneTailed ?? convergencePValue)!) : '—'}, one-tailed).
+                    The experimental group (Adaptive Mutation) reached Nash equilibrium in significantly fewer generations than the control group (p = {primaryP != null ? formatPValue(primaryP) : '—'}, two-tailed).
                     {convergenceImprovement !== null && convergenceImprovement > 0 && (
-                      <> The adaptive strategy converged {convergenceImprovement.toFixed(0)}% faster, supporting the hypothesis that fitness-scaled mutation rates accelerate convergence to Nash equilibrium.</>
+                      <> The adaptive strategy converged {convergenceImprovement.toFixed(0)}% faster, supporting the hypothesis that fitness-scaled mutation rates accelerate convergence.</>
                     )}
                     {convergenceCohensD !== null && (
                       <> Effect size: d = {convergenceCohensD.toFixed(2)} ({effectSize.label.toLowerCase()}{convergenceCohensD < 0 ? ', favoring experimental' : ''}).</>
@@ -406,20 +371,20 @@ export default function StatsSummary({
                   </>
                 ) : (statisticalPowerLevel === 'robust' || statisticalPowerLevel === 'recommended') ? (
                   <>
-                    No statistically significant difference was found in convergence speed between the control and experimental groups
-                    (p = {(convergencePValueOneTailed ?? convergencePValue) != null ? formatPValue((convergencePValueOneTailed ?? convergencePValue)!) : '—'}, one-tailed).
+                    No statistically significant difference was found between groups
+                    (p = {primaryP != null ? formatPValue(primaryP) : '—'}, two-tailed).
                     {convergenceCohensD !== null && Math.abs(convergenceCohensD) < 0.2 && (
-                      <> The effect size is negligible (d = {convergenceCohensD.toFixed(3)}), and with {statisticalPowerLevel === 'robust' ? 'robust' : 'moderate'} statistical power, this suggests the true difference between strategies is genuinely small or absent — not that more data is needed.</>
+                      <> With {statisticalPowerLevel === 'robust' ? 'robust' : 'moderate'} statistical power and a negligible effect size (d = {convergenceCohensD.toFixed(3)}), the true difference is likely genuinely small or absent.</>
                     )}
                     {convergenceCohensD !== null && Math.abs(convergenceCohensD) >= 0.2 && (
-                      <> Effect size: d = {convergenceCohensD.toFixed(3)} ({effectSize.label.toLowerCase()}). Despite a measurable effect, the difference does not reach significance at α = 0.05.</>
+                      <> Effect size d = {convergenceCohensD.toFixed(3)} ({effectSize.label.toLowerCase()}) but does not reach significance at α = 0.05.</>
                     )}
                   </>
                 ) : (
                   <>
-                    Statistical significance has not been reached for convergence speed.
+                    Significance not yet reached.
                     {(convergedN < 30 || convergedM < 30)
-                      ? <> Running more experiments (currently {convergedN} control + {convergedM} experimental converged) will increase statistical power and the ability to detect a true effect if one exists.</>
+                      ? <> More converged experiments ({convergedN} ctrl + {convergedM} exp so far) will increase power to detect a true effect if one exists.</>
                       : <> Additional converged experiments may help clarify the result.</>
                     }
                   </>
@@ -427,27 +392,29 @@ export default function StatsSummary({
               </p>
             </div>
 
-            {/* Convergence Detection Methodology */}
-            <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
-              <h5 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                Nash Equilibrium Detection
-              </h5>
-              <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
-                <p><strong>Metric:</strong> Entropy Variance (σ) — measures how similar all agents&apos; strategies are</p>
-                <p><strong>Threshold:</strong> σ &lt; 0.001 (same for both groups for fair comparison)</p>
-                <p><strong>Stability:</strong> 20+ consecutive generations below threshold required</p>
-                <p><strong>Method:</strong> Population must first diverge (σ ≥ threshold), then converge. Prevents false positives from identical initial agents.</p>
+            {/* Collapsible methodology */}
+            <details className="mt-3">
+              <summary className="text-xs text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 select-none">
+                Understanding the p-value &amp; Nash detection methodology
+              </summary>
+              <div className="mt-2 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg text-xs text-gray-600 dark:text-gray-400 space-y-2">
+                <p>
+                  <strong>p-value:</strong> The probability of observing a difference this large (or larger) between groups if there were truly no difference. Small p (&lt; 0.05) = evidence against &quot;no difference.&quot;
+                </p>
+                <p>
+                  <strong>Two-tailed test:</strong> Tests for any difference in either direction (H₁: μ<sub>exp</sub> ≠ μ<sub>ctrl</sub>). This is the standard, more conservative approach. The one-tailed p-value is also reported for reference.
+                </p>
+                <p>
+                  <strong>Nash detection:</strong> Entropy variance σ &lt; 0.001 sustained for 20+ consecutive generations, after population has first diverged. Same threshold for both groups.
+                </p>
               </div>
-            </div>
+            </details>
           </>
         ) : (
-          <div className="flex items-center justify-center h-48 text-gray-500 dark:text-gray-400">
-            <div className="text-center">
-              <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
+          <div className="flex items-center justify-center h-40 text-gray-400 dark:text-gray-500">
+            <div className="text-center text-sm">
               <p>No experiment data available.</p>
-              <p className="text-sm mt-1">Run Control and Experimental experiments to see statistical analysis.</p>
+              <p className="text-xs mt-1">Run Control and Experimental experiments to see analysis.</p>
             </div>
           </div>
         )}

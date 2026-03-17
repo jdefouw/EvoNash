@@ -387,56 +387,59 @@ export default function DashboardPage() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="space-y-6">
-                  <StatsSummary
-                    controlConvergenceGen={stats?.controlConvergenceGen ?? null}
-                    experimentalConvergenceGen={stats?.experimentalConvergenceGen ?? null}
-                    convergenceImprovement={stats?.convergenceImprovement ?? null}
-                    controlFinalFitness={stats?.controlFinalFitness ?? null}
-                    experimentalFinalFitness={stats?.experimentalFinalFitness ?? null}
-                    controlPeakFitness={stats?.controlPeakFitness ?? null}
-                    experimentalPeakFitness={stats?.experimentalPeakFitness ?? null}
-                    totalGenerationsControl={stats?.totalGenerationsControl ?? 0}
-                    totalGenerationsExperimental={stats?.totalGenerationsExperimental ?? 0}
-                    controlConvergedCount={stats?.controlConvergedCount ?? 0}
-                    experimentalConvergedCount={stats?.experimentalConvergedCount ?? 0}
-                    controlExperimentCount={stats?.controlExperimentCount ?? 0}
-                    experimentalExperimentCount={stats?.experimentalExperimentCount ?? 0}
-                    convergencePValue={stats?.convergencePValue ?? null}
-                    convergencePValueOneTailed={stats?.convergencePValueOneTailed ?? null}
-                    convergenceIsSignificant={stats?.convergenceIsSignificant ?? false}
-                    convergenceTStatistic={stats?.convergenceTStatistic ?? null}
-                    convergenceDegreesOfFreedom={stats?.convergenceDegreesOfFreedom ?? null}
-                    convergenceCohensD={stats?.convergenceCohensD ?? null}
-                    convergenceConfidenceInterval={stats?.convergenceConfidenceInterval ?? null}
-                    convergenceControlMean={stats?.convergenceControlMean ?? null}
-                    convergenceExperimentalMean={stats?.convergenceExperimentalMean ?? null}
-                    convergenceControlStd={stats?.convergenceControlStd ?? null}
-                    convergenceExperimentalStd={stats?.convergenceExperimentalStd ?? null}
-                    convergenceMeanDifference={stats?.convergenceMeanDifference ?? null}
-                    convergenceControlMedian={stats?.convergenceControlMedian ?? null}
-                    convergenceExperimentalMedian={stats?.convergenceExperimentalMedian ?? null}
-                    convergenceControlIQR={stats?.convergenceControlIQR ?? null}
-                    convergenceExperimentalIQR={stats?.convergenceExperimentalIQR ?? null}
-                    statisticalPowerLevel={stats?.statisticalPowerLevel ?? 'insufficient'}
-                  />
-                </div>
-                <div className="space-y-6">
-                  <ComparisonChart
-                    controlGenerations={controlGenerations}
-                    experimentalGenerations={experimentalGenerations}
-                    metric="fitness"
-                  />
-                  <ComparisonChart
-                    controlGenerations={controlGenerations}
-                    experimentalGenerations={experimentalGenerations}
-                    metric="entropy"
-                  />
-                </div>
+              {/* Hero: Statistical Results */}
+              <StatsSummary
+                controlConvergenceGen={stats?.controlConvergenceGen ?? null}
+                experimentalConvergenceGen={stats?.experimentalConvergenceGen ?? null}
+                convergenceImprovement={stats?.convergenceImprovement ?? null}
+                controlFinalFitness={stats?.controlFinalFitness ?? null}
+                experimentalFinalFitness={stats?.experimentalFinalFitness ?? null}
+                controlPeakFitness={stats?.controlPeakFitness ?? null}
+                experimentalPeakFitness={stats?.experimentalPeakFitness ?? null}
+                totalGenerationsControl={stats?.totalGenerationsControl ?? 0}
+                totalGenerationsExperimental={stats?.totalGenerationsExperimental ?? 0}
+                controlConvergedCount={stats?.controlConvergedCount ?? 0}
+                experimentalConvergedCount={stats?.experimentalConvergedCount ?? 0}
+                controlExperimentCount={stats?.controlExperimentCount ?? 0}
+                experimentalExperimentCount={stats?.experimentalExperimentCount ?? 0}
+                convergencePValue={stats?.convergencePValue ?? null}
+                convergencePValueOneTailed={stats?.convergencePValueOneTailed ?? null}
+                convergenceIsSignificant={stats?.convergenceIsSignificant ?? false}
+                convergenceTStatistic={stats?.convergenceTStatistic ?? null}
+                convergenceDegreesOfFreedom={stats?.convergenceDegreesOfFreedom ?? null}
+                convergenceCohensD={stats?.convergenceCohensD ?? null}
+                convergenceConfidenceInterval={stats?.convergenceConfidenceInterval ?? null}
+                convergenceControlMean={stats?.convergenceControlMean ?? null}
+                convergenceExperimentalMean={stats?.convergenceExperimentalMean ?? null}
+                convergenceControlStd={stats?.convergenceControlStd ?? null}
+                convergenceExperimentalStd={stats?.convergenceExperimentalStd ?? null}
+                convergenceMeanDifference={stats?.convergenceMeanDifference ?? null}
+                convergenceControlMedian={stats?.convergenceControlMedian ?? null}
+                convergenceExperimentalMedian={stats?.convergenceExperimentalMedian ?? null}
+                convergenceControlIQR={stats?.convergenceControlIQR ?? null}
+                convergenceExperimentalIQR={stats?.convergenceExperimentalIQR ?? null}
+                statisticalPowerLevel={stats?.statisticalPowerLevel ?? 'insufficient'}
+              />
+
+              {/* Charts: full-width stacked */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <ComparisonChart
+                  controlGenerations={controlGenerations}
+                  experimentalGenerations={experimentalGenerations}
+                  metric="fitness"
+                />
+                <ComparisonChart
+                  controlGenerations={controlGenerations}
+                  experimentalGenerations={experimentalGenerations}
+                  metric="entropy"
+                  showConvergenceMarker
+                  controlConvergenceGen={stats?.controlConvergenceGen ?? null}
+                  experimentalConvergenceGen={stats?.experimentalConvergenceGen ?? null}
+                />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Distribution Analysis */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <BoxPlotChart
                   title="Convergence Speed Distribution"
                   controlData={dashboardData?.distributionData?.control ?? null}
@@ -448,7 +451,8 @@ export default function DashboardPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Statistical Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <AssumptionChecksCard
                   normalityControl={dashboardData?.assumptionChecks?.normalityControl ?? null}
                   normalityExperimental={dashboardData?.assumptionChecks?.normalityExperimental ?? null}
@@ -476,6 +480,7 @@ export default function DashboardPage() {
                 />
               </div>
 
+              {/* Effect Size */}
               <EffectSizeCard
                 hedgesG={dashboardData?.effectSizes?.hedgesG ?? null}
                 cohensD={dashboardData?.effectSizes?.hedgesG?.cohensD ?? stats?.convergenceCohensD ?? null}
