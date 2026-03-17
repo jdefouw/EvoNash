@@ -7,7 +7,7 @@ export { default as ComparisonChart } from './ComparisonChart'
 export { default as ExperimentDataTable } from './ExperimentDataTable'
 export { default as StatsSummary } from './StatsSummary'
 export { default as ConclusionCard } from './ConclusionCard'
-export { default as SampleSizeGuidance } from './SampleSizeGuidance'
+// SampleSizeGuidance removed — absorbed into PowerAnalysisCard
 // Scientific Rigor Components
 export { default as BoxPlotChart } from './BoxPlotChart'
 export { default as QQPlot } from './QQPlot'

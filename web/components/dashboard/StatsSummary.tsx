@@ -181,20 +181,26 @@ export default function StatsSummary({
             {/* Main Result Banner - Generations to Nash equilibrium */}
             <div className={`mb-6 p-6 rounded-xl ${convergenceIsSignificant
               ? 'bg-gradient-to-r from-green-500 to-emerald-500'
-              : 'bg-gradient-to-r from-gray-400 to-gray-500'
+              : convergenceImprovement !== null && convergenceImprovement < 0
+                ? 'bg-gradient-to-r from-amber-500 to-orange-500'
+                : 'bg-gradient-to-r from-slate-500 to-slate-600'
               } text-white`}>
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="text-2xl font-bold mb-1">
-                    {convergenceImprovement !== null && convergenceImprovement > 0
+                    {convergenceIsSignificant && convergenceImprovement !== null && convergenceImprovement > 0
                       ? `${convergenceImprovement.toFixed(0)}% Faster Convergence`
-                      : 'Analysis Results'
+                      : convergenceImprovement !== null && convergenceImprovement < -1
+                        ? `${Math.abs(convergenceImprovement).toFixed(0)}% Slower Convergence`
+                        : 'No Significant Difference Detected'
                     }
                   </h4>
                   <p className="text-white/90">
                     {convergenceIsSignificant && (convergencePValueOneTailed ?? convergencePValue) !== null
-                      ? `Generations to Nash equilibrium: statistically significant (p = ${formatPValue(convergencePValueOneTailed ?? convergencePValue!)} < 0.05, one-tailed)`
-                      : 'Results pending sufficient converged experiments for statistical significance'
+                      ? `Statistically significant (p = ${formatPValue(convergencePValueOneTailed ?? convergencePValue!)} < 0.05, one-tailed)`
+                      : (convergencePValueOneTailed ?? convergencePValue) !== null
+                        ? `Not statistically significant (p = ${formatPValue(convergencePValueOneTailed ?? convergencePValue!)}, one-tailed, α = 0.05)`
+                        : 'Awaiting converged experiments for analysis'
                     }
                   </p>
                 </div>
@@ -202,7 +208,7 @@ export default function StatsSummary({
                   <div className="text-4xl font-bold">
                     {(convergencePValueOneTailed ?? convergencePValue) !== null
                       ? `p = ${formatPValue((convergencePValueOneTailed ?? convergencePValue)!, 3)}`
-                      : 'p = -'}
+                      : 'p = —'}
                   </div>
                   <div className="text-sm text-white/80">
                     {convergenceIsSignificant ? 'Significant (one-tailed)' : 'Not Significant'}
@@ -398,9 +404,24 @@ export default function StatsSummary({
                       <> Effect size: d = {convergenceCohensD.toFixed(2)} ({effectSize.label.toLowerCase()}{convergenceCohensD < 0 ? ', favoring experimental' : ''}).</>
                     )}
                   </>
+                ) : (statisticalPowerLevel === 'robust' || statisticalPowerLevel === 'recommended') ? (
+                  <>
+                    No statistically significant difference was found in convergence speed between the control and experimental groups
+                    (p = {(convergencePValueOneTailed ?? convergencePValue) != null ? formatPValue((convergencePValueOneTailed ?? convergencePValue)!) : '—'}, one-tailed).
+                    {convergenceCohensD !== null && Math.abs(convergenceCohensD) < 0.2 && (
+                      <> The effect size is negligible (d = {convergenceCohensD.toFixed(3)}), and with {statisticalPowerLevel === 'robust' ? 'robust' : 'moderate'} statistical power, this suggests the true difference between strategies is genuinely small or absent — not that more data is needed.</>
+                    )}
+                    {convergenceCohensD !== null && Math.abs(convergenceCohensD) >= 0.2 && (
+                      <> Effect size: d = {convergenceCohensD.toFixed(3)} ({effectSize.label.toLowerCase()}). Despite a measurable effect, the difference does not reach significance at α = 0.05.</>
+                    )}
+                  </>
                 ) : (
                   <>
-                    More converged experiments are needed to determine statistical significance for generations to Nash equilibrium. Run additional experiments until enough reach Nash in both groups.
+                    Statistical significance has not been reached for convergence speed.
+                    {(convergedN < 30 || convergedM < 30)
+                      ? <> Running more experiments (currently {convergedN} control + {convergedM} experimental converged) will increase statistical power and the ability to detect a true effect if one exists.</>
+                      : <> Additional converged experiments may help clarify the result.</>
+                    }
                   </>
                 )}
               </p>

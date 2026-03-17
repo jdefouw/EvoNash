@@ -11,7 +11,6 @@ import {
   ExperimentDataTable,
   StatsSummary,
   ConclusionCard,
-  SampleSizeGuidance,
   BoxPlotChart,
   QQPlot,
   AssumptionChecksCard,
@@ -390,14 +389,6 @@ export default function DashboardPage() {
             <>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="space-y-6">
-                  <SampleSizeGuidance
-                    controlExperimentCount={stats?.controlExperimentCount ?? 0}
-                    experimentalExperimentCount={stats?.experimentalExperimentCount ?? 0}
-                    controlAvgGenerations={stats?.controlAvgGenerations ?? 0}
-                    experimentalAvgGenerations={stats?.experimentalAvgGenerations ?? 0}
-                    statisticalPowerLevel={stats?.statisticalPowerLevel ?? 'insufficient'}
-                    achievedPower={dashboardData?.powerAnalysis?.achievedPower?.power ?? null}
-                  />
                   <StatsSummary
                     controlConvergenceGen={stats?.controlConvergenceGen ?? null}
                     experimentalConvergenceGen={stats?.experimentalConvergenceGen ?? null}
@@ -477,6 +468,11 @@ export default function DashboardPage() {
                   currentControlN={stats?.controlConvergedCount ?? 0}
                   currentExperimentalN={stats?.experimentalConvergedCount ?? 0}
                   effectSize={dashboardData?.effectSizes?.hedgesG?.hedgesG ?? stats?.convergenceCohensD ?? null}
+                  statisticalPowerLevel={stats?.statisticalPowerLevel ?? 'insufficient'}
+                  controlExperimentCount={stats?.controlExperimentCount ?? 0}
+                  experimentalExperimentCount={stats?.experimentalExperimentCount ?? 0}
+                  controlAvgGenerations={stats?.controlAvgGenerations ?? 0}
+                  experimentalAvgGenerations={stats?.experimentalAvgGenerations ?? 0}
                 />
               </div>
 
