@@ -2035,7 +2035,20 @@ export async function GET() {
         requiredFor95
       }
 
-      achievedPowerValue = achievedPower.power
+      // For the power LEVEL indicator, use medium-effect power when
+      // the observed effect is negligible. This answers the scientific question:
+      // "Do we have enough data to detect a meaningful effect?"
+      // rather than "Can we detect this negligible effect?" (which is always low).
+      if (isNegligible) {
+        const sensitivityPower = calculatePower(
+          controlConvergenceGens.length,
+          experimentalConvergenceGens.length,
+          0.5  // medium effect (Cohen's convention)
+        )
+        achievedPowerValue = sensitivityPower.power
+      } else {
+        achievedPowerValue = achievedPower.power
+      }
 
       distributionData = {
         control: getDistributionStats(controlConvergenceGens),
