@@ -10,21 +10,13 @@ interface HedgesGResult {
   sampleSizes: { control: number; experimental: number }
 }
 
-interface CLESResult {
-  cles: number | null
-  clesPercentage: number | null
-  interpretation: string
-}
-
 interface EffectSizeCardProps {
   hedgesG: HedgesGResult | null
-  cles: CLESResult | null
   cohensD: number | null
 }
 
 export default function EffectSizeCard({
   hedgesG,
-  cles,
   cohensD
 }: EffectSizeCardProps) {
   const getEffectSizeColor = (interpretation: string) => {
@@ -53,22 +45,26 @@ export default function EffectSizeCard({
     }
   }
 
-  // Visual scale for effect size
-  const effectSizeScale = [
-    { threshold: 0.2, label: 'Negligible', color: 'bg-gray-300' },
-    { threshold: 0.5, label: 'Small', color: 'bg-yellow-400' },
-    { threshold: 0.8, label: 'Medium', color: 'bg-blue-400' },
-    { threshold: Infinity, label: 'Large', color: 'bg-green-500' }
-  ]
-
   const getScalePosition = (d: number | null) => {
     if (d === null) return 0
     const absD = Math.abs(d)
-    // Scale: 0-0.2 (0-16.67%), 0.2-0.5 (16.67-41.67%), 0.5-0.8 (41.67-66.67%), 0.8-1.2 (66.67-100%)
     if (absD <= 0.2) return (absD / 0.2) * 16.67
     if (absD <= 0.5) return 16.67 + ((absD - 0.2) / 0.3) * 25
     if (absD <= 0.8) return 41.67 + ((absD - 0.5) / 0.3) * 25
     return 66.67 + Math.min((absD - 0.8) / 0.4, 1) * 33.33
+  }
+
+  // Directional interpretation for signed effect sizes
+  const getDirectionLabel = (g: number | null) => {
+    if (g === null) return ''
+    if (g < 0) return ', favoring experimental'
+    if (g > 0) return ', favoring control'
+    return ''
+  }
+
+  const formatSigned = (v: number | null, decimals: number) => {
+    if (v === null) return 'N/A'
+    return (v > 0 ? '+' : '') + v.toFixed(decimals)
   }
 
   return (
@@ -80,7 +76,7 @@ export default function EffectSizeCard({
         Generations to Nash equilibrium (hypothesis outcome)
       </p>
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-        Practical significance measures - how meaningful is the difference?
+        Practical significance measures — how meaningful is the difference?
       </p>
 
       <div className="space-y-4">
@@ -89,16 +85,19 @@ export default function EffectSizeCard({
           <div className="flex items-start justify-between mb-2">
             <div>
               <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300">Hedges&apos; g</h5>
-              <p className="text-xs text-gray-500">Small-sample corrected effect size</p>
+              <p className="text-xs text-gray-500">Small-sample corrected effect size (bias-corrected Cohen&apos;s d)</p>
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {hedgesG?.hedgesG?.toFixed(3) ?? 'N/A'}
+                {formatSigned(hedgesG?.hedgesG ?? null, 3)}
               </div>
               <div className={`text-sm font-medium ${getEffectSizeColor(hedgesG?.interpretation ?? '')}`}>
-                {hedgesG?.interpretation ?? 'Unknown'}
+                {hedgesG?.interpretation ?? 'Unknown'}{getDirectionLabel(hedgesG?.hedgesG ?? null)}
               </div>
             </div>
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+            Negative = experimental converges in fewer generations (supports hypothesis)
           </div>
           
           {/* Effect size scale visualization */}
@@ -143,43 +142,12 @@ export default function EffectSizeCard({
               <p className="text-xs text-gray-500">Uncorrected effect size</p>
             </div>
             <div className="text-lg font-bold text-gray-900 dark:text-white">
-              {cohensD !== null ? cohensD.toFixed(3) : 'N/A'}
+              {formatSigned(cohensD, 3)}
             </div>
           </div>
           {hedgesG?.correctionFactor != null && (
             <div className="text-xs text-gray-500 mt-1">
               Correction factor: {hedgesG?.correctionFactor?.toFixed(4)}
-            </div>
-          )}
-        </div>
-
-        {/* Common Language Effect Size */}
-        <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-          <div className="flex items-start justify-between mb-2">
-            <div>
-              <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Common Language Effect Size
-              </h5>
-              <p className="text-xs text-gray-500">Probability of superiority</p>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                {cles?.clesPercentage != null ? `${cles?.clesPercentage?.toFixed(1)}%` : 'N/A'}
-              </div>
-            </div>
-          </div>
-          
-          {/* CLES interpretation */}
-          <div className="text-xs text-gray-600 dark:text-gray-400 mt-2">
-            {cles?.interpretation ?? 'Unable to calculate'}
-          </div>
-          
-          {/* Visual explanation */}
-          {cles?.clesPercentage != null && (
-            <div className="mt-3 p-2 bg-white dark:bg-gray-800 rounded text-xs text-gray-600 dark:text-gray-400">
-              <strong>Interpretation:</strong> If you randomly select one value from each group, 
-              there is a {cles?.clesPercentage?.toFixed(1)}% chance the Experimental value will be higher 
-              than the Control value.
             </div>
           )}
         </div>
@@ -216,3 +184,4 @@ export default function EffectSizeCard({
     </div>
   )
 }
+

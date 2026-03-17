@@ -36,6 +36,7 @@ interface DashboardData {
     controlPeakFitness: number | null
     experimentalPeakFitness: number | null
     convergencePValue: number | null
+    convergencePValueOneTailed: number | null
     convergenceTStatistic: number | null
     convergenceIsSignificant: boolean
     convergenceControlMean: number | null
@@ -46,17 +47,10 @@ interface DashboardData {
     convergenceControlStd: number | null
     convergenceExperimentalStd: number | null
     convergenceMeanDifference: number | null
-    pValue: number | null
-    tStatistic: number | null
-    isSignificant: boolean
-    degreesOfFreedom: number | null
-    cohensD: number | null
-    confidenceInterval: { lower: number; upper: number } | null
-    controlMean: number | null
-    experimentalMean: number | null
-    controlStd: number | null
-    experimentalStd: number | null
-    meanDifference: number | null
+    convergenceControlMedian: number | null
+    convergenceExperimentalMedian: number | null
+    convergenceControlIQR: { Q1: number; Q3: number } | null
+    convergenceExperimentalIQR: { Q1: number; Q3: number } | null
     totalGenerationsControl: number
     totalGenerationsExperimental: number
     controlExperimentCount: number
@@ -71,7 +65,6 @@ interface DashboardData {
   nonParametricTest?: any
   effectSizes?: {
     hedgesG: any
-    cles: any
   }
   powerAnalysis?: {
     achievedPower: any
@@ -79,11 +72,11 @@ interface DashboardData {
     requiredFor90: any
     requiredFor95: any
   }
-  bootstrapCI?: any
   distributionData?: {
     control: any
     experimental: any
   }
+  pairedAnalysis?: any
 }
 
 export default function DashboardPage() {
@@ -131,7 +124,7 @@ export default function DashboardPage() {
     controlled: [
       { name: "Population Size", description: "Fixed number of agents per generation", value: 100 },
       { name: "Selection Pressure", description: "Tournament size / truncation ratio", value: "Top 20%" },
-      { name: "Network Architecture", description: "Input/Hidden/Output layers", value: "24-16-16-4" },
+      { name: "Network Architecture", description: "Input/Hidden/Output layers", value: "24-64-4" },
       { name: "Simulation Ticks", description: "Ticks per generation", value: 750 },
       { name: "Random Seed Pairings", description: "Identical seeds for Control/Experimental pairs", value: "Matched" }
     ]
@@ -420,6 +413,7 @@ export default function DashboardPage() {
                     controlExperimentCount={stats?.controlExperimentCount ?? 0}
                     experimentalExperimentCount={stats?.experimentalExperimentCount ?? 0}
                     convergencePValue={stats?.convergencePValue ?? null}
+                    convergencePValueOneTailed={stats?.convergencePValueOneTailed ?? null}
                     convergenceIsSignificant={stats?.convergenceIsSignificant ?? false}
                     convergenceTStatistic={stats?.convergenceTStatistic ?? null}
                     convergenceDegreesOfFreedom={stats?.convergenceDegreesOfFreedom ?? null}
@@ -430,17 +424,11 @@ export default function DashboardPage() {
                     convergenceControlStd={stats?.convergenceControlStd ?? null}
                     convergenceExperimentalStd={stats?.convergenceExperimentalStd ?? null}
                     convergenceMeanDifference={stats?.convergenceMeanDifference ?? null}
-                    pValue={stats?.pValue ?? null}
-                    isSignificant={stats?.isSignificant ?? false}
-                    tStatistic={stats?.tStatistic ?? null}
-                    degreesOfFreedom={stats?.degreesOfFreedom ?? null}
-                    cohensD={stats?.cohensD ?? null}
-                    confidenceInterval={stats?.confidenceInterval ?? null}
-                    controlMean={stats?.controlMean ?? null}
-                    experimentalMean={stats?.experimentalMean ?? null}
-                    controlStd={stats?.controlStd ?? null}
-                    experimentalStd={stats?.experimentalStd ?? null}
-                    meanDifference={stats?.meanDifference ?? null}
+                    convergenceControlMedian={stats?.convergenceControlMedian ?? null}
+                    convergenceExperimentalMedian={stats?.convergenceExperimentalMedian ?? null}
+                    convergenceControlIQR={stats?.convergenceControlIQR ?? null}
+                    convergenceExperimentalIQR={stats?.convergenceExperimentalIQR ?? null}
+                    statisticalPowerLevel={stats?.statisticalPowerLevel ?? 'insufficient'}
                   />
                 </div>
                 <div className="space-y-6">
@@ -494,7 +482,6 @@ export default function DashboardPage() {
 
               <EffectSizeCard
                 hedgesG={dashboardData?.effectSizes?.hedgesG ?? null}
-                cles={dashboardData?.effectSizes?.cles ?? null}
                 cohensD={dashboardData?.effectSizes?.hedgesG?.cohensD ?? stats?.convergenceCohensD ?? null}
               />
             </>

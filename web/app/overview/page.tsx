@@ -440,14 +440,64 @@ export default function OverviewPage() {
 
         <SectionCard num={4} id={sectionIds.experimentNetworks} title="How does this experiment implement neural networks?">
           <p>
-            Each organism has exactly one neural network as its brain. That network has 24 inputs
-            from raycasts (virtual beams in 8 directions that report how far the nearest
-            food or other organism is). It has one hidden layer of 64 neurons—a middle layer that
-            mixes the 24 inputs into 64 new numbers, giving the network room to learn patterns. It
-            has 4 outputs: thrust (move forward), turn (rotate), shoot (fire a projectile to steal
-            energy from others), and split (see Key terms).
+            In this experiment, each organism is controlled by a specific neural network architecture
+            often described as <strong>24-64-4</strong>. This code describes the shape of its
+            &quot;brain&quot; and how it processes information. You can think of it like a team of
+            workers passing messages down a line.
           </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2">
+            1. The Inputs: 24 &quot;Eyes&quot; (Sensors)
+          </h3>
           <p>
+            The network starts with <strong>24 inputs</strong>. Imagine the organism has 8 eyes
+            looking in 8 different directions (forward, backward, left, right, and diagonals).
+            Each eye measures exactly 3 things:
+          </p>
+          <ul className="list-disc pl-6 space-y-1 mb-4">
+            <li>How far is the nearest <strong>Wall</strong>?</li>
+            <li>How far is the nearest <strong>Food</strong>?</li>
+            <li>How far is the nearest <strong>Enemy</strong>?</li>
+          </ul>
+          <p>
+            With 8 directions × 3 measurements each, that gives us the <strong>24 inputs</strong>.
+            These numbers are the only thing the organism &quot;sees.&quot;
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2">
+            2. The Hidden Layer: 64 &quot;Thinkers&quot;
+          </h3>
+          <p>
+            The information then travels to a large <strong>hidden layer</strong> containing
+            <strong>64 neurons</strong>.
+          </p>
+          <ul className="list-disc pl-6 space-y-2 mb-4">
+            <li>
+              Instead of splitting duties between small groups, this large group of 64 neurons works together to process the
+              raw input data. They identify patterns (like "food is close") and calculate the best strategy
+              simultaneously. Having more neurons in a single layer allows the network to capture complex
+              relationships between the inputs directly.
+            </li>
+          </ul>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2">
+            3. The Outputs: 4 Actions
+          </h3>
+          <p>
+            Finally, the network produces <strong>4 outputs</strong>, which are the instructions sent
+            to the organism&apos;s body:
+          </p>
+          <ul className="list-disc pl-6 space-y-1 mb-4">
+            <li><strong>Thrust:</strong> How hard to push forward (0 to 100%).</li>
+            <li><strong>Turn:</strong> Which way to steer (-1 for left, +1 for right).</li>
+            <li><strong>Shoot:</strong> Whether to fire a projectile (if this number is high enough, it shoots).</li>
+            <li><strong>Split:</strong> Whether to reproduce/split (if high enough).</li>
+          </ul>
+          <p>
+            This entire process happens instantly, dozens of times per second, allowing the organism to
+            react to its world in real-time.
+          </p>
+          <p className="mt-4">
             We run 1,000 organisms at once. To do this quickly we use a graphics card (GPU) to run
             all 1,000 brains in parallel—like having 1,000 calculators working at the same time.
             The software runs on the GPU so we can simulate many generations in a reasonable time.

@@ -30,6 +30,7 @@ export const dynamic = 'force-dynamic'
 
 interface TTestResult {
   pValue: number
+  oneTailedPValue: number  // One-tailed p-value for directional hypothesis (H₁: experimental < control)
   tStatistic: number
   degreesOfFreedom: number
   controlMean: number
@@ -37,7 +38,7 @@ interface TTestResult {
   controlStd: number
   experimentalStd: number
   meanDifference: number
-  cohensD: number | null  // Effect size
+  cohensD: number | null  // Signed effect size (negative = experimental has lower values)
   confidenceInterval: { lower: number; upper: number } | null  // 95% CI for mean difference
   sampleSizes: { control: number; experimental: number }
 }
@@ -881,6 +882,7 @@ function welchTTest(sample1: number[], sample2: number[]): TTestResult {
   if (n1 < 2 || n2 < 2) {
     return {
       pValue: 1,
+      oneTailedPValue: 1,
       tStatistic: 0,
       degreesOfFreedom: 0,
       controlMean: n1 > 0 ? sample1.reduce((a, b) => a + b, 0) / n1 : 0,
@@ -920,10 +922,12 @@ function welchTTest(sample1: number[], sample2: number[]): TTestResult {
     // Use Number.MIN_VALUE instead of 0 to ensure proper scientific notation display
     // (e.g. 5e-324) rather than "0" or "0.00e+0"
     const pValue = hasDiff ? Number.MIN_VALUE : 1
+    const oneTailedPValue = hasDiff ? Number.MIN_VALUE : 1
     const tStatistic = hasDiff ? (meanDiff > 0 ? Infinity : -Infinity) : 0
 
     return {
       pValue,
+      oneTailedPValue,
       tStatistic,
       degreesOfFreedom: n1 + n2 - 2,
       controlMean: mean1,
@@ -947,9 +951,19 @@ function welchTTest(sample1: number[], sample2: number[]): TTestResult {
   // P-value from t-distribution (two-tailed)
   const pValue = 2 * tDistributionCDF(-Math.abs(tStatistic), df)
 
-  // Cohen's d effect size (pooled standard deviation)
+  // One-tailed p-value for directional hypothesis
+  // H₁: experimental mean < control mean (i.e., sample2 < sample1)
+  // This corresponds to tStatistic < 0 (since tStatistic = (mean2 - mean1) / SE)
+  // One-tailed p = P(T ≤ observed t | H₀) when testing for sample2 < sample1
+  const oneTailedPValue = tStatistic < 0
+    ? tDistributionCDF(tStatistic, df)      // t is negative → experimental is lower (matches H₁)
+    : 1 - tDistributionCDF(tStatistic, df)  // t is positive → experimental is higher (against H₁)
+
+  // Cohen's d effect size (pooled standard deviation) — SIGNED
+  // Sign convention: d = (mean2 - mean1) / pooledStd
+  // Negative d = experimental (sample2) has lower values → supports "fewer generations" hypothesis
   const pooledStd = Math.sqrt(((n1 - 1) * variance1 + (n2 - 1) * variance2) / (n1 + n2 - 2))
-  const cohensD = pooledStd > 0 ? Math.abs(meanDiff) / pooledStd : null
+  const cohensD = pooledStd > 0 ? meanDiff / pooledStd : null
 
   // 95% Confidence Interval for mean difference
   const tCritical = tDistributionQuantile(0.975, df)  // Two-tailed 95% CI
@@ -961,6 +975,7 @@ function welchTTest(sample1: number[], sample2: number[]): TTestResult {
 
   return {
     pValue,
+    oneTailedPValue,
     tStatistic,
     degreesOfFreedom: df,
     controlMean: mean1,
@@ -971,6 +986,136 @@ function welchTTest(sample1: number[], sample2: number[]): TTestResult {
     cohensD,
     confidenceInterval,
     sampleSizes: { control: n1, experimental: n2 }
+  }
+}
+
+// =============================================================================
+// PAIRED T-TEST FOR MATCHED-SEED ANALYSIS
+// =============================================================================
+// 
+// When experiments use paired seeds (same random_seed for control + experimental),
+// a paired t-test is more powerful than an independent-samples test because it
+// controls for seed-specific variation (e.g., one seed producing a harder initial
+// population for both groups).
+// 
+// Method:
+//   1. Match experiments by random_seed
+//   2. Compute paired differences: d_i = control_i − experimental_i
+//   3. Run a one-sample t-test on the differences: H₁: mean(d) > 0
+//      (positive difference = experimental converged faster)
+// 
+// Test Statistic: t = d̄ / (s_d / √n)
+//   where d̄ = mean of differences, s_d = std of differences, n = number of pairs
+// 
+// Reference: Student (1908). "The Probable Error of a Mean."
+// =============================================================================
+
+interface PairedTTestResult {
+  pValueTwoTailed: number
+  pValueOneTailed: number  // H₁: control > experimental (i.e., experimental converges faster)
+  tStatistic: number
+  degreesOfFreedom: number
+  meanDifference: number  // mean of (control − experimental); positive = experimental faster
+  stdDifference: number
+  seDifference: number
+  nPairs: number
+  cohensD: number | null  // Effect size for paired data: d = d̄ / s_d
+  confidenceInterval: { lower: number; upper: number } | null
+  pairs: { seed: number; control: number; experimental: number; difference: number }[]
+}
+
+function pairedTTest(
+  controlData: { seed: number; value: number }[],
+  experimentalData: { seed: number; value: number }[]
+): PairedTTestResult | null {
+  // Match by seed: for each seed, find a control and experimental value
+  const controlBySeed = new Map<number, number[]>()
+  for (const d of controlData) {
+    if (!controlBySeed.has(d.seed)) controlBySeed.set(d.seed, [])
+    controlBySeed.get(d.seed)!.push(d.value)
+  }
+
+  const experimentalBySeed = new Map<number, number[]>()
+  for (const d of experimentalData) {
+    if (!experimentalBySeed.has(d.seed)) experimentalBySeed.set(d.seed, [])
+    experimentalBySeed.get(d.seed)!.push(d.value)
+  }
+
+  // Build pairs: for each seed present in both groups, pair mean values
+  const pairs: { seed: number; control: number; experimental: number; difference: number }[] = []
+  for (const [seed, controlValues] of controlBySeed) {
+    const experimentalValues = experimentalBySeed.get(seed)
+    if (!experimentalValues || experimentalValues.length === 0) continue
+    
+    // Use mean if multiple experiments per seed per group
+    const controlMean = controlValues.reduce((a, b) => a + b, 0) / controlValues.length
+    const experimentalMean = experimentalValues.reduce((a, b) => a + b, 0) / experimentalValues.length
+    const difference = controlMean - experimentalMean  // Positive = experimental faster
+    
+    pairs.push({ seed, control: controlMean, experimental: experimentalMean, difference })
+  }
+
+  const n = pairs.length
+  if (n < 2) return null  // Need at least 2 pairs
+
+  const differences = pairs.map(p => p.difference)
+  const dBar = differences.reduce((a, b) => a + b, 0) / n
+  const sdDiff = Math.sqrt(
+    differences.reduce((sum, d) => sum + Math.pow(d - dBar, 2), 0) / (n - 1)
+  )
+  const seDiff = sdDiff / Math.sqrt(n)
+
+  if (seDiff === 0) {
+    // All differences are identical
+    const hasDiff = Math.abs(dBar) > 1e-10
+    return {
+      pValueTwoTailed: hasDiff ? Number.MIN_VALUE : 1,
+      pValueOneTailed: hasDiff ? Number.MIN_VALUE : 1,
+      tStatistic: hasDiff ? (dBar > 0 ? Infinity : -Infinity) : 0,
+      degreesOfFreedom: n - 1,
+      meanDifference: dBar,
+      stdDifference: sdDiff,
+      seDifference: seDiff,
+      nPairs: n,
+      cohensD: null,
+      confidenceInterval: null,
+      pairs
+    }
+  }
+
+  const tStat = dBar / seDiff
+  const df = n - 1
+
+  const pTwoTailed = 2 * tDistributionCDF(-Math.abs(tStat), df)
+  // One-tailed: H₁ is that control > experimental (d̄ > 0), i.e., t > 0
+  const pOneTailed = tStat > 0
+    ? 1 - tDistributionCDF(tStat, df)  // Intentionally wrong direction would give large p
+    : tDistributionCDF(tStat, df)
+  // Correct: we want P(T ≥ t_obs) when testing H₁: μ_d > 0
+  const pOneTailedCorrected = 1 - tDistributionCDF(tStat, df)
+
+  // Cohen's d for paired data: d = d̄ / s_d
+  const dCohen = sdDiff > 0 ? dBar / sdDiff : null
+
+  // 95% CI for mean difference
+  const tCrit = tDistributionQuantile(0.975, df)
+  const ci = {
+    lower: dBar - tCrit * seDiff,
+    upper: dBar + tCrit * seDiff
+  }
+
+  return {
+    pValueTwoTailed: pTwoTailed,
+    pValueOneTailed: pOneTailedCorrected,
+    tStatistic: tStat,
+    degreesOfFreedom: df,
+    meanDifference: dBar,
+    stdDifference: sdDiff,
+    seDifference: seDiff,
+    nPairs: n,
+    cohensD: dCohen,
+    confidenceInterval: ci,
+    pairs
   }
 }
 
@@ -1200,29 +1345,23 @@ export interface DashboardData {
     controlPeakFitness: number | null
     experimentalPeakFitness: number | null
     // Primary: Convergence generation t-test (hypothesis test)
-    convergencePValue: number | null
+    convergencePValue: number | null           // Two-tailed (conservative)
+    convergencePValueOneTailed: number | null   // One-tailed (directional H₁: exp < ctrl)
     convergenceTStatistic: number | null
-    convergenceIsSignificant: boolean
+    convergenceIsSignificant: boolean          // Based on one-tailed test (α = 0.05)
     convergenceControlMean: number | null
     convergenceExperimentalMean: number | null
-    convergenceCohensD: number | null
+    convergenceCohensD: number | null          // Signed: negative = experimental faster
     convergenceConfidenceInterval: { lower: number; upper: number } | null
     convergenceDegreesOfFreedom: number | null
     convergenceControlStd: number | null
     convergenceExperimentalStd: number | null
     convergenceMeanDifference: number | null  // Control − Experimental (positive = experimental faster)
-    // Secondary: Fitness t-test (descriptive only)
-    pValue: number | null
-    tStatistic: number | null
-    isSignificant: boolean
-    degreesOfFreedom: number | null
-    cohensD: number | null
-    confidenceInterval: { lower: number; upper: number } | null
-    controlMean: number | null
-    experimentalMean: number | null
-    controlStd: number | null
-    experimentalStd: number | null
-    meanDifference: number | null
+    // Descriptive statistics (median, IQR)
+    convergenceControlMedian: number | null
+    convergenceExperimentalMedian: number | null
+    convergenceControlIQR: { Q1: number; Q3: number } | null
+    convergenceExperimentalIQR: { Q1: number; Q3: number } | null
     // Experiment counts and generations
     totalGenerationsControl: number
     totalGenerationsExperimental: number
@@ -1247,12 +1386,11 @@ export interface DashboardData {
     recommendation: 'parametric' | 'parametric_with_caution' | 'non_parametric'
     recommendationText: string
   }
-  // Scientific Rigor - Non-parametric Test
+  // Scientific Rigor - Non-parametric Test (backup if normality fails)
   nonParametricTest?: MannWhitneyResult
-  // Scientific Rigor - Enhanced Effect Sizes
+  // Scientific Rigor - Effect Size (Hedges' g = bias-corrected Cohen's d)
   effectSizes?: {
     hedgesG: HedgesGResult
-    cles: CLESResult
   }
   // Scientific Rigor - Power Analysis
   powerAnalysis?: {
@@ -1261,13 +1399,13 @@ export interface DashboardData {
     requiredFor90: RequiredSampleSizeResult
     requiredFor95: RequiredSampleSizeResult
   }
-  // Scientific Rigor - Bootstrap CI
-  bootstrapCI?: BootstrapCIResult
   // Scientific Rigor - Distribution Data (for visualizations)
   distributionData?: {
     control: DistributionStats
     experimental: DistributionStats
   }
+  // Scientific Rigor - Paired-Seed Analysis (matched-pairs t-test)
+  pairedAnalysis?: PairedTTestResult
 }
 
 // =============================================================================
@@ -1719,6 +1857,7 @@ export async function GET() {
     // T-test on convergence generations (PRIMARY hypothesis test)
     let convergenceTTestResult: TTestResult | null = null
     let convergencePValue: number | null = null
+    let convergencePValueOneTailed: number | null = null
     let convergenceTStatistic: number | null = null
     let convergenceIsSignificant = false
     let convergenceControlMean: number | null = null
@@ -1730,10 +1869,16 @@ export async function GET() {
     let convergenceExperimentalStd: number | null = null
     // Control − Experimental (positive = experimental reached Nash in fewer generations)
     let convergenceMeanDifference: number | null = null
+    // Descriptive statistics
+    let convergenceControlMedian: number | null = null
+    let convergenceExperimentalMedian: number | null = null
+    let convergenceControlIQR: { Q1: number; Q3: number } | null = null
+    let convergenceExperimentalIQR: { Q1: number; Q3: number } | null = null
 
     if (controlConvergenceGens.length >= 2 && experimentalConvergenceGens.length >= 2) {
       convergenceTTestResult = welchTTest(controlConvergenceGens, experimentalConvergenceGens)
       convergencePValue = convergenceTTestResult.pValue
+      convergencePValueOneTailed = convergenceTTestResult.oneTailedPValue
       convergenceTStatistic = convergenceTTestResult.tStatistic
       convergenceControlMean = convergenceTTestResult.controlMean
       convergenceExperimentalMean = convergenceTTestResult.experimentalMean
@@ -1744,7 +1889,8 @@ export async function GET() {
       convergenceExperimentalStd = convergenceTTestResult.experimentalStd
       // TTestResult.meanDifference is Experimental − Control; we want Control − Experimental
       convergenceMeanDifference = -convergenceTTestResult.meanDifference
-      convergenceIsSignificant = convergencePValue < 0.05
+      // Use ONE-TAILED test for significance (directional hypothesis: experimental < control)
+      convergenceIsSignificant = convergencePValueOneTailed < 0.05
 
       // Update improvement percentage from multi-experiment data (more accurate)
       if (convergenceControlMean && convergenceExperimentalMean && convergenceControlMean > 0) {
@@ -1757,6 +1903,22 @@ export async function GET() {
       convergenceMeanDifference = convergenceControlMean - convergenceExperimentalMean
       if (convergenceControlMean > 0) {
         convergenceImprovement = ((convergenceControlMean - convergenceExperimentalMean) / convergenceControlMean) * 100
+      }
+    }
+
+    // Descriptive statistics: median and IQR for convergence generations
+    if (controlConvergenceGens.length >= 1) {
+      const sortedCtrl = [...controlConvergenceGens].sort((a, b) => a - b)
+      convergenceControlMedian = percentile(sortedCtrl, 50)
+      if (sortedCtrl.length >= 4) {
+        convergenceControlIQR = { Q1: percentile(sortedCtrl, 25), Q3: percentile(sortedCtrl, 75) }
+      }
+    }
+    if (experimentalConvergenceGens.length >= 1) {
+      const sortedExp = [...experimentalConvergenceGens].sort((a, b) => a - b)
+      convergenceExperimentalMedian = percentile(sortedExp, 50)
+      if (sortedExp.length >= 4) {
+        convergenceExperimentalIQR = { Q1: percentile(sortedExp, 25), Q3: percentile(sortedExp, 75) }
       }
     }
 
@@ -1785,7 +1947,6 @@ export async function GET() {
     let nonParametricTest: DashboardData['nonParametricTest'] = undefined
     let effectSizes: DashboardData['effectSizes'] = undefined
     let powerAnalysisResult: DashboardData['powerAnalysis'] = undefined
-    let bootstrapCIResult: DashboardData['bootstrapCI'] = undefined
     let distributionData: DashboardData['distributionData'] = undefined
 
     // Track achieved power for power level (from convergence analysis)
@@ -1836,10 +1997,8 @@ export async function GET() {
       nonParametricTest = mannWhitneyUTest(controlConvergenceGens, experimentalConvergenceGens)
 
       const hedgesGResult = hedgesG(controlConvergenceGens, experimentalConvergenceGens)
-      const clesResult = commonLanguageEffectSize(controlConvergenceGens, experimentalConvergenceGens)
       effectSizes = {
-        hedgesG: hedgesGResult,
-        cles: clesResult
+        hedgesG: hedgesGResult
       }
 
       const exactEffectSize = hedgesGResult.hedgesG ?? convergenceCohensD ?? 0
@@ -1878,12 +2037,71 @@ export async function GET() {
 
       achievedPowerValue = achievedPower.power
 
-      bootstrapCIResult = bootstrapCI(controlConvergenceGens, experimentalConvergenceGens, 5000)
-
       distributionData = {
         control: getDistributionStats(controlConvergenceGens),
         experimental: getDistributionStats(experimentalConvergenceGens)
       }
+    }
+
+    // =========================================================================
+    // PAIRED-SEED ANALYSIS (matched-pairs t-test)
+    // =========================================================================
+    // Match experiments by random_seed and run a paired t-test.
+    // This is more powerful than unpaired because it controls for seed variation.
+    // =========================================================================
+
+    // Build seed → convergence_gen maps from the experiment-level convergence data
+    interface ExperimentWithSeed {
+      id: string
+      random_seed: number
+      experiment_group: string
+    }
+
+    // Fetch seeds for all completed experiments
+    const controlExperimentsWithSeeds = allControlExperiments as (Experiment & { random_seed: number })[]
+    const experimentalExperimentsWithSeeds = allExperimentalExperiments as (Experiment & { random_seed: number })[]
+
+    // Map experiment IDs to convergence generations
+    const getConvergenceForExperiment = (exp: Experiment, genMap: Map<string, Generation[]>): number | null => {
+      const expGens = genMap.get(String(exp.id)) || []
+      expGens.sort((a, b) => Number(a.generation_number) - Number(b.generation_number))
+      if (expGens.length < 10) return null
+      const varianceData = expGens.slice(5)
+        .filter(g => g.entropy_variance != null)
+        .map(g => ({ gen: Number(g.generation_number), variance: Number(g.entropy_variance) }))
+      if (varianceData.length === 0) return null
+      const peakVariance = Math.max(...varianceData.map(d => d.variance))
+      const peakIndex = varianceData.findIndex(d => d.variance === peakVariance)
+      if (peakVariance <= 0.0001) return null
+      const afterPeak = varianceData.slice(peakIndex)
+      for (let i = 0; i <= afterPeak.length - STABILITY_WINDOW; i++) {
+        const window = afterPeak.slice(i, i + STABILITY_WINDOW)
+        if (window.every(d => d.variance < CONVERGENCE_THRESHOLD)) {
+          return window[0].gen
+        }
+      }
+      return null
+    }
+
+    const controlSeedData: { seed: number; value: number }[] = []
+    for (const exp of controlExperimentsWithSeeds) {
+      const convGen = getConvergenceForExperiment(exp, controlGenerationsMap)
+      if (convGen !== null && exp.random_seed != null) {
+        controlSeedData.push({ seed: Number(exp.random_seed), value: convGen })
+      }
+    }
+
+    const experimentalSeedData: { seed: number; value: number }[] = []
+    for (const exp of experimentalExperimentsWithSeeds) {
+      const convGen = getConvergenceForExperiment(exp, experimentalGenerationsMap)
+      if (convGen !== null && exp.random_seed != null) {
+        experimentalSeedData.push({ seed: Number(exp.random_seed), value: convGen })
+      }
+    }
+
+    let pairedAnalysisResult: PairedTTestResult | null = null
+    if (controlSeedData.length >= 2 && experimentalSeedData.length >= 2) {
+      pairedAnalysisResult = pairedTTest(controlSeedData, experimentalSeedData)
     }
 
     // Power level from convergence analysis (converged-experiment counts)
@@ -1908,6 +2126,7 @@ export async function GET() {
         experimentalPeakFitness,
         // Primary: convergence generation t-test (hypothesis test)
         convergencePValue,
+        convergencePValueOneTailed,
         convergenceTStatistic,
         convergenceIsSignificant,
         convergenceControlMean,
@@ -1918,18 +2137,12 @@ export async function GET() {
         convergenceControlStd,
         convergenceExperimentalStd,
         convergenceMeanDifference,
-        // Secondary: Fitness t-test (descriptive only)
-        pValue,
-        tStatistic,
-        isSignificant,
-        degreesOfFreedom,
-        cohensD,
-        confidenceInterval,
-        controlMean,
-        experimentalMean,
-        controlStd,
-        experimentalStd,
-        meanDifference,
+        // Descriptive statistics
+        convergenceControlMedian,
+        convergenceExperimentalMedian,
+        convergenceControlIQR,
+        convergenceExperimentalIQR,
+        // Experiment counts and generations
         totalGenerationsControl: allControlGenerations.length,
         totalGenerationsExperimental: allExperimentalGenerations.length,
         controlExperimentCount,
@@ -1945,8 +2158,8 @@ export async function GET() {
       nonParametricTest,
       effectSizes,
       powerAnalysis: powerAnalysisResult,
-      bootstrapCI: bootstrapCIResult,
-      distributionData
+      distributionData,
+      pairedAnalysis: pairedAnalysisResult ?? undefined
     }
 
     return NextResponse.json(response, {

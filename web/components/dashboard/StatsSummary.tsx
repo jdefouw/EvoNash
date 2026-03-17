@@ -13,35 +13,29 @@ interface StatsSummaryProps {
   totalGenerationsControl: number
   totalGenerationsExperimental: number
   // Primary: convergence-generation t-test (hypothesis test)
-  convergencePValue: number | null
+  convergencePValue: number | null           // Two-tailed
+  convergencePValueOneTailed?: number | null  // One-tailed (directional)
   convergenceIsSignificant: boolean
   convergenceTStatistic?: number | null
   convergenceDegreesOfFreedom?: number | null
-  convergenceCohensD?: number | null
+  convergenceCohensD?: number | null         // Signed: negative = experimental faster
   convergenceConfidenceInterval?: { lower: number; upper: number } | null
   convergenceControlMean?: number | null
   convergenceExperimentalMean?: number | null
   convergenceControlStd?: number | null
   convergenceExperimentalStd?: number | null
   convergenceMeanDifference?: number | null
+  // Descriptive statistics
+  convergenceControlMedian?: number | null
+  convergenceExperimentalMedian?: number | null
+  convergenceControlIQR?: { Q1: number; Q3: number } | null
+  convergenceExperimentalIQR?: { Q1: number; Q3: number } | null
   controlConvergedCount?: number
   experimentalConvergedCount?: number
   // Statistical power and sample size (from convergence analysis)
   controlExperimentCount?: number
   experimentalExperimentCount?: number
   statisticalPowerLevel?: StatisticalPowerLevel
-  // Secondary/descriptive (Fitness t-test - not used for hypothesis)
-  pValue?: number | null
-  isSignificant?: boolean
-  tStatistic?: number | null
-  degreesOfFreedom?: number | null
-  cohensD?: number | null
-  confidenceInterval?: { lower: number; upper: number } | null
-  controlMean?: number | null
-  experimentalMean?: number | null
-  controlStd?: number | null
-  experimentalStd?: number | null
-  meanDifference?: number | null
 }
 
 export default function StatsSummary({
@@ -53,6 +47,7 @@ export default function StatsSummary({
   controlPeakFitness,
   experimentalPeakFitness,
   convergencePValue,
+  convergencePValueOneTailed = null,
   convergenceIsSignificant,
   convergenceTStatistic = null,
   convergenceDegreesOfFreedom = null,
@@ -63,22 +58,17 @@ export default function StatsSummary({
   convergenceControlStd = null,
   convergenceExperimentalStd = null,
   convergenceMeanDifference = null,
+  convergenceControlMedian = null,
+  convergenceExperimentalMedian = null,
+  convergenceControlIQR = null,
+  convergenceExperimentalIQR = null,
   controlConvergedCount,
   experimentalConvergedCount,
   totalGenerationsControl,
   totalGenerationsExperimental,
   controlExperimentCount = 0,
   experimentalExperimentCount = 0,
-  statisticalPowerLevel = 'insufficient',
-  tStatistic = null,
-  degreesOfFreedom = null,
-  cohensD = null,
-  confidenceInterval = null,
-  controlMean = null,
-  experimentalMean = null,
-  controlStd = null,
-  experimentalStd = null,
-  meanDifference = null
+  statisticalPowerLevel = 'insufficient'
 }: StatsSummaryProps) {
   // Effect size interpretation (Cohen's conventions) - use convergence for primary display
   const getEffectSizeLabel = (d: number | null): { label: string; color: string } => {
@@ -90,7 +80,7 @@ export default function StatsSummary({
     return { label: 'Large', color: 'text-green-600 dark:text-green-400' }
   }
 
-  const effectSize = getEffectSizeLabel(convergenceCohensD ?? cohensD)
+  const effectSize = getEffectSizeLabel(convergenceCohensD ?? null)
   const convergedN = controlConvergedCount ?? controlExperimentCount
   const convergedM = experimentalConvergedCount ?? experimentalExperimentCount
 
@@ -202,18 +192,20 @@ export default function StatsSummary({
                     }
                   </h4>
                   <p className="text-white/90">
-                    {convergenceIsSignificant && convergencePValue !== null
-                      ? `Generations to Nash equilibrium: statistically significant (p = ${formatPValue(convergencePValue)} < 0.05)`
+                    {convergenceIsSignificant && (convergencePValueOneTailed ?? convergencePValue) !== null
+                      ? `Generations to Nash equilibrium: statistically significant (p = ${formatPValue(convergencePValueOneTailed ?? convergencePValue!)} < 0.05, one-tailed)`
                       : 'Results pending sufficient converged experiments for statistical significance'
                     }
                   </p>
                 </div>
                 <div className="text-right">
                   <div className="text-4xl font-bold">
-                    {convergencePValue !== null ? `p = ${formatPValue(convergencePValue, 3)}` : 'p = -'}
+                    {(convergencePValueOneTailed ?? convergencePValue) !== null
+                      ? `p = ${formatPValue((convergencePValueOneTailed ?? convergencePValue)!, 3)}`
+                      : 'p = -'}
                   </div>
                   <div className="text-sm text-white/80">
-                    {convergenceIsSignificant ? 'Significant' : 'Not Significant'}
+                    {convergenceIsSignificant ? 'Significant (one-tailed)' : 'Not Significant'}
                   </div>
                 </div>
               </div>
@@ -244,10 +236,13 @@ export default function StatsSummary({
                   <strong className="text-gray-700 dark:text-gray-300">What is a p-value?</strong> The p-value (probability value) is the probability of seeing a difference as large as the one observed—or larger—between the two groups, <em>if in reality there were no true difference</em> (i.e., if the null hypothesis were true). A small p-value means the observed result would be very unlikely by chance alone, so we have evidence against &quot;no difference.&quot;
                 </p>
                 <p>
-                  <strong className="text-gray-700 dark:text-gray-300">How it&apos;s calculated here:</strong> We use Welch&apos;s two-sample t-test on <strong>generations to Nash equilibrium</strong>: one value per experiment (control vs experimental). The test compares the mean number of generations each group took to reach Nash. The resulting p-value answers: &quot;If adaptive mutation had no real effect, how likely would we be to see a difference this large (or larger) just from random variation?&quot;
+                  <strong className="text-gray-700 dark:text-gray-300">One-tailed test:</strong> Because our hypothesis predicts a specific direction — that adaptive mutation converges <em>faster</em> (in fewer generations) — we use a <strong>one-tailed test</strong>. This tests H₁: μ<sub>experimental</sub> &lt; μ<sub>control</sub> directly, and is more statistically powerful for directional hypotheses than a two-tailed test. Both one-tailed and two-tailed p-values are reported for transparency.
                 </p>
                 <p>
-                  <strong className="text-gray-700 dark:text-gray-300">Why it supports the hypothesis:</strong> Our hypothesis is that the experimental group (adaptive mutation) reaches Nash equilibrium in <em>fewer</em> generations than the control. When p &lt; 0.05, we reject the null hypothesis of &quot;no difference&quot; and conclude the observed faster convergence is statistically significant—i.e., unlikely to be due to chance. A very small p-value (e.g. &lt; 0.0001) indicates strong evidence that the adaptive strategy genuinely reduces generations to Nash.
+                  <strong className="text-gray-700 dark:text-gray-300">How it&apos;s calculated here:</strong> We use Welch&apos;s two-sample t-test on <strong>generations to Nash equilibrium</strong>: one value per experiment (control vs experimental). The test compares the mean number of generations each group took to reach Nash. The one-tailed p-value answers: &quot;If adaptive mutation had no real effect, how likely would the experimental group converge faster to this degree or more, just from random variation?&quot;
+                </p>
+                <p>
+                  <strong className="text-gray-700 dark:text-gray-300">Why it supports the hypothesis:</strong> When p &lt; 0.05 (one-tailed), we reject the null hypothesis and conclude the observed faster convergence is statistically significant—i.e., unlikely to be due to chance. A very small p-value (e.g. &lt; 0.0001) indicates strong evidence that the adaptive strategy genuinely reduces generations to Nash.
                 </p>
               </div>
             </div>
@@ -306,30 +301,39 @@ export default function StatsSummary({
                   </div>
                 </div>
                 <div>
-                  <div className="text-gray-500 dark:text-gray-400">p-Value (two-tailed)</div>
+                  <div className="text-gray-500 dark:text-gray-400">p-Value (one-tailed)</div>
                   <div className="font-mono font-bold text-gray-900 dark:text-white">
-                    {convergencePValue !== null ? formatPValue(convergencePValue) : '-'}
+                    {convergencePValueOneTailed !== null ? formatPValue(convergencePValueOneTailed) : (convergencePValue !== null ? formatPValue(convergencePValue) : '-')}
                   </div>
+                  <div className="text-xs text-gray-400 dark:text-gray-500">H₁: exp &lt; ctrl</div>
                 </div>
                 <div>
                   <div className="text-gray-500 dark:text-gray-400">Significance (α = 0.05)</div>
                   <div className={`font-bold ${convergenceIsSignificant ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`}>
-                    {convergencePValue !== null ? (convergenceIsSignificant ? 'Reject H₀' : 'Fail to Reject H₀') : '-'}
+                    {(convergencePValueOneTailed ?? convergencePValue) !== null ? (convergenceIsSignificant ? 'Reject H₀ → Supports H₁' : 'Fail to Reject H₀') : '-'}
                   </div>
                 </div>
               </div>
+
+              {/* Two-tailed p-value for transparency */}
+              {convergencePValue !== null && convergencePValueOneTailed !== null && (
+                <div className="mb-4 text-xs text-gray-500 dark:text-gray-400">
+                  Two-tailed p-value: {formatPValue(convergencePValue)} (reported for transparency; one-tailed is primary because the hypothesis is directional)
+                </div>
+              )}
 
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm border-t border-gray-200 dark:border-gray-700 pt-4">
                 <div>
                   <div className="text-gray-500 dark:text-gray-400">Cohen&apos;s d (Effect Size)</div>
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-bold text-gray-900 dark:text-white">
-                      {convergenceCohensD !== null ? convergenceCohensD.toFixed(3) : '-'}
+                      {convergenceCohensD !== null ? (convergenceCohensD > 0 ? '+' : '') + convergenceCohensD.toFixed(3) : '-'}
                     </span>
                     <span className={`text-xs font-medium ${effectSize.color}`}>
-                      ({effectSize.label})
+                      ({effectSize.label}{convergenceCohensD !== null ? (convergenceCohensD < 0 ? ', favoring experimental' : convergenceCohensD > 0 ? ', favoring control' : '') : ''})
                     </span>
                   </div>
+                  <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Negative = experimental converges in fewer generations</div>
                 </div>
                 <div>
                   <div className="text-gray-500 dark:text-gray-400">Mean Difference (Ctrl − Exp) generations</div>
@@ -350,17 +354,29 @@ export default function StatsSummary({
 
               <div className="grid grid-cols-2 gap-4 text-sm border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
                 <div>
-                  <div className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">Control: mean generations to Nash (n={convergedN})</div>
+                  <div className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">Control: generations to Nash (n={convergedN})</div>
                   <div className="text-gray-600 dark:text-gray-400">
                     Mean: <span className="font-mono font-bold text-gray-900 dark:text-white">{convergenceControlMean !== null ? convergenceControlMean.toFixed(0) : '-'}</span>
                     {' '}± <span className="font-mono">{convergenceControlStd !== null ? convergenceControlStd.toFixed(0) : '-'}</span>
                   </div>
+                  <div className="text-gray-600 dark:text-gray-400">
+                    Median: <span className="font-mono font-bold text-gray-900 dark:text-white">{convergenceControlMedian !== null ? convergenceControlMedian.toFixed(0) : '-'}</span>
+                    {convergenceControlIQR && (
+                      <span className="text-xs ml-1">(IQR: {convergenceControlIQR.Q1.toFixed(0)}–{convergenceControlIQR.Q3.toFixed(0)})</span>
+                    )}
+                  </div>
                 </div>
                 <div>
-                  <div className="text-xs text-purple-600 dark:text-purple-400 font-medium mb-1">Experimental: mean generations to Nash (n={convergedM})</div>
+                  <div className="text-xs text-purple-600 dark:text-purple-400 font-medium mb-1">Experimental: generations to Nash (n={convergedM})</div>
                   <div className="text-gray-600 dark:text-gray-400">
                     Mean: <span className="font-mono font-bold text-gray-900 dark:text-white">{convergenceExperimentalMean !== null ? convergenceExperimentalMean.toFixed(0) : '-'}</span>
                     {' '}± <span className="font-mono">{convergenceExperimentalStd !== null ? convergenceExperimentalStd.toFixed(0) : '-'}</span>
+                  </div>
+                  <div className="text-gray-600 dark:text-gray-400">
+                    Median: <span className="font-mono font-bold text-gray-900 dark:text-white">{convergenceExperimentalMedian !== null ? convergenceExperimentalMedian.toFixed(0) : '-'}</span>
+                    {convergenceExperimentalIQR && (
+                      <span className="text-xs ml-1">(IQR: {convergenceExperimentalIQR.Q1.toFixed(0)}–{convergenceExperimentalIQR.Q3.toFixed(0)})</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -374,9 +390,12 @@ export default function StatsSummary({
               <p className="text-sm text-blue-700 dark:text-blue-400">
                 {convergenceIsSignificant ? (
                   <>
-                    The experimental group (Adaptive Mutation) reached Nash equilibrium in significantly fewer generations than the control group (p = {convergencePValue != null ? formatPValue(convergencePValue) : '—'}).
+                    The experimental group (Adaptive Mutation) reached Nash equilibrium in significantly fewer generations than the control group (p = {(convergencePValueOneTailed ?? convergencePValue) != null ? formatPValue((convergencePValueOneTailed ?? convergencePValue)!) : '—'}, one-tailed).
                     {convergenceImprovement !== null && convergenceImprovement > 0 && (
                       <> The adaptive strategy converged {convergenceImprovement.toFixed(0)}% faster, supporting the hypothesis that fitness-scaled mutation rates accelerate convergence to Nash equilibrium.</>
+                    )}
+                    {convergenceCohensD !== null && (
+                      <> Effect size: d = {convergenceCohensD.toFixed(2)} ({effectSize.label.toLowerCase()}{convergenceCohensD < 0 ? ', favoring experimental' : ''}).</>
                     )}
                   </>
                 ) : (

@@ -236,7 +236,7 @@ The simulation environment is a deterministic biological sandbox:
 
 ### Agent Neural Network
 
-- **Inputs** (24): 8 raycasts × 3 values + self-state
+- **Inputs** (24): 8 raycasts × 3 values (Wall, Food, Enemy)
 - **Hidden**: 64 neurons (configurable)
 - **Outputs** (4): Thrust, Turn, Shoot, Split
 
