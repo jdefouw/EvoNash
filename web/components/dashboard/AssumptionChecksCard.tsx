@@ -52,6 +52,21 @@ export default function AssumptionChecksCard({
   recommendation,
   recommendationText
 }: AssumptionChecksCardProps) {
+  // Central Limit Theorem override: with large samples (n > 30 per group),
+  // Welch's t-test is robust to non-normality, so soften the recommendation.
+  const controlN = normalityControl?.sampleSize ?? varianceEquality?.sampleSizes?.control ?? 0
+  const experimentalN = normalityExperimental?.sampleSize ?? varianceEquality?.sampleSizes?.experimental ?? 0
+  const largeN = controlN > 30 && experimentalN > 30
+
+  // Effective recommendation: override 'non_parametric' when sample sizes are large
+  const effectiveRecommendation = (recommendation === 'non_parametric' && largeN)
+    ? 'parametric_with_caution' as const
+    : recommendation
+
+  const effectiveText = (recommendation === 'non_parametric' && largeN)
+    ? `Normality assumption is violated, but with n = ${controlN} + ${experimentalN} (both > 30), Welch's t-test remains robust via the Central Limit Theorem. Unequal variances are handled by Welch's correction. Results are reliable.`
+    : recommendationText
+
   const getStatusIcon = (passed: boolean | null) => {
     if (passed === null) return <span className="text-gray-400">?</span>
     return passed 
@@ -60,7 +75,7 @@ export default function AssumptionChecksCard({
   }
 
   const getRecommendationStyle = () => {
-    switch (recommendation) {
+    switch (effectiveRecommendation) {
       case 'parametric':
         return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400'
       case 'parametric_with_caution':
@@ -71,7 +86,7 @@ export default function AssumptionChecksCard({
   }
 
   const getRecommendationIcon = () => {
-    switch (recommendation) {
+    switch (effectiveRecommendation) {
       case 'parametric':
         return '✓'
       case 'parametric_with_caution':
@@ -82,13 +97,10 @@ export default function AssumptionChecksCard({
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-      <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
+      <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-0.5">
         Assumption Checks
       </h4>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-        Generations to Nash equilibrium (hypothesis outcome)
-      </p>
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
         Verifying statistical test assumptions for scientific rigor
       </p>
@@ -99,11 +111,11 @@ export default function AssumptionChecksCard({
           <span className="text-lg">{getRecommendationIcon()}</span>
           <div>
             <div className="font-semibold text-sm">
-              {recommendation === 'parametric' && 'Parametric Tests Recommended'}
-              {recommendation === 'parametric_with_caution' && 'Parametric Tests (With Caution)'}
-              {recommendation === 'non_parametric' && 'Non-Parametric Tests Recommended'}
+              {effectiveRecommendation === 'parametric' && 'Parametric Tests Appropriate'}
+              {effectiveRecommendation === 'parametric_with_caution' && 'Parametric Tests Robust (CLT)'}
+              {effectiveRecommendation === 'non_parametric' && 'Non-Parametric Tests Recommended'}
             </div>
-            <div className="text-xs mt-1 opacity-90">{recommendationText}</div>
+            <div className="text-xs mt-1 opacity-90">{effectiveText}</div>
           </div>
         </div>
       </div>
