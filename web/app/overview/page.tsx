@@ -306,12 +306,14 @@ export default function OverviewPage() {
         <SectionCard num={2} id={sectionIds.howNetworksWork} title="How do neural networks work?">
           <p>
             The <strong>inputs</strong> are numbers that represent what the organism
-            &quot;knows&quot;—for example, how far away the nearest food is, or how close the
-            nearest wall or other organism is. These numbers flow through <strong>layers</strong>.
-            The first layer takes the inputs and multiplies them by learned &quot;weights,&quot;
-            adds &quot;biases,&quot; and then applies a simple rule (like &quot;if the result is
-            negative, treat it as zero&quot;) so the network can learn patterns that are not
-            straight lines. The result becomes the input to the next layer, and so on.
+            &quot;knows&quot;—for example, how far away the nearest food pellet is, or how
+            close the nearest enemy organism is. Since the world wraps around (toroidal
+            geometry), there are no walls—just open space in every direction. These numbers
+            flow through <strong>layers</strong>. The first layer takes the inputs and multiplies
+            them by learned &quot;weights,&quot; adds &quot;biases,&quot; and then applies a simple
+            rule (like &quot;if the result is negative, treat it as zero&quot;) so the network
+            can learn patterns that are not straight lines. The result becomes the input to
+            the next layer, and so on.
           </p>
           <p>
             The <strong>output layer</strong> produces the final numbers. In our experiment, that
@@ -386,28 +388,33 @@ export default function OverviewPage() {
                 Fitness Score (in depth)
               </h3>
               <p>
-                <strong>Fitness Score</strong> is a rating that measures how well an organism
-                performs in the petri dish environment. In our experiment, each organism has a
-                fitness score (a number) that reflects its survival and resource-gathering ability.
-                We start everyone at 1500; over time, the number goes up if they tend to
-                &quot;win&quot; and down if they tend to &quot;lose.&quot;
+                <strong>Fitness Score</strong> is a number that measures how well an organism
+                performed during its lifetime in the petri dish. In our experiment, each
+                organism&apos;s fitness is calculated with a simple formula:
+              </p>
+              <p className="text-center font-mono text-lg my-3">
+                <strong>Fitness = Ticks Survived + Remaining Energy</strong>
               </p>
               <p>
-                After each <strong>generation</strong> (one round of life in the petri dish), we
-                run many short &quot;matches&quot; between random pairs of organisms. In each match
-                we ask: who had more energy at the end of the generation? That organism
-                &quot;wins&quot; (score 1), the other &quot;loses&quot; (score 0); if they had the
-                same energy, it is a tie (0.5). Then we update both organisms&apos; fitness scores.
-                If you beat someone you were &quot;expected&quot; to lose to, your score goes up
-                more; if you lose to someone you were expected to beat, it goes down more. Over
-                many matches, the fitness score reflects who tends to do better in the petri dish.
+                <strong>Ticks survived</strong> is how many moments (out of 750 per generation)
+                the organism stayed alive. An organism that survives the entire generation
+                gets 750 points for survival alone. <strong>Remaining energy</strong> is how
+                much energy the organism still has at the end of the generation. Organisms that
+                collected food efficiently and avoided unnecessary energy loss will have more
+                energy left over.
+              </p>
+              <p>
+                This means an organism that survives the full generation <em>and</em> ends
+                with lots of energy will have the highest fitness score. For example, an
+                organism that survived all 750 ticks and ended with 150 energy would score
+                750 + 150 = 900. One that died at tick 300 with 0 energy scores just 300.
               </p>
               <p>
                 We use fitness scores to select parents (top 20% by score get to reproduce), to set
-                mutation rate in the experimental group (low fitness = more mutation, high fitness
+                the mutation rate in the experimental group (low fitness = more mutation, high fitness
                 = less), and to measure how well the population did (peak fitness = highest score
-                anyone reached). So fitness score is the measure that drives evolution and our
-                statistics.
+                anyone reached). So fitness score is the single number that drives evolution and our
+                statistical analysis.
               </p>
             </div>
 
@@ -455,13 +462,15 @@ export default function OverviewPage() {
             Each eye measures exactly 3 things:
           </p>
           <ul className="list-disc pl-6 space-y-1 mb-4">
-            <li>How far is the nearest <strong>Wall</strong>?</li>
-            <li>How far is the nearest <strong>Food</strong>?</li>
-            <li>How far is the nearest <strong>Enemy</strong>?</li>
+            <li>How far is the nearest <strong>Food</strong> pellet in this direction?</li>
+            <li>How far is the nearest <strong>Enemy</strong> organism in this direction?</li>
+            <li>How far is the nearest <strong>boundary wrap</strong> point? (Since the world is toroidal—it wraps around like the surface of a donut—there are no walls. This value tells the organism how far it is from the wrap-around edge, which affects how distances to food and enemies are measured.)</li>
           </ul>
           <p>
             With 8 directions × 3 measurements each, that gives us the <strong>24 inputs</strong>.
-            These numbers are the only thing the organism &quot;sees.&quot;
+            These numbers are the only thing the organism &quot;sees.&quot; Because the world wraps
+            around, organisms cannot hide in corners or against walls—the environment is completely
+            open in every direction.
           </p>
 
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2">
@@ -746,23 +755,99 @@ export default function OverviewPage() {
 
         <SectionCard num={14} id={sectionIds.aiFuture} title="Why is this relevant for the future of AI, and how could it be expanded?">
           <p>
-            <strong>Relevance:</strong> This experiment combines evolution (trial and error over
-            generations), game theory (Nash equilibrium—when no one benefits by changing strategy
-            alone), and neural networks (brains that learn or evolve). That combination is useful
-            for the future of AI because: (1) we can discover strategies without hand-designing
-            every rule; (2) we can study many agents interacting (like robots, drones, or trading
-            algorithms); (3) we can test how to evolve better—for example, does adaptive mutation
-            help? So the relevance is: it is a step toward AI that improves itself through
-            evolution and that can work in competitive, multi-agent worlds.
+            This experiment sits at the intersection of three powerful fields:
+            <strong> evolutionary computing</strong> (improving AI through trial and error over
+            generations), <strong>game theory</strong> (understanding strategic decision-making
+            when multiple agents interact), and <strong>neural networks</strong> (giving agents
+            brains that can process information and make decisions). That combination isn&apos;t
+            just academic—it has direct applications to some of the most important challenges
+            facing humanity.
           </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+            Real-World Applications
+          </h3>
+          <ul className="list-disc pl-6 space-y-3">
+            <li>
+              <strong>Autonomous vehicles and robotics:</strong> Self-driving cars must constantly
+              make decisions in a world full of other drivers, pedestrians, and cyclists—all making
+              their own decisions simultaneously. This is exactly the kind of multi-agent game
+              theory problem our experiment studies. If adaptive mutation helps populations of AI
+              agents find stable strategies faster, that same principle could help robot fleets
+              (warehouse robots, delivery drones, self-driving trucks) learn to coordinate
+              efficiently without crashing into each other.
+            </li>
+            <li>
+              <strong>Economics and market design:</strong> Stock markets, auctions, and supply
+              chains are all systems where many agents (traders, companies, consumers) interact
+              strategically. Economists use Nash Equilibrium to predict market outcomes. Our
+              experiment tests whether there are faster ways to find these equilibria—which could
+              help design fairer auction systems, more efficient markets, or better pricing
+              algorithms.
+            </li>
+            <li>
+              <strong>Drug discovery and protein design:</strong> Pharmaceutical companies use
+              evolutionary algorithms to search through billions of possible molecular structures
+              to find effective drugs. The question of &quot;how much should we mutate?&quot; is
+              directly relevant—adaptive mutation could help these searches converge on promising
+              drug candidates faster, potentially saving years of research time.
+            </li>
+            <li>
+              <strong>Climate and resource management:</strong> Managing shared resources (fisheries,
+              forests, water supplies) involves many stakeholders making independent decisions.
+              Game theory helps model these &quot;tragedy of the commons&quot; situations. Understanding
+              how populations converge to stable strategies could inform policies that help communities
+              reach sustainable equilibria faster.
+            </li>
+            <li>
+              <strong>Multi-agent AI systems:</strong> As AI becomes more common, we increasingly have
+              situations where multiple AI systems interact—chatbots negotiating, trading algorithms
+              competing, or recommendation systems influencing each other. Understanding how
+              populations of AI agents reach equilibrium is crucial for ensuring these systems
+              behave predictably and safely.
+            </li>
+            <li>
+              <strong>Cybersecurity:</strong> Attackers and defenders in cybersecurity are engaged in
+              a constant strategic game. Evolutionary approaches to security (where defense
+              strategies evolve in response to attacks) could benefit from adaptive mutation to
+              find robust defense strategies more quickly.
+            </li>
+          </ul>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+            Why Adaptive Mutation Matters Beyond This Experiment
+          </h3>
           <p>
-            <strong>Expansion:</strong> This kind of experiment could grow in many directions. We
-            could use bigger or more complex worlds (e.g. 3D, more types of food or danger), more
-            organisms or larger brains, different species (e.g. predators vs prey with different
-            neural networks), or smarter mutation (e.g. learning how much to mutate). We could also
-            apply similar methods to real-world applications: training robot swarms, designing fair
-            markets, or testing policies in simulations. The goal is to show that evolutionary
-            game-theoretic experiments can scale and benefit both science and industry.
+            The core question—&quot;should we change things more when they&apos;re not working and
+            less when they are?&quot;—is fundamental to optimization everywhere. Currently, most
+            evolutionary algorithms use fixed mutation rates, which is like always turning every knob
+            by the same amount regardless of whether you&apos;re close to a good solution or far
+            away. If our experiment demonstrates that adaptive mutation accelerates convergence,
+            that finding could be applied to:
+          </p>
+          <ul className="list-disc pl-6 space-y-2 mt-2">
+            <li>Training neural networks more efficiently (reducing the enormous energy cost of training large AI models)</li>
+            <li>Optimizing engineering designs (aircraft wings, circuit layouts, antenna shapes) faster</li>
+            <li>Evolving game-playing AI (like AlphaGo&apos;s successors) with less computational cost</li>
+            <li>Accelerating scientific simulations that use evolutionary search methods</li>
+          </ul>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+            How This Experiment Could Be Expanded
+          </h3>
+          <p>
+            This kind of experiment could grow in many directions. We could use bigger or more
+            complex worlds (3D environments, multiple food types, predator-prey ecosystems), larger
+            populations or bigger neural networks, or entirely different mutation strategies
+            (for example, letting the organisms <em>learn</em> their own mutation rate over time).
+            We could also introduce cooperation (organisms that work together to hunt) or
+            communication (organisms that signal to each other), creating richer game-theoretic
+            scenarios. The goal is to show that evolutionary game-theoretic experiments can scale
+            from a science fair project to tools that benefit both scientific research and real-world
+            industry.
           </p>
         </SectionCard>
       </div>
