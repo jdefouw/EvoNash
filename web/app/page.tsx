@@ -121,7 +121,7 @@ export default function DashboardPage() {
       { name: "Fitness Score", description: "Relative skill level (Self-play performance)" }
     ],
     controlled: [
-      { name: "Population Size", description: "Fixed number of agents per generation", value: 100 },
+      { name: "Population Size", description: "Fixed number of agents per generation", value: 1000 },
       { name: "Selection Pressure", description: "Tournament size / truncation ratio", value: "Top 20%" },
       { name: "Network Architecture", description: "Input/Hidden/Output layers", value: "24-64-4" },
       { name: "Simulation Ticks", description: "Ticks per generation", value: 750 },
