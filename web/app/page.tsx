@@ -206,7 +206,7 @@ export default function DashboardPage() {
     }
     if (stats.convergencePValue !== null) {
       const pStr = stats.convergencePValue < 0.0001
-        ? '< 0.0001'
+        ? stats.convergencePValue.toExponential(2)
         : stats.convergencePValue.toFixed(4);
       keyFindings.push(
         `Welch's t-test: p = ${pStr} (${stats.convergenceIsSignificant ? 'statistically significant at α = 0.05' : 'not statistically significant'}).`
@@ -230,7 +230,7 @@ export default function DashboardPage() {
   // Dynamic summary for conclusion
   const conclusionSummary = stats
     ? hypothesisSupported === true
-      ? `The experimental data supports the hypothesis. Adaptive mutation significantly accelerated convergence to Nash Equilibrium compared to static mutation (p = ${stats.convergencePValue !== null ? (stats.convergencePValue < 0.0001 ? '< 0.0001' : stats.convergencePValue.toFixed(4)) : 'N/A'}), with a ${Math.abs(stats.convergenceImprovement ?? 0).toFixed(1)}% improvement in convergence speed.`
+      ? `The experimental data supports the hypothesis. Adaptive mutation significantly accelerated convergence to Nash Equilibrium compared to static mutation (p = ${stats.convergencePValue !== null ? (stats.convergencePValue < 0.0001 ? stats.convergencePValue.toExponential(2) : stats.convergencePValue.toFixed(4)) : 'N/A'}), with a ${Math.abs(stats.convergenceImprovement ?? 0).toFixed(1)}% improvement in convergence speed.`
       : hypothesisSupported === false
         ? `The experimental data does not support the hypothesis. While both groups converged to Nash Equilibrium, the difference in convergence speed between adaptive and static mutation was not statistically significant (p = ${stats.convergencePValue !== null ? stats.convergencePValue.toFixed(4) : 'N/A'}).`
         : `The experiment is still in progress. ${stats.controlExperimentCount + stats.experimentalExperimentCount} experiments have been completed so far (${stats.controlConvergedCount + stats.experimentalConvergedCount} converged). More data is needed for a definitive conclusion.`
