@@ -1631,90 +1631,163 @@ export async function GET() {
     }
 
     // =========================================================================
-    // CONVERGENCE DATA: Fetch ALL generations for ALL completed experiments
-    // This is needed to calculate convergence generation for each experiment
+    // CONVERGENCE DATA: Compute per-experiment convergence generation via SQL
+    // =========================================================================
+    //
+    // Instead of loading all generation rows (~1.5M for 1000+ experiments) into
+    // Node.js memory, compute convergence directly in PostgreSQL using the
+    // gap-and-island window function technique.
+    //
+    // The SQL exactly replicates the JavaScript convergence detection logic:
+    //   1. Skip first 5 generations (unstable initialization data)
+    //   2. Find peak entropy_variance per experiment (must be > 0.0001)
+    //   3. After peak, find first run of 20 consecutive generations
+    //      where entropy_variance < 0.001 (CONVERGENCE_THRESHOLD)
+    //   4. Return the generation_number starting that stable window
+    //
+    // Both groups use the same threshold (0.001) for fair comparison.
     // =========================================================================
 
-    const allControlIds = allControlExperiments.map((exp: Experiment) => exp.id)
-    const allExperimentalIds = allExperimentalExperiments.map((exp: Experiment) => exp.id)
-
-    let allControlGenerations: Generation[] = []
-    let allExperimentalGenerations: Generation[] = []
-
-    // Fetch all generations for control experiments (for convergence stats)
-    if (allControlIds.length > 0) {
-      const placeholders = allControlIds.map((_: string, i: number) => `$${i + 1}`).join(', ')
-      allControlGenerations = await queryAll<Generation>(
-        `SELECT * FROM generations 
-         WHERE experiment_id IN (${placeholders}) 
-         ORDER BY experiment_id, generation_number ASC`,
-        allControlIds
-      ) || []
-    }
-
-    // Fetch all generations for experimental experiments (for convergence stats)
-    if (allExperimentalIds.length > 0) {
-      const placeholders = allExperimentalIds.map((_: string, i: number) => `$${i + 1}`).join(', ')
-      allExperimentalGenerations = await queryAll<Generation>(
-        `SELECT * FROM generations 
-         WHERE experiment_id IN (${placeholders}) 
-         ORDER BY experiment_id, generation_number ASC`,
-        allExperimentalIds
-      ) || []
-    }
-
-    // Find convergence points using improved detection with stability window
-    // 
-    // Logic:
-    // 1. Find peak entropy variance (must be above minimum to show divergence)
-    // 2. Use min(absolute threshold, 5% of peak) for convergence detection
-    // 3. Require STABILITY_WINDOW consecutive generations below threshold
-    // 
-    // IMPORTANT: Both groups use the same threshold for fair comparison
     const CONVERGENCE_THRESHOLD = 0.001
     const STABILITY_WINDOW = 20  // Require 20 consecutive generations below threshold
 
-    const findConvergenceGeneration = (generations: Generation[], absoluteThreshold: number): number | null => {
-      if (generations.length < 10) return null
-
-      // Get variance data (skip first few gens where data might be unstable)
-      const varianceData = generations.slice(5)
-        .filter((g: Generation) => g.entropy_variance != null)
-        .map((g: Generation) => ({
-          gen: Number(g.generation_number),
-          variance: Number(g.entropy_variance)  // Ensure numeric (pg can return strings)
-        }))
-
-      if (varianceData.length === 0) return null
-
-      // Find peak variance
-      const peakVariance = Math.max(...varianceData.map(d => d.variance))
-      const peakIndex = varianceData.findIndex(d => d.variance === peakVariance)
-
-      // Must have diverged (peak > minimum threshold)
-      if (peakVariance <= 0.0001) return null
-
-      // Use the fixed threshold for convergence detection
-      // This matches the documented methodology: σ < 0.001 after initial divergence
-      const effectiveThreshold = absoluteThreshold
-
-      // Get data after peak
-      const afterPeak = varianceData.slice(peakIndex)
-
-      // Find first generation that starts a stable run of STABILITY_WINDOW generations below threshold
-      for (let i = 0; i <= afterPeak.length - STABILITY_WINDOW; i++) {
-        const window = afterPeak.slice(i, i + STABILITY_WINDOW)
-        if (window.every(d => d.variance < effectiveThreshold)) {
-          return window[0].gen
-        }
-      }
-
-      return null
+    interface ExperimentConvergence {
+      experiment_id: string
+      experiment_group: string
+      random_seed: number
+      convergence_generation: number
     }
 
-    // Use ALL completed experiment generations (not chart subset) for hero convergence display
-    const controlConvergenceGen = findConvergenceGeneration(allControlGenerations, CONVERGENCE_THRESHOLD)
-    const experimentalConvergenceGen = findConvergenceGeneration(allExperimentalGenerations, CONVERGENCE_THRESHOLD)
+    const experimentConvergenceData = await queryAll<ExperimentConvergence>(`
+      WITH gen_data AS (
+        -- Step 1: Get entropy variance data, skipping first 5 generations per experiment
+        -- Matches JS: expGens.sort(...).slice(5).filter(g => g.entropy_variance != null)
+        SELECT
+          g.experiment_id,
+          e.experiment_group,
+          e.random_seed,
+          g.generation_number,
+          g.entropy_variance::float as entropy_variance
+        FROM generations g
+        JOIN experiments e ON g.experiment_id = e.id
+        WHERE e.status = 'COMPLETED'
+          AND g.entropy_variance IS NOT NULL
+          AND g.generation_number > 5
+      ),
+      peak_info AS (
+        -- Step 2: Find peak entropy_variance per experiment
+        -- Matches JS: Math.max(...varianceData.map(d => d.variance))
+        -- DISTINCT ON picks highest variance; on tie, earliest generation (same as findIndex)
+        -- Require peak > 0.0001 (experiment must have diverged)
+        SELECT DISTINCT ON (experiment_id)
+          experiment_id,
+          entropy_variance as peak_variance,
+          generation_number as peak_gen
+        FROM gen_data
+        WHERE experiment_id IN (
+          SELECT experiment_id FROM gen_data
+          GROUP BY experiment_id
+          HAVING MAX(entropy_variance) > 0.0001
+        )
+        ORDER BY experiment_id, entropy_variance DESC, generation_number ASC
+      ),
+      after_peak AS (
+        -- Step 3a: Take data from peak onwards, flag each gen as above/below threshold
+        -- Matches JS: varianceData.slice(peakIndex) then checking < 0.001
+        SELECT
+          gd.experiment_id,
+          gd.experiment_group,
+          gd.random_seed,
+          gd.generation_number,
+          CASE WHEN gd.entropy_variance >= 0.001 THEN 1 ELSE 0 END as above_threshold
+        FROM gen_data gd
+        JOIN peak_info pi ON gd.experiment_id = pi.experiment_id
+        WHERE gd.generation_number >= pi.peak_gen
+      ),
+      islands AS (
+        -- Step 3b: Gap-and-island grouping for consecutive below-threshold runs
+        -- SUM(above_threshold) creates a running counter that increments at each "break"
+        -- Consecutive below-threshold gens share the same island_id
+        SELECT
+          experiment_id,
+          experiment_group,
+          random_seed,
+          generation_number,
+          above_threshold,
+          SUM(above_threshold) OVER (
+            PARTITION BY experiment_id
+            ORDER BY generation_number
+          ) as island_id
+        FROM after_peak
+      ),
+      convergent_runs AS (
+        -- Step 3c: Find islands with 20+ consecutive below-threshold generations
+        -- Matches JS: window.every(d => d.variance < effectiveThreshold) with STABILITY_WINDOW=20
+        SELECT
+          experiment_id,
+          experiment_group,
+          random_seed,
+          island_id,
+          MIN(generation_number) as first_gen,
+          COUNT(*) as run_length
+        FROM islands
+        WHERE above_threshold = 0
+        GROUP BY experiment_id, experiment_group, random_seed, island_id
+        HAVING COUNT(*) >= 20
+      )
+      -- Step 4: Return earliest convergence point per experiment
+      -- Matches JS: returning window[0].gen from the first qualifying window
+      SELECT
+        experiment_id,
+        experiment_group,
+        random_seed::int as random_seed,
+        MIN(first_gen)::int as convergence_generation
+      FROM convergent_runs
+      GROUP BY experiment_id, experiment_group, random_seed
+    `) || []
+
+    // Separate convergence data by group (same as original JS arrays)
+    const controlConvergenceGens = experimentConvergenceData
+      .filter(e => e.experiment_group === 'CONTROL')
+      .map(e => Number(e.convergence_generation))
+    const experimentalConvergenceGens = experimentConvergenceData
+      .filter(e => e.experiment_group === 'EXPERIMENTAL')
+      .map(e => Number(e.convergence_generation))
+
+    // Also fetch total generation counts efficiently (for display metrics)
+    interface GenCountData {
+      experiment_group: string
+      total_gens: string
+      avg_gens: string
+    }
+    const genCountData = await queryAll<GenCountData>(`
+      SELECT
+        e.experiment_group,
+        COUNT(g.id)::text as total_gens,
+        ROUND(COUNT(g.id)::numeric / NULLIF(COUNT(DISTINCT g.experiment_id), 0))::text as avg_gens
+      FROM generations g
+      JOIN experiments e ON g.experiment_id = e.id
+      WHERE e.status = 'COMPLETED'
+      GROUP BY e.experiment_group
+    `) || []
+
+    const genCountByGroup: Record<string, { totalGens: number; avgGens: number }> = {}
+    for (const row of genCountData) {
+      genCountByGroup[row.experiment_group] = {
+        totalGens: parseInt(row.total_gens || '0', 10),
+        avgGens: parseInt(row.avg_gens || '0', 10)
+      }
+    }
+
+    // Hero convergence display: use per-experiment median convergence generation
+    // This is more statistically meaningful than the aggregate approach and uses
+    // ALL converged experiments (not limited to chart subset)
+    const controlConvergenceGen = controlConvergenceGens.length > 0
+      ? percentile([...controlConvergenceGens].sort((a, b) => a - b), 50)
+      : null
+    const experimentalConvergenceGen = experimentalConvergenceGens.length > 0
+      ? percentile([...experimentalConvergenceGens].sort((a, b) => a - b), 50)
+      : null
 
     // Calculate convergence improvement
     let convergenceImprovement: number | null = null
@@ -1787,72 +1860,15 @@ export async function GET() {
     // This directly tests the hypothesis: "Does adaptive mutation reach Nash
     // equilibrium in fewer generations than static mutation?"
     // Each experiment provides ONE data point: its convergence generation.
-    // 
+    //
+    // controlConvergenceGens and experimentalConvergenceGens are computed via
+    // the SQL convergence query above (gap-and-island technique), which
+    // replicates the original JS logic exactly:
+    //   skip 5 gens → find peak > 0.0001 → 20 consecutive below 0.001
+    //
     // IMPORTANT: We use ALL completed experiments for statistical analysis,
     // not just the subset used for chart visualization.
     // =========================================================================
-
-    // Optimized generation lookup using Map to avoid O(N*M) filtering
-    // Group generations by experiment_id
-    const groupGenerationsByExperiment = (gens: Generation[]) => {
-      const map = new Map<string, Generation[]>()
-      for (const gen of gens) {
-        const expId = String(gen.experiment_id)
-        if (!map.has(expId)) {
-          map.set(expId, [])
-        }
-        map.get(expId)!.push(gen)
-      }
-      return map
-    }
-
-    const controlGenerationsMap = groupGenerationsByExperiment(allControlGenerations)
-    const experimentalGenerationsMap = groupGenerationsByExperiment(allExperimentalGenerations)
-
-    // Get convergence generation for each individual experiment using Map
-    const getExperimentConvergenceGens = (experiments: Experiment[], genMap: Map<string, Generation[]>): number[] => {
-      return experiments.map(exp => {
-        // Get all generations for this experiment from Map
-        const expGens = genMap.get(String(exp.id)) || []
-
-        // Sort by generation number
-        expGens.sort((a, b) => Number(a.generation_number) - Number(b.generation_number))
-
-        if (expGens.length < 10) return null
-
-        // Apply the same convergence detection logic as findConvergenceGeneration
-        const varianceData = expGens.slice(5)
-          .filter(g => g.entropy_variance != null)
-          .map(g => ({
-            gen: Number(g.generation_number),
-            variance: Number(g.entropy_variance)
-          }))
-
-        if (varianceData.length === 0) return null
-
-        const peakVariance = Math.max(...varianceData.map(d => d.variance))
-        const peakIndex = varianceData.findIndex(d => d.variance === peakVariance)
-
-        if (peakVariance <= 0.0001) return null
-
-        const effectiveThreshold = CONVERGENCE_THRESHOLD
-        const afterPeak = varianceData.slice(peakIndex)
-
-        // Find stable convergence window
-        for (let i = 0; i <= afterPeak.length - STABILITY_WINDOW; i++) {
-          const window = afterPeak.slice(i, i + STABILITY_WINDOW)
-          if (window.every(d => d.variance < effectiveThreshold)) {
-            return window[0].gen
-          }
-        }
-
-        return null
-      }).filter((gen): gen is number => gen !== null)
-    }
-
-    // Use ALL completed experiments for convergence statistics (not just chart subset)
-    const controlConvergenceGens = getExperimentConvergenceGens(allControlExperiments, controlGenerationsMap)
-    const experimentalConvergenceGens = getExperimentConvergenceGens(allExperimentalExperiments, experimentalGenerationsMap)
 
     // T-test on convergence generations (PRIMARY hypothesis test)
     let convergenceTTestResult: TTestResult | null = null
@@ -1927,13 +1943,9 @@ export async function GET() {
     const controlExperimentCount = allControlExperiments.length
     const experimentalExperimentCount = allExperimentalExperiments.length
 
-    // Calculate average generations from ALL completed experiments
-    const controlAvgGenerations = controlExperimentCount > 0
-      ? Math.round(allControlGenerations.length / controlExperimentCount)
-      : 0
-    const experimentalAvgGenerations = experimentalExperimentCount > 0
-      ? Math.round(allExperimentalGenerations.length / experimentalExperimentCount)
-      : 0
+    // Average generations from SQL count query (replaces in-memory row counting)
+    const controlAvgGenerations = genCountByGroup['CONTROL']?.avgGens ?? 0
+    const experimentalAvgGenerations = genCountByGroup['EXPERIMENTAL']?.avgGens ?? 0
 
     // =========================================================================
     // SCIENTIFIC RIGOR - On convergence generations (primary hypothesis outcome)
@@ -2061,56 +2073,18 @@ export async function GET() {
     // =========================================================================
     // Match experiments by random_seed and run a paired t-test.
     // This is more powerful than unpaired because it controls for seed variation.
+    //
+    // Uses the SQL convergence data (experimentConvergenceData) which already
+    // includes experiment_group, random_seed, and convergence_generation.
     // =========================================================================
 
-    // Build seed → convergence_gen maps from the experiment-level convergence data
-    interface ExperimentWithSeed {
-      id: string
-      random_seed: number
-      experiment_group: string
-    }
+    const controlSeedData = experimentConvergenceData
+      .filter(e => e.experiment_group === 'CONTROL' && e.random_seed != null)
+      .map(e => ({ seed: Number(e.random_seed), value: Number(e.convergence_generation) }))
 
-    // Fetch seeds for all completed experiments
-    const controlExperimentsWithSeeds = allControlExperiments as (Experiment & { random_seed: number })[]
-    const experimentalExperimentsWithSeeds = allExperimentalExperiments as (Experiment & { random_seed: number })[]
-
-    // Map experiment IDs to convergence generations
-    const getConvergenceForExperiment = (exp: Experiment, genMap: Map<string, Generation[]>): number | null => {
-      const expGens = genMap.get(String(exp.id)) || []
-      expGens.sort((a, b) => Number(a.generation_number) - Number(b.generation_number))
-      if (expGens.length < 10) return null
-      const varianceData = expGens.slice(5)
-        .filter(g => g.entropy_variance != null)
-        .map(g => ({ gen: Number(g.generation_number), variance: Number(g.entropy_variance) }))
-      if (varianceData.length === 0) return null
-      const peakVariance = Math.max(...varianceData.map(d => d.variance))
-      const peakIndex = varianceData.findIndex(d => d.variance === peakVariance)
-      if (peakVariance <= 0.0001) return null
-      const afterPeak = varianceData.slice(peakIndex)
-      for (let i = 0; i <= afterPeak.length - STABILITY_WINDOW; i++) {
-        const window = afterPeak.slice(i, i + STABILITY_WINDOW)
-        if (window.every(d => d.variance < CONVERGENCE_THRESHOLD)) {
-          return window[0].gen
-        }
-      }
-      return null
-    }
-
-    const controlSeedData: { seed: number; value: number }[] = []
-    for (const exp of controlExperimentsWithSeeds) {
-      const convGen = getConvergenceForExperiment(exp, controlGenerationsMap)
-      if (convGen !== null && exp.random_seed != null) {
-        controlSeedData.push({ seed: Number(exp.random_seed), value: convGen })
-      }
-    }
-
-    const experimentalSeedData: { seed: number; value: number }[] = []
-    for (const exp of experimentalExperimentsWithSeeds) {
-      const convGen = getConvergenceForExperiment(exp, experimentalGenerationsMap)
-      if (convGen !== null && exp.random_seed != null) {
-        experimentalSeedData.push({ seed: Number(exp.random_seed), value: convGen })
-      }
-    }
+    const experimentalSeedData = experimentConvergenceData
+      .filter(e => e.experiment_group === 'EXPERIMENTAL' && e.random_seed != null)
+      .map(e => ({ seed: Number(e.random_seed), value: Number(e.convergence_generation) }))
 
     let pairedAnalysisResult: PairedTTestResult | null = null
     if (controlSeedData.length >= 2 && experimentalSeedData.length >= 2) {
@@ -2156,8 +2130,8 @@ export async function GET() {
         convergenceControlIQR,
         convergenceExperimentalIQR,
         // Experiment counts and generations
-        totalGenerationsControl: allControlGenerations.length,
-        totalGenerationsExperimental: allExperimentalGenerations.length,
+        totalGenerationsControl: genCountByGroup['CONTROL']?.totalGens ?? 0,
+        totalGenerationsExperimental: genCountByGroup['EXPERIMENTAL']?.totalGens ?? 0,
         controlExperimentCount,
         experimentalExperimentCount,
         controlAvgGenerations,
