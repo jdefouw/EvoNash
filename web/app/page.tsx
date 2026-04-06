@@ -252,9 +252,9 @@ export default function DashboardPage() {
     : '—';
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
       {/* ── HERO BANNER ── */}
-      <div className="hero-banner px-8 py-8 animate-fade-in">
+      <div className="hero-banner px-5 sm:px-8 py-8 animate-fade-in">
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-6">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/15 backdrop-blur-sm rounded-full text-white/90 text-xs font-medium mb-3">
