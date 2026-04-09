@@ -1635,21 +1635,24 @@ export async function GET() {
     // =========================================================================
     //
     // Instead of loading all generation rows (~1.5M for 1000+ experiments) into
-    // Node.js memory, compute convergence directly in PostgreSQL using the
-    // gap-and-island window function technique.
+    // Node.js memory, compute convergence directly in PostgreSQL using a
+    // sliding window technique.
     //
-    // The SQL exactly replicates the JavaScript convergence detection logic:
+    // The SQL convergence detection logic:
     //   1. Skip first 5 generations (unstable initialization data)
     //   2. Find peak entropy_variance per experiment (must be > 0.0001)
-    //   3. After peak, find first run of 20 consecutive generations
-    //      where entropy_variance < 0.001 (CONVERGENCE_THRESHOLD)
-    //   4. Return the generation_number starting that stable window
+    //   3. After peak, use a sliding window of 20 generations — if at least
+    //      18 out of 20 are below 0.001, the experiment has converged.
+    //      This tolerates up to 2 brief entropy spikes per window (common
+    //      with adaptive mutation) while still requiring strong convergence.
+    //   4. Return the generation_number starting the first qualifying window
     //
-    // Both groups use the same threshold (0.001) for fair comparison.
+    // Both groups use the same threshold and window for fair comparison.
     // =========================================================================
 
     const CONVERGENCE_THRESHOLD = 0.001
-    const STABILITY_WINDOW = 20  // Require 20 consecutive generations below threshold
+    const STABILITY_WINDOW = 20  // Check windows of 20 generations
+    const MIN_BELOW_THRESHOLD = 18  // Allow up to 2 brief spikes per window
 
     interface ExperimentConvergence {
       experiment_id: string
@@ -1667,7 +1670,11 @@ export async function GET() {
           e.experiment_group,
           e.random_seed,
           g.generation_number,
-          g.entropy_variance::float as entropy_variance
+          g.entropy_variance::float as entropy_variance,
+          ROW_NUMBER() OVER (
+            PARTITION BY g.experiment_id
+            ORDER BY g.generation_number
+          ) as rn
         FROM generations g
         JOIN experiments e ON g.experiment_id = e.id
         WHERE e.status = 'COMPLETED'
@@ -1692,48 +1699,58 @@ export async function GET() {
         ORDER BY experiment_id, entropy_variance DESC, generation_number ASC
       ),
       after_peak AS (
-        -- Step 3a: Take data from peak onwards, flag each gen as above/below threshold
+        -- Step 3a: Take data from peak onwards, flag each gen as below threshold
         -- Matches JS: varianceData.slice(peakIndex) then checking < 0.001
         SELECT
           gd.experiment_id,
           gd.experiment_group,
           gd.random_seed,
           gd.generation_number,
-          CASE WHEN gd.entropy_variance >= 0.001 THEN 1 ELSE 0 END as above_threshold
+          CASE WHEN gd.entropy_variance < ${CONVERGENCE_THRESHOLD} THEN 1 ELSE 0 END as below_threshold,
+          ROW_NUMBER() OVER (
+            PARTITION BY gd.experiment_id
+            ORDER BY gd.generation_number
+          ) as rn
         FROM gen_data gd
         JOIN peak_info pi ON gd.experiment_id = pi.experiment_id
         WHERE gd.generation_number >= pi.peak_gen
       ),
-      islands AS (
-        -- Step 3b: Gap-and-island grouping for consecutive below-threshold runs
-        -- SUM(above_threshold) creates a running counter that increments at each "break"
-        -- Consecutive below-threshold gens share the same island_id
+      sliding_window AS (
+        -- Step 3b: Sliding window approach (replaces gap-and-island)
+        -- For each generation, count how many of the NEXT 20 generations
+        -- (including itself) are below threshold. This tolerates up to 2
+        -- brief spikes in a 20-gen window, which is common with adaptive
+        -- mutation but doesn't indicate genuine non-convergence.
         SELECT
           experiment_id,
           experiment_group,
           random_seed,
           generation_number,
-          above_threshold,
-          SUM(above_threshold) OVER (
+          SUM(below_threshold) OVER (
             PARTITION BY experiment_id
             ORDER BY generation_number
-          ) as island_id
+            ROWS BETWEEN CURRENT ROW AND ${STABILITY_WINDOW - 1} FOLLOWING
+          ) as below_count,
+          COUNT(*) OVER (
+            PARTITION BY experiment_id
+            ORDER BY generation_number
+            ROWS BETWEEN CURRENT ROW AND ${STABILITY_WINDOW - 1} FOLLOWING
+          ) as window_size
         FROM after_peak
       ),
       convergent_runs AS (
-        -- Step 3c: Find islands with 20+ consecutive below-threshold generations
-        -- Matches JS: window.every(d => d.variance < effectiveThreshold) with STABILITY_WINDOW=20
+        -- Step 3c: Find windows with at least 18/20 below threshold
+        -- This allows up to 2 brief entropy spikes per window while still
+        -- requiring strong overall convergence. Same criteria for both groups.
         SELECT
           experiment_id,
           experiment_group,
           random_seed,
-          island_id,
-          MIN(generation_number) as first_gen,
-          COUNT(*) as run_length
-        FROM islands
-        WHERE above_threshold = 0
-        GROUP BY experiment_id, experiment_group, random_seed, island_id
-        HAVING COUNT(*) >= 20
+          generation_number,
+          below_count
+        FROM sliding_window
+        WHERE window_size >= ${STABILITY_WINDOW}
+          AND below_count >= ${MIN_BELOW_THRESHOLD}
       )
       -- Step 4: Return earliest convergence point per experiment
       -- Matches JS: returning window[0].gen from the first qualifying window
@@ -1741,7 +1758,7 @@ export async function GET() {
         experiment_id,
         experiment_group,
         random_seed::int as random_seed,
-        MIN(first_gen)::int as convergence_generation
+        MIN(generation_number)::int as convergence_generation
       FROM convergent_runs
       GROUP BY experiment_id, experiment_group, random_seed
     `) || []
