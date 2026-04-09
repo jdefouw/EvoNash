@@ -1595,8 +1595,8 @@ export async function GET() {
     // =========================================================================
 
     const MAX_EXPERIMENTS_FOR_CHARTS = 20
-    const controlIdsForCharts = controlExperiments.slice(0, MAX_EXPERIMENTS_FOR_CHARTS).map((exp: Experiment) => exp.id)
-    const experimentalIdsForCharts = experimentalExperiments.slice(0, MAX_EXPERIMENTS_FOR_CHARTS).map((exp: Experiment) => exp.id)
+    const controlIdsForCharts = allControlExperiments.slice(0, MAX_EXPERIMENTS_FOR_CHARTS).map((exp: Experiment) => exp.id)
+    const experimentalIdsForCharts = allExperimentalExperiments.slice(0, MAX_EXPERIMENTS_FOR_CHARTS).map((exp: Experiment) => exp.id)
 
     let controlGenerations: Generation[] = []
     let experimentalGenerations: Generation[] = []

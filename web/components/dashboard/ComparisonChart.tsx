@@ -27,9 +27,16 @@ export default function ComparisonChart({
   const [viewMode, setViewMode] = useState<'overlay' | 'side-by-side'>('overlay')
 
   // Aggregate by generation_number
+  // Include convergence marker positions so the chart x-axis always extends
+  // far enough for the data lines to reach the Nash equilibrium reference lines.
+  // Without this, the chart subset (20 experiments) may have fewer generations
+  // than the median convergence gen (computed from ALL experiments), causing
+  // the data lines to stop short of the markers.
   const maxGen = Math.max(
     controlGenerations.length > 0 ? Math.max(...controlGenerations.map(g => g.generation_number)) : 0,
-    experimentalGenerations.length > 0 ? Math.max(...experimentalGenerations.map(g => g.generation_number)) : 0
+    experimentalGenerations.length > 0 ? Math.max(...experimentalGenerations.map(g => g.generation_number)) : 0,
+    showConvergenceMarker && controlConvergenceGen ? controlConvergenceGen : 0,
+    showConvergenceMarker && experimentalConvergenceGen ? experimentalConvergenceGen : 0
   )
 
   const controlExpIds = new Set(controlGenerations.map((g) => g.experiment_id))
