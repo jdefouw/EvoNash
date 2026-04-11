@@ -17,6 +17,7 @@ const sectionIds = {
   gpuWorkers: 'gpu-workers',
   measuring: 'what-we-measure',
   aiFuture: 'ai-future',
+  tryItYourself: 'try-it-yourself',
   references: 'references',
 } as const
 
@@ -35,7 +36,8 @@ const tocItems: { id: string; label: string; num: number }[] = [
   { id: sectionIds.gpuWorkers, label: 'Why do we need GPU workers?', num: 12 },
   { id: sectionIds.measuring, label: 'What are we measuring?', num: 13 },
   { id: sectionIds.aiFuture, label: 'Why is this relevant for the future of AI?', num: 14 },
-  { id: sectionIds.references, label: 'References', num: 15 },
+  { id: sectionIds.tryItYourself, label: 'Try it yourself', num: 15 },
+  { id: sectionIds.references, label: 'References', num: 16 },
 ]
 
 function SectionCard({
@@ -854,13 +856,105 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        {/* Section 15 – References */}
+        {/* Section 15 – Try It Yourself */}
+        <SectionCard num={15} id={sectionIds.tryItYourself} title="Try it yourself">
+          <p>
+            EvoNash is fully open-source. If you would like to reproduce this experiment—or
+            run your own variation of it—everything you need is on GitHub:
+          </p>
+          <p>
+            <a
+              href="https://github.com/jdefouw/EvoNash"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 underline decoration-dotted underline-offset-2 font-semibold"
+            >
+              github.com/jdefouw/EvoNash
+            </a>
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+            What You Need
+          </h3>
+          <ul className="list-disc pl-6 space-y-2">
+            <li>
+              <strong>An NVIDIA GPU with CUDA support</strong> — any modern NVIDIA card will work
+              (e.g.&nbsp;RTX 2060 or newer). The simulation runs entirely on the GPU, so a dedicated
+              graphics card is required. An RTX 3090 is recommended for fastest results.
+            </li>
+            <li>
+              <strong>Python 3.8+</strong> with <strong>PyTorch (CUDA version)</strong> — this powers
+              the simulation worker.
+            </li>
+            <li>
+              <strong>Node.js 20+</strong> and <strong>PostgreSQL 16</strong> — these run the web
+              dashboard and store experiment data.
+            </li>
+          </ul>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+            Quick Start (3 Steps)
+          </h3>
+          <div className="sci-card p-5 !bg-gray-50 dark:!bg-gray-800/50 space-y-4">
+            <div>
+              <p className="font-semibold text-gray-900 dark:text-white mb-1">1. Clone the repository</p>
+              <pre className="bg-gray-100 dark:bg-gray-900 rounded-lg p-3 text-sm overflow-x-auto"><code>git clone https://github.com/jdefouw/EvoNash.git{"\n"}cd EvoNash</code></pre>
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900 dark:text-white mb-1">2. Set up the web dashboard</p>
+              <pre className="bg-gray-100 dark:bg-gray-900 rounded-lg p-3 text-sm overflow-x-auto"><code>{"# Install PostgreSQL, create a database, and apply the schema\n"}psql -U evonash -d evonash -f web/lib/sql/schema_standalone.sql{"\n\n"}cd web{"\n"}npm install{"\n"}cp .env.example .env   # then edit .env with your database connection string{"\n"}npm run build{"\n"}npm start</code></pre>
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900 dark:text-white mb-1">3. Run the GPU worker</p>
+              <pre className="bg-gray-100 dark:bg-gray-900 rounded-lg p-3 text-sm overflow-x-auto"><code>{"# Install PyTorch with CUDA (see https://pytorch.org for your CUDA version)\n"}pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128{"\n\n"}cd worker{"\n"}pip install -r requirements.txt{"\n"}# Edit config/worker_config.json — set controller_url to your dashboard URL{"\n"}python run_worker.py</code></pre>
+            </div>
+          </div>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+            Running Your Own Experiments
+          </h3>
+          <p>
+            Once the dashboard is running and the worker is connected, open the dashboard in your
+            browser, navigate to <strong>Experiments → New Experiment</strong>, and create experiments
+            in both the <strong>Control</strong> and <strong>Experimental</strong> groups. Use the
+            same random seed for each pair (e.g.&nbsp;42) so the only difference is the mutation
+            strategy. For statistically meaningful results, run at least 5 experiments per group
+            with different seeds.
+          </p>
+          <p>
+            The dashboard will automatically compute convergence generation, peak fitness, and
+            statistical comparisons (t-tests, effect sizes) as data comes in. You can watch the
+            experiments progress in real time.
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+            Contribute or Extend
+          </h3>
+          <p>
+            Contributions are welcome! Some ideas for extensions: try different neural network
+            architectures, experiment with new mutation strategies (e.g.&nbsp;self-adaptive rates),
+            add cooperation mechanics, or scale to larger populations. See the project
+            {' '}<a
+              href="https://github.com/jdefouw/EvoNash/blob/main/PROJECT_SPEC.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 underline decoration-dotted underline-offset-2"
+            >PROJECT_SPEC.md</a>{' '}
+            for the full technical specification.
+          </p>
+        </SectionCard>
+
+        {/* Section 16 – References */}
         <section
           id={sectionIds.references}
           className="scroll-mt-24 sci-card p-6 md:p-8 animate-fade-in"
         >
           <h2 className="section-heading">
-            <span className="section-number">15</span>
+            <span className="section-number">16</span>
             References
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 pl-10">

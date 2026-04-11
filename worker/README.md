@@ -38,7 +38,7 @@ The worker configuration is pre-configured with the controller URL. Check `confi
 
 ```json
 {
-  "controller_url": "https://sf26.defouw.ca",
+  "controller_url": "https://sf.defouw.ca",
   "poll_interval_seconds": 30,
   "max_retries": 3,
   "retry_delay_seconds": 5,
@@ -57,7 +57,7 @@ Run `start_worker.bat` to test the worker in CLI mode. You should see:
 ```
 Starting EvoNash Worker (CLI Mode)...
 [INFO] Worker initialized
-[INFO] Connecting to controller: https://sf26.defouw.ca
+[INFO] Connecting to controller: https://sf.defouw.ca
 [INFO] Polling for jobs...
 ```
 

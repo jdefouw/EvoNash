@@ -95,12 +95,12 @@ The code detects Nash Equilibrium using **entropy variance**:
 
 1. Calculate each agent's **policy entropy** (how "uncertain" its decisions are).
 2. Calculate the **variance** of entropy across all agents.
-3. If variance stays below **0.001** for **20 consecutive generations**, the population has converged.
+3. If variance stays below **0.01** for **20 consecutive generations**, the population has converged.
 4. An additional requirement: the population must have **diverged first** (started exploring different strategies) before converging. This prevents false positives from the initial identical population.
 
 ```
 Convergence conditions:
-  σ(entropy) < 0.001       ← strategies are nearly identical
+  σ(entropy) < 0.01        ← strategies are nearly identical
   for 20+ consecutive gens ← not a temporary fluctuation
   after divergence phase    ← population actually explored first
 ```

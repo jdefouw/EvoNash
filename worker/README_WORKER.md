@@ -139,7 +139,7 @@ nssm status EvoNashWorker
 ## How It Works
 
 1. **Polling:** Worker polls `/api/queue` every 30 seconds
-2. **Job Request:** If a PENDING experiment exists, Vercel returns job config
+2. **Job Request:** If a PENDING experiment exists, the controller returns job config
 3. **Processing:** Worker runs experiment on local GPU:
    - 1,500 generations, 750 ticks each (configurable)
    - A **tick** is one simulation step (dt=0.016s): physics, neural network inference, collisions, and food respawning

@@ -285,7 +285,7 @@ server {
 ```bash
 sudo -u evonash -i
 cd /opt/evonash
-git clone https://github.com/your-repo/EvoNash.git .
+git clone https://github.com/jdefouw/EvoNash.git .
 ```
 
 Or copy files from your local machine:
