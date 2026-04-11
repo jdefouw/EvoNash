@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { Cite, references } from '@/components/dashboard/ReferencesSection'
 
 const sectionIds = {
   intro: 'intro',
@@ -16,6 +17,7 @@ const sectionIds = {
   gpuWorkers: 'gpu-workers',
   measuring: 'what-we-measure',
   aiFuture: 'ai-future',
+  references: 'references',
 } as const
 
 const tocItems: { id: string; label: string; num: number }[] = [
@@ -33,6 +35,7 @@ const tocItems: { id: string; label: string; num: number }[] = [
   { id: sectionIds.gpuWorkers, label: 'Why do we need GPU workers?', num: 12 },
   { id: sectionIds.measuring, label: 'What are we measuring?', num: 13 },
   { id: sectionIds.aiFuture, label: 'Why is this relevant for the future of AI?', num: 14 },
+  { id: sectionIds.references, label: 'References', num: 15 },
 ]
 
 function SectionCard({
@@ -115,7 +118,7 @@ export default function OverviewPage() {
               does it help to change their &quot;genes&quot; more when they are doing poorly and
               less when they are doing well? Or is it better to always change them by the same
               amount, like flipping a coin the same way every time? This project builds a real
-              experiment—a computer platform that runs on a powerful graphics card—to answer that
+              experiment—a computer platform that runs on a powerful graphics card<Cite ids={[27]} />—to answer that
               question. Below we explain every part of the experiment in simple terms.
             </p>
 
@@ -125,17 +128,17 @@ export default function OverviewPage() {
                 Abstract (What We Did in One Paragraph)
               </h3>
               <p>
-                This experiment tests whether <strong>adaptive mutation</strong>—changing an
+                This experiment tests whether <strong>adaptive mutation</strong><Cite ids={[15, 17]} />—changing an
                 organism&apos;s &quot;genes&quot; (the numbers inside its brain) more when the
                 parent did poorly and less when the parent did well—helps a population of 1,000
                 digital organisms reach a <strong>stable outcome</strong> (called a Nash
-                equilibrium) faster than a <strong>control group</strong> that always uses the same
+                equilibrium<Cite ids={[1, 2]} />) faster than a <strong>control group</strong> that always uses the same
                 amount of random change (static mutation). We put the organisms in a simple 2D
                 world (a &quot;petri dish&quot;) where they can move, eat food, and shoot at each
-                other to steal energy. Their brains are small neural networks that we do not
+                other to steal energy. Their brains are small neural networks<Cite ids={[6, 9]} /> that we do not
                 program; we only evolve them by keeping the best performers and randomly mutating
-                their weights. We run two groups side by side, measure how many generations it
-                takes each group to &quot;settle down,&quot; and use statistics to see if the
+                their weights<Cite ids={[10, 11]} />. We run two groups side by side, measure how many generations it
+                takes each group to &quot;settle down,&quot; and use statistics<Cite ids={[21, 22]} /> to see if the
                 adaptive group really got there faster. The results tell us whether this kind of
                 smart mutation could help future AI and evolutionary algorithms.
               </p>
@@ -147,18 +150,18 @@ export default function OverviewPage() {
                 The Problem (Why We Did This)
               </h3>
               <p>
-                In many real-world and computer experiments, we use <strong>evolution</strong> to
+                In many real-world and computer experiments, we use <strong>evolution</strong><Cite ids={[10, 11]} /> to
                 improve things: we keep the best performers, copy them with small random changes
                 (mutations), and repeat. But how much should we change them? If we change too much
-                every time, good solutions get destroyed and we search almost at random. If we
+                every time, good solutions get destroyed and we search almost at random<Cite ids={[15]} />. If we
                 change too little, we might get stuck in a &quot;local&quot; good outcome and never
                 find a better one. Most classic methods use a <strong>fixed</strong> amount of
-                mutation—the same for everyone, every time. This project asks: what if we
+                mutation—the same for everyone, every time<Cite ids={[17]} />. This project asks: what if we
                 <strong> adapt</strong> the amount of mutation to how well the parent did?
                 Struggling organisms get more random changes (a chance to try something new);
                 successful ones get fewer changes (we keep what works). We wanted to test whether
                 that idea actually speeds up how fast a population finds a stable, balanced outcome
-                (a Nash equilibrium) in a simple but real experiment.
+                (a Nash equilibrium<Cite ids={[1]} />) in a simple but real experiment.
               </p>
             </div>
 
@@ -168,11 +171,11 @@ export default function OverviewPage() {
                 The Hypothesis (What We Think Will Happen)
               </h3>
               <p>
-                Our <strong>hypothesis</strong> is: if we use adaptive mutation—where the amount
+                Our <strong>hypothesis</strong> is: if we use adaptive mutation<Cite ids={[15, 16, 17]} />—where the amount
                 of random change is <strong>inversely proportional</strong> to the parent&apos;s
                 fitness (so low-performing parents produce more heavily mutated offspring, and
                 high-performing parents produce less mutated offspring)—then the population will
-                reach a Nash equilibrium (a stable mix of strategies where no one benefits by
+                reach a Nash equilibrium<Cite ids={[1, 2]} /> (a stable mix of strategies where no one benefits by
                 changing alone) in <strong>fewer generations</strong> than a control group that
                 uses a fixed mutation rate. In other words, we predict that &quot;smarter&quot;
                 mutation will help the population settle down faster.
@@ -248,12 +251,12 @@ export default function OverviewPage() {
                 Why This Matters
               </h3>
               <p>
-                This project combines <strong>evolution</strong> (trial and error over
-                generations), <strong>game theory</strong> (Nash equilibrium—when no one benefits
-                by changing strategy alone), and <strong>neural networks</strong> (small artificial
-                brains). Understanding whether adaptive mutation speeds up convergence can help
+                This project combines <strong>evolution</strong><Cite ids={[10, 11]} /> (trial and error over
+                generations), <strong>game theory</strong><Cite ids={[3, 4]} /> (Nash equilibrium<Cite ids={[1, 2]} />—when no one benefits
+                by changing strategy alone), and <strong>neural networks</strong><Cite ids={[6, 9]} /> (small artificial
+                brains). Understanding whether adaptive mutation<Cite ids={[15, 17, 18]} /> speeds up convergence can help
                 future AI and evolutionary algorithms—for example, in robotics, multi-agent
-                systems, or automated design. The rest of this page explains each part of the
+                systems<Cite ids={[25]} />, or automated design. The rest of this page explains each part of the
                 experiment in more detail, so you can understand exactly what we did and why.
               </p>
             </div>
@@ -288,12 +291,12 @@ export default function OverviewPage() {
         {/* Sections */}
         <SectionCard num={1} id={sectionIds.neuralNetwork} title="What is a neural network?">
           <p>
-            A <strong>neural network</strong> is a computer model inspired by how brain cells
+            A <strong>neural network</strong><Cite ids={[6, 7]} /> is a computer model inspired by how brain cells
             work. It is made of many simple &quot;cells&quot; (called neurons) that receive
             numbers, do simple math, and send numbers to other cells. No one programs the network
             step-by-step to solve the problem. Instead, we give it a structure—layers and
             connections—and then we <strong>change the strength of those connections</strong> (the
-            &quot;weights&quot;) through learning or, in our case, evolution.
+            &quot;weights&quot;) through learning<Cite ids={[8]} /> or, in our case, evolution<Cite ids={[12]} />.
           </p>
           <p>
             Think of it like a recipe where we only adjust the amounts of ingredients, not the
@@ -623,17 +626,17 @@ export default function OverviewPage() {
 
         <SectionCard num={10} id={sectionIds.gameTheoryNash} title="What is game theory? What is Nash equilibrium? Why is it the key metric?">
           <p>
-            <strong>Game theory</strong> is the study of situations where multiple
+            <strong>Game theory</strong><Cite ids={[3]} /> is the study of situations where multiple
             decision-makers (players) choose actions, and each person&apos;s outcome depends not
             only on their own choice but on what others do. Think of two people dividing a pizza: if
             you ask for more, the other might take less; your best choice depends on what you think
             they will do. In our experiment, the &quot;players&quot; are the organisms. Each one
             chooses how to behave (forage, attack, flee) based on its neural network, and its
             success (energy, survival, reproduction) depends on what the other 999 are doing. So the
-            petri dish is a &quot;game&quot; in the game-theory sense.
+            petri dish is a &quot;game&quot; in the game-theory sense<Cite ids={[25]} />.
           </p>
           <p>
-            <strong>Nash equilibrium</strong> is a situation where no one can improve their outcome
+            <strong>Nash equilibrium</strong><Cite ids={[1, 2]} /> is a situation where no one can improve their outcome
             by changing their strategy alone, given what everyone else is doing. It is named after
             the mathematician John Nash. At a Nash equilibrium, if you are the only one who
             switches from &quot;forage&quot; to &quot;attack,&quot; you don&apos;t do better—so no
@@ -642,11 +645,11 @@ export default function OverviewPage() {
           </p>
           <p>
             In our experiment, each organism has a strategy (the way its brain turns inputs into
-            actions). The population has a mix of strategies. We say the population has reached a
+            actions). The population has a mix of strategies<Cite ids={[4, 5]} />. We say the population has reached a
             Nash-like equilibrium when the mix of strategies stops changing from generation to
             generation: the kinds of behavior have settled into a stable balance. At that point, no
             organism would do better by behaving differently, given how the rest of the population
-            is behaving. We detect this by watching <strong>entropy variance</strong>—how much
+            is behaving. We detect this by watching <strong>entropy variance</strong><Cite ids={[28]} />—how much
             the organisms differ from each other in how &quot;mixed&quot; or &quot;certain&quot;
             their decisions are. When everyone is behaving similarly, that difference drops and
             stays low; when it stays low for many generations in a row, we treat that as having
@@ -666,8 +669,8 @@ export default function OverviewPage() {
 
         <SectionCard num={11} id={sectionIds.nashDetectionTechnical} title="How we detect Nash equilibrium (technical)">
           <p>
-            <strong>Detection criterion.</strong> Nash equilibrium is detected using
-            <strong> entropy variance</strong> across the population, not mean policy entropy.
+            <strong>Detection criterion.</strong> Nash equilibrium<Cite ids={[1, 2]} /> is detected using
+            <strong> entropy variance</strong><Cite ids={[28]} /> across the population, not mean policy entropy.
             For each generation we compute a scalar <strong>policy entropy</strong> per agent
             (expected entropy of the action distribution over a fixed set of sample inputs).
             The <strong>entropy variance</strong> is the variance of those per-agent entropies
@@ -677,7 +680,7 @@ export default function OverviewPage() {
             <strong>Why variance rather than mean entropy.</strong> Mean policy entropy
             indicates how mixed or deterministic the average policy is, but it does not
             measure population-level homogeneity. At equilibrium we require that the
-            strategy mix has stabilized—i.e., that agents no longer differ substantially
+            strategy mix has stabilized<Cite ids={[4]} />—i.e., that agents no longer differ substantially
             in behavior. That corresponds to low <em>variance</em> of policy entropy across
             agents: when all agents have similar entropies, the population has converged
             to a homogeneous strategy mix. We therefore define convergence as the
@@ -756,9 +759,9 @@ export default function OverviewPage() {
         <SectionCard num={14} id={sectionIds.aiFuture} title="Why is this relevant for the future of AI, and how could it be expanded?">
           <p>
             This experiment sits at the intersection of three powerful fields:
-            <strong> evolutionary computing</strong> (improving AI through trial and error over
-            generations), <strong>game theory</strong> (understanding strategic decision-making
-            when multiple agents interact), and <strong>neural networks</strong> (giving agents
+            <strong> evolutionary computing</strong><Cite ids={[10, 11, 12]} /> (improving AI through trial and error over
+            generations), <strong>game theory</strong><Cite ids={[3, 4, 5]} /> (understanding strategic decision-making
+            when multiple agents interact), and <strong>neural networks</strong><Cite ids={[6, 8, 9]} /> (giving agents
             brains that can process information and make decisions). That combination isn&apos;t
             just academic—it has direct applications to some of the most important challenges
             facing humanity.
@@ -828,10 +831,10 @@ export default function OverviewPage() {
             that finding could be applied to:
           </p>
           <ul className="list-disc pl-6 space-y-2 mt-2">
-            <li>Training neural networks more efficiently (reducing the enormous energy cost of training large AI models)</li>
-            <li>Optimizing engineering designs (aircraft wings, circuit layouts, antenna shapes) faster</li>
-            <li>Evolving game-playing AI (like AlphaGo&apos;s successors) with less computational cost</li>
-            <li>Accelerating scientific simulations that use evolutionary search methods</li>
+            <li>Training neural networks more efficiently (reducing the enormous energy cost of training large AI models)<Cite ids={[13, 14]} /></li>
+            <li>Optimizing engineering designs (aircraft wings, circuit layouts, antenna shapes) faster<Cite ids={[11]} /></li>
+            <li>Evolving game-playing AI (like AlphaGo&apos;s successors) with less computational cost<Cite ids={[26]} /></li>
+            <li>Accelerating scientific simulations that use evolutionary search methods<Cite ids={[17, 18]} /></li>
           </ul>
 
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
@@ -850,6 +853,81 @@ export default function OverviewPage() {
             industry.
           </p>
         </SectionCard>
+
+        {/* Section 15 – References */}
+        <section
+          id={sectionIds.references}
+          className="scroll-mt-24 sci-card p-6 md:p-8 animate-fade-in"
+        >
+          <h2 className="section-heading">
+            <span className="section-number">15</span>
+            References
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 pl-10">
+            {references.length} sources across {Array.from(new Set(references.map((r) => r.category))).length} categories
+          </p>
+          <div className="space-y-8 pl-2 md:pl-10">
+            {Array.from(new Set(references.map((r) => r.category))).map((category) => (
+              <div key={category}>
+                <h3 className="text-sm font-semibold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-3 flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                  {category}
+                </h3>
+                <ol className="space-y-3">
+                  {references
+                    .filter((r) => r.category === category)
+                    .map((ref) => (
+                      <li
+                        key={ref.id}
+                        id={`overview-ref-${ref.id}`}
+                        className="flex gap-3 text-sm leading-relaxed text-gray-700 dark:text-gray-300"
+                      >
+                        <span className="flex-shrink-0 w-7 h-7 rounded-md bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xs font-bold text-gray-500 dark:text-gray-400 mt-0.5">
+                          {ref.id}
+                        </span>
+                        <div>
+                          <span className="font-medium text-gray-900 dark:text-white">
+                            {ref.authors}
+                          </span>{' '}
+                          ({ref.year}).{' '}
+                          <em>{ref.title}</em>.{' '}
+                          <span className="text-gray-500 dark:text-gray-400">
+                            {ref.source}
+                          </span>
+                          {ref.doi && (
+                            <>
+                              {' '}
+                              <a
+                                href={`https://doi.org/${ref.doi}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-indigo-500 hover:text-indigo-600 dark:text-indigo-400 dark:hover:text-indigo-300 underline decoration-dotted underline-offset-2"
+                              >
+                                doi:{ref.doi}
+                              </a>
+                            </>
+                          )}
+                          {!ref.doi && ref.url && (
+                            <>
+                              {' '}
+                              <a
+                                href={ref.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-indigo-500 hover:text-indigo-600 dark:text-indigo-400 dark:hover:text-indigo-300 underline decoration-dotted underline-offset-2"
+                              >
+                                [Link]
+                              </a>
+                            </>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                </ol>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </main>
   )

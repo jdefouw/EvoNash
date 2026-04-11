@@ -16,7 +16,8 @@ import {
   AssumptionChecksCard,
   PowerAnalysisCard,
   EffectSizeCard,
-  VerificationCard
+  VerificationCard,
+  ReferencesSection
 } from "@/components/dashboard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -317,6 +318,7 @@ export default function DashboardPage() {
           <TabsTrigger value="methodology" className="sci-tab">Methodology</TabsTrigger>
           <TabsTrigger value="results" className="sci-tab">Results & Analysis</TabsTrigger>
           <TabsTrigger value="data" className="sci-tab">Raw Data</TabsTrigger>
+          <TabsTrigger value="references" className="sci-tab">References</TabsTrigger>
           <TabsTrigger value="conclusion" className="sci-tab">Conclusion</TabsTrigger>
         </TabsList>
 
@@ -506,6 +508,11 @@ export default function DashboardPage() {
               experimentalGenerations={experimentalGenerations}
             />
           )}
+        </TabsContent>
+
+        {/* ── REFERENCES TAB ── */}
+        <TabsContent value="references" className="space-y-6 animate-fade-in">
+          <ReferencesSection />
         </TabsContent>
 
         {/* ── CONCLUSION TAB ── */}
