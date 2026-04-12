@@ -16,6 +16,7 @@ const sectionIds = {
   nashDetectionTechnical: 'nash-detection-technical',
   gpuWorkers: 'gpu-workers',
   measuring: 'what-we-measure',
+  entropyVsVariance: 'entropy-vs-variance',
   howWeMeasure: 'how-we-measure',
   statisticalTests: 'statistical-tests',
   dataScale: 'data-scale',
@@ -38,12 +39,13 @@ const tocItems: { id: string; label: string; num: number }[] = [
   { id: sectionIds.nashDetectionTechnical, label: 'How we detect Nash equilibrium (technical)', num: 11 },
   { id: sectionIds.gpuWorkers, label: 'Why do we need GPU workers?', num: 12 },
   { id: sectionIds.measuring, label: 'What are we measuring?', num: 13 },
-  { id: sectionIds.howWeMeasure, label: 'How do we measure and report results?', num: 14 },
-  { id: sectionIds.statisticalTests, label: 'Understanding the statistical tests', num: 15 },
-  { id: sectionIds.dataScale, label: 'The scale of this experiment', num: 16 },
-  { id: sectionIds.aiFuture, label: 'Why is this relevant for the future of AI?', num: 17 },
-  { id: sectionIds.tryItYourself, label: 'Try it yourself', num: 18 },
-  { id: sectionIds.references, label: 'References', num: 19 },
+  { id: sectionIds.entropyVsVariance, label: 'Policy entropy vs. entropy variance', num: 14 },
+  { id: sectionIds.howWeMeasure, label: 'How do we measure and report results?', num: 15 },
+  { id: sectionIds.statisticalTests, label: 'Understanding the statistical tests', num: 16 },
+  { id: sectionIds.dataScale, label: 'The scale of this experiment', num: 17 },
+  { id: sectionIds.aiFuture, label: 'Why is this relevant for the future of AI?', num: 18 },
+  { id: sectionIds.tryItYourself, label: 'Try it yourself', num: 19 },
+  { id: sectionIds.references, label: 'References', num: 20 },
 ]
 
 function SectionCard({
@@ -764,7 +766,137 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        <SectionCard num={14} id={sectionIds.howWeMeasure} title="How do we measure and report results?">
+        <SectionCard num={14} id={sectionIds.entropyVsVariance} title="Policy entropy vs. entropy variance — what's the difference?">
+          <p>
+            Two of the most important numbers in this experiment sound similar — <strong>policy
+            entropy</strong> and <strong>entropy variance</strong> — but they measure very
+            different things. Understanding the distinction is critical to understanding how we
+            detect Nash equilibrium.
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+            Policy entropy: &quot;How random is ONE organism&apos;s behavior?&quot;
+          </h3>
+          <p>
+            Imagine an organism standing in the petri dish. It has four possible actions: move
+            forward, turn left, turn right, or boost. If its neural network says <strong>&quot;82%
+            forward, 7% left, 5% right, 6% boost&quot;</strong>, that organism has a clear
+            preference — it almost always goes forward. Its <strong>policy entropy is low</strong>.
+          </p>
+          <p>
+            On the other hand, if the neural network says <strong>&quot;25% forward, 25% left, 25%
+            right, 25% boost&quot;</strong>, the organism is essentially flipping a coin every time.
+            It has no strategy. Its <strong>policy entropy is high</strong>.
+          </p>
+          <p>
+            Mathematically, for a single organism with action probabilities p₁, p₂, p₃, p₄:
+          </p>
+          <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50">
+            <p className="font-mono text-sm text-center">
+              H = &minus;(p₁&middot;log(p₁) + p₂&middot;log(p₂) + p₃&middot;log(p₃) + p₄&middot;log(p₄))
+            </p>
+          </div>
+          <p>
+            The number we report on the dashboard as &quot;policy entropy&quot; is the
+            <strong> average</strong> of this value across 200 sampled organisms. It tells us:
+            on average, how decisive is the typical organism?
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+            Entropy variance: &quot;How DIFFERENT are the organisms FROM EACH OTHER?&quot;
+          </h3>
+          <p>
+            Policy entropy tells us about the average individual. Entropy variance tells us whether
+            all the individuals <strong>agree</strong>. We take the entropy of each sampled organism
+            and compute the <strong>variance</strong> (statistical spread) across the whole group:
+          </p>
+          <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50">
+            <p className="font-mono text-sm text-center">
+              Variance = (1/n) &times; &Sigma;(H&#x1D62; &minus; H&#x0304;)&sup2;
+            </p>
+            <p className="text-xs text-gray-500 text-center mt-1">
+              where H&#x1D62; is each organism&apos;s entropy and H&#x0304; is the average entropy
+            </p>
+          </div>
+          <p>
+            Low variance means all organisms have <strong>similar</strong> entropy values. High
+            variance means some are decisive while others are still confused.
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+            Why variance matters more than entropy for detecting Nash equilibrium
+          </h3>
+          <p>
+            Here is the key insight: <strong>you can have low average entropy but high variance,
+            and it is NOT Nash equilibrium.</strong> Three scenarios illustrate this:
+          </p>
+
+          <div className="space-y-3 mt-3">
+            {/* Scenario A */}
+            <div className="sci-card p-4 !bg-green-50 dark:!bg-green-900/20 border-green-200 dark:border-green-800/40">
+              <h4 className="text-sm font-semibold text-green-700 dark:text-green-400 mb-1">✓ Scenario A: Low entropy, LOW variance — Nash equilibrium</h4>
+              <div className="font-mono text-xs space-y-0.5 text-gray-700 dark:text-gray-300">
+                <p>Organism 1: H = 0.30 (always goes forward)</p>
+                <p>Organism 2: H = 0.31 (always goes forward)</p>
+                <p>Organism 3: H = 0.29 (always goes forward)</p>
+              </div>
+              <p className="text-xs text-green-700 dark:text-green-400 mt-1">
+                Average entropy: 0.30 (low) &bull; Variance: 0.0001 (low) &bull;
+                <strong> Everyone converged on the same strategy.</strong>
+              </p>
+            </div>
+
+            {/* Scenario B */}
+            <div className="sci-card p-4 !bg-red-50 dark:!bg-red-900/20 border-red-200 dark:border-red-800/40">
+              <h4 className="text-sm font-semibold text-red-700 dark:text-red-400 mb-1">✗ Scenario B: Low entropy, HIGH variance — NOT Nash equilibrium</h4>
+              <div className="font-mono text-xs space-y-0.5 text-gray-700 dark:text-gray-300">
+                <p>Organism 1: H = 0.10 (always attacks)</p>
+                <p>Organism 2: H = 1.20 (still exploring randomly)</p>
+                <p>Organism 3: H = 0.05 (always runs away)</p>
+              </div>
+              <p className="text-xs text-red-700 dark:text-red-400 mt-1">
+                Average entropy: 0.45 (moderate) &bull; Variance: 0.42 (high) &bull;
+                <strong> Different strategies, no consensus — population is still in flux.</strong>
+              </p>
+            </div>
+
+            {/* Scenario C */}
+            <div className="sci-card p-4 !bg-yellow-50 dark:!bg-yellow-900/20 border-yellow-200 dark:border-yellow-800/40">
+              <h4 className="text-sm font-semibold text-yellow-700 dark:text-yellow-400 mb-1">⟳ Scenario C: High entropy, LOW variance — Starting conditions (generation 0)</h4>
+              <div className="font-mono text-xs space-y-0.5 text-gray-700 dark:text-gray-300">
+                <p>Organism 1: H = 1.35 (random)</p>
+                <p>Organism 2: H = 1.38 (random)</p>
+                <p>Organism 3: H = 1.34 (random)</p>
+              </div>
+              <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
+                Average entropy: 1.36 (high) &bull; Variance: 0.0003 (low) &bull;
+                <strong> Everyone is equally confused — this is where all experiments start.</strong>
+              </p>
+            </div>
+          </div>
+
+          <p className="mt-4">
+            This is exactly why our convergence detection algorithm requires the population to
+            <strong> diverge first</strong> (variance goes up as organisms develop different
+            strategies) and then <strong>re-converge</strong> (variance drops back down as they
+            settle on a shared equilibrium). Only when variance stays low for 20 consecutive
+            generations <em>after</em> having been high do we declare Nash equilibrium.
+          </p>
+
+          <div className="sci-card p-4 !bg-indigo-50 dark:!bg-indigo-900/20 border-indigo-200 dark:border-indigo-800/40 mt-3">
+            <p className="text-xs text-indigo-700 dark:text-indigo-300">
+              <strong>In one sentence: </strong>
+              Policy entropy tells you what the average organism is doing. Entropy variance tells
+              you whether they&apos;re all doing the <strong>same thing</strong> — and that
+              consensus is what defines Nash equilibrium.
+            </p>
+          </div>
+        </SectionCard>
+
+        <SectionCard num={15} id={sectionIds.howWeMeasure} title="How do we measure and report results?">
           <p>
             The previous sections explain <strong>what</strong> we measure (convergence velocity,
             peak fitness, policy entropy). This section explains <strong>how</strong> the software
@@ -896,7 +1028,7 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        <SectionCard num={15} id={sectionIds.statisticalTests} title="Understanding the statistical tests">
+        <SectionCard num={16} id={sectionIds.statisticalTests} title="Understanding the statistical tests">
           <p>
             After running hundreds of experiments in both the control and experimental groups, we
             need to answer two questions: <strong>&quot;Is the difference real?&quot;</strong> and
@@ -1005,7 +1137,7 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        <SectionCard num={16} id={sectionIds.dataScale} title="The scale of this experiment">
+        <SectionCard num={17} id={sectionIds.dataScale} title="The scale of this experiment">
           <p>
             One question people often ask is: <strong>&quot;Why do you need computers to do the
             statistics? Can&apos;t you just look at the numbers?&quot;</strong> The short answer is
@@ -1096,7 +1228,7 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        <SectionCard num={17} id={sectionIds.aiFuture} title="Why is this relevant for the future of AI, and how could it be expanded?">
+        <SectionCard num={18} id={sectionIds.aiFuture} title="Why is this relevant for the future of AI, and how could it be expanded?">
           <p>
             This experiment sits at the intersection of three powerful fields:
             <strong> evolutionary computing</strong><Cite ids={[10, 11, 12]} /> (improving AI through trial and error over
@@ -1195,7 +1327,7 @@ export default function OverviewPage() {
         </SectionCard>
 
         {/* Section 18 – Try It Yourself */}
-        <SectionCard num={18} id={sectionIds.tryItYourself} title="Try it yourself">
+        <SectionCard num={19} id={sectionIds.tryItYourself} title="Try it yourself">
           <p>
             EvoNash is fully open-source. If you would like to reproduce this experiment—or
             run your own variation of it—everything you need is on GitHub:
@@ -1292,7 +1424,7 @@ export default function OverviewPage() {
           className="scroll-mt-24 sci-card p-6 md:p-8 animate-fade-in"
         >
           <h2 className="section-heading">
-            <span className="section-number">19</span>
+            <span className="section-number">20</span>
             References
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 pl-10">

@@ -12,7 +12,6 @@ import {
   StatsSummary,
   ConclusionCard,
   BoxPlotChart,
-  QQPlot,
   PowerAnalysisCard,
   EffectSizeCard,
   ConvergenceRangeCard,
@@ -440,25 +439,21 @@ export default function DashboardPage() {
                 />
               </div>
 
-              {/* Distribution Analysis */}
+              {/* Distribution Analysis & Convergence Range */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <BoxPlotChart
                   title="Convergence Speed Distribution"
                   controlData={dashboardData?.distributionData?.control ?? null}
                   experimentalData={dashboardData?.distributionData?.experimental ?? null}
                 />
-                <QQPlot
-                  controlValues={dashboardData?.distributionData?.control?.values ?? []}
-                  experimentalValues={dashboardData?.distributionData?.experimental?.values ?? []}
-                />
-              </div>
-
-              {/* Convergence Range & Power Analysis */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <ConvergenceRangeCard
                   controlData={dashboardData?.distributionData?.control ?? null}
                   experimentalData={dashboardData?.distributionData?.experimental ?? null}
                 />
+              </div>
+
+              {/* Power Analysis */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <PowerAnalysisCard
                   achievedPower={dashboardData?.powerAnalysis?.achievedPower ?? null}
                   requiredFor80={dashboardData?.powerAnalysis?.requiredFor80 ?? null}
