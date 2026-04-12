@@ -16,6 +16,7 @@ import {
   AssumptionChecksCard,
   PowerAnalysisCard,
   EffectSizeCard,
+  ConvergenceRangeCard,
   VerificationCard,
   ReferencesSection
 } from "@/components/dashboard";
@@ -452,6 +453,12 @@ export default function DashboardPage() {
                   experimentalValues={dashboardData?.distributionData?.experimental?.values ?? []}
                 />
               </div>
+
+              {/* Convergence Range Comparison */}
+              <ConvergenceRangeCard
+                controlData={dashboardData?.distributionData?.control ?? null}
+                experimentalData={dashboardData?.distributionData?.experimental ?? null}
+              />
 
               {/* Statistical Details */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
