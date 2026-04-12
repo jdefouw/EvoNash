@@ -13,7 +13,6 @@ import {
   ConclusionCard,
   BoxPlotChart,
   QQPlot,
-  AssumptionChecksCard,
   PowerAnalysisCard,
   EffectSizeCard,
   ConvergenceRangeCard,
@@ -454,24 +453,11 @@ export default function DashboardPage() {
                 />
               </div>
 
-              {/* Convergence Range Comparison */}
-              <ConvergenceRangeCard
-                controlData={dashboardData?.distributionData?.control ?? null}
-                experimentalData={dashboardData?.distributionData?.experimental ?? null}
-              />
-
-              {/* Statistical Details */}
+              {/* Convergence Range & Power Analysis */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <AssumptionChecksCard
-                  normalityControl={dashboardData?.assumptionChecks?.normalityControl ?? null}
-                  normalityExperimental={dashboardData?.assumptionChecks?.normalityExperimental ?? null}
-                  varianceEquality={dashboardData?.assumptionChecks?.varianceEquality ?? null}
-                  outlierControl={dashboardData?.assumptionChecks?.outlierControl ?? null}
-                  outlierExperimental={dashboardData?.assumptionChecks?.outlierExperimental ?? null}
-                  bothNormal={dashboardData?.assumptionChecks?.bothNormal ?? false}
-                  anyOutliers={dashboardData?.assumptionChecks?.anyOutliers ?? false}
-                  recommendation={dashboardData?.assumptionChecks?.recommendation ?? 'non_parametric'}
-                  recommendationText={dashboardData?.assumptionChecks?.recommendationText ?? 'Insufficient data'}
+                <ConvergenceRangeCard
+                  controlData={dashboardData?.distributionData?.control ?? null}
+                  experimentalData={dashboardData?.distributionData?.experimental ?? null}
                 />
                 <PowerAnalysisCard
                   achievedPower={dashboardData?.powerAnalysis?.achievedPower ?? null}
