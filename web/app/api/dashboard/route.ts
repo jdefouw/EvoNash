@@ -2163,7 +2163,13 @@ export async function GET() {
       effectSizes,
       powerAnalysis: powerAnalysisResult,
       distributionData,
-      pairedAnalysis: pairedAnalysisResult ?? undefined
+      pairedAnalysis: pairedAnalysisResult ?? undefined,
+      convergenceData: experimentConvergenceData.map(e => ({
+        experimentId: e.experiment_id,
+        group: e.experiment_group,
+        seed: Number(e.random_seed),
+        convergenceGeneration: Number(e.convergence_generation)
+      }))
     }
 
     return NextResponse.json(response, {

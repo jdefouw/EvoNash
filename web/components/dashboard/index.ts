@@ -5,6 +5,7 @@ export { default as VariablesTable } from './VariablesTable'
 export { default as MethodologyTimeline } from './MethodologyTimeline'
 export { default as ComparisonChart } from './ComparisonChart'
 export { default as ExperimentDataTable } from './ExperimentDataTable'
+export { default as ConvergenceDataTable } from './ConvergenceDataTable'
 export { default as StatsSummary } from './StatsSummary'
 export { default as ConclusionCard } from './ConclusionCard'
 // SampleSizeGuidance removed — absorbed into PowerAnalysisCard

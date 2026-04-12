@@ -44,7 +44,6 @@ export default function ExperimentDataTable({
   const tableData = useMemo(() => {
     const rows: TableRow[] = []
 
-    // Add control generations
     controlGenerations.forEach(gen => {
       const exp = controlExperiments.find(e => e.id === gen.experiment_id)
       rows.push({
@@ -62,7 +61,6 @@ export default function ExperimentDataTable({
       })
     })
 
-    // Add experimental generations
     experimentalGenerations.forEach(gen => {
       const exp = experimentalExperiments.find(e => e.id === gen.experiment_id)
       rows.push({
@@ -83,27 +81,28 @@ export default function ExperimentDataTable({
     return rows
   }, [controlGenerations, experimentalGenerations, controlExperiments, experimentalExperiments])
 
+  // Dataset size calculations
+  const totalRows = tableData.length
+  const controlRows = tableData.filter(r => r.group === 'control').length
+  const experimentalRows = tableData.filter(r => r.group === 'experimental').length
+  const columnsPerRow = 8 // fields displayed
+  const totalDataPoints = totalRows * columnsPerRow
+  const estimatedSizeMB = ((totalRows * 120) / (1024 * 1024)).toFixed(1) // ~120 bytes per row estimate
+
   // Filter and sort data
   const filteredAndSortedData = useMemo(() => {
     let data = [...tableData]
 
-    // Filter by group
     if (filterGroup !== 'all') {
       data = data.filter(row => row.group === filterGroup)
     }
 
-    // Sort (all sortable fields are numeric)
     data.sort((a, b) => {
       const aVal = a[sortField]
       const bVal = b[sortField]
-
-      // Handle null values - treat as -Infinity for sorting
       const aNum = aVal ?? -Infinity
       const bNum = bVal ?? -Infinity
-
-      return sortDirection === 'asc'
-        ? aNum - bNum
-        : bNum - aNum
+      return sortDirection === 'asc' ? aNum - bNum : bNum - aNum
     })
 
     return data
@@ -125,36 +124,6 @@ export default function ExperimentDataTable({
     }
   }
 
-  const exportToCSV = () => {
-    const headers = ['Group', 'Experiment', 'Generation', 'Avg Fitness', 'Peak Fitness', 'Min Fitness', 'Std Fitness', 'Entropy', 'Variance', 'Diversity', 'Mutation Rate']
-    const csvContent = [
-      headers.join(','),
-      ...filteredAndSortedData.map(row => [
-        row.group,
-        `"${row.experimentName}"`,
-        row.generation,
-        row.avg_fitness?.toFixed(4) ?? '',
-        row.peak_fitness?.toFixed(4) ?? '',
-        row.min_fitness?.toFixed(4) ?? '',
-        row.std_fitness?.toFixed(4) ?? '',
-        row.entropy?.toFixed(6) ?? '',
-        row.variance?.toFixed(6) ?? '',
-        row.diversity?.toFixed(6) ?? '',
-        row.mutation_rate?.toFixed(4) ?? ''
-      ].join(','))
-    ].join('\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    link.setAttribute('href', url)
-    link.setAttribute('download', `evonash_experiment_data_${new Date().toISOString().split('T')[0]}.csv`)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) {
       return <span className="text-gray-300 dark:text-gray-600">↕</span>
@@ -168,45 +137,69 @@ export default function ExperimentDataTable({
   }
 
   return (
-    <section id="data" className="scroll-mt-20">
+    <section id="data" className="scroll-mt-20 space-y-6">
+      {/* Dataset Size Info Card */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-        <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-              7. Data Tables
-            </h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Raw generation data from all experiments ({filteredAndSortedData.length} records)
-            </p>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+          Raw Generation Data
+        </h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 leading-relaxed">
+          Every generation from every experiment — this is the full telemetry dataset. Each row represents
+          one generation of one experiment, with fitness, entropy, variance, diversity, and mutation rate
+          recorded per generation.
+        </p>
+
+        {/* Dataset Size Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div className="bg-gray-50 dark:bg-gray-900/30 rounded-lg p-3 text-center border border-gray-200 dark:border-gray-700">
+            <div className="text-xl font-bold text-gray-900 dark:text-white">{totalRows.toLocaleString()}</div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400">Total rows</div>
+          </div>
+          <div className="bg-blue-50 dark:bg-blue-900/15 rounded-lg p-3 text-center border border-blue-100 dark:border-blue-800/40">
+            <div className="text-xl font-bold text-blue-600 dark:text-blue-400">{controlRows.toLocaleString()}</div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400">Control generations</div>
+          </div>
+          <div className="bg-purple-50 dark:bg-purple-900/15 rounded-lg p-3 text-center border border-purple-100 dark:border-purple-800/40">
+            <div className="text-xl font-bold text-purple-600 dark:text-purple-400">{experimentalRows.toLocaleString()}</div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400">Experimental generations</div>
+          </div>
+          <div className="bg-gray-50 dark:bg-gray-900/30 rounded-lg p-3 text-center border border-gray-200 dark:border-gray-700">
+            <div className="text-xl font-bold text-gray-900 dark:text-white">{totalDataPoints.toLocaleString()}</div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400">Data points</div>
+          </div>
+        </div>
+
+        <div className="p-3 bg-amber-50 dark:bg-amber-900/15 rounded-lg border border-amber-100 dark:border-amber-800/40">
+          <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+            <strong>⚠ Large dataset:</strong> This table contains {totalRows.toLocaleString()} rows (~{estimatedSizeMB} MB).
+            Each of the {controlExperiments.length + experimentalExperiments.length} experiments contributes
+            ~{totalRows > 0 ? Math.round(totalRows / Math.max(controlExperiments.length + experimentalExperiments.length, 1)) : 0} generations
+            of telemetry data. The table is paginated to {rowsPerPage} rows per page for performance.
+          </p>
+        </div>
+      </div>
+
+      {/* Data Table */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+        <div className="flex flex-wrap justify-between items-center gap-4 mb-4">
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            Showing {((currentPage - 1) * rowsPerPage) + 1}–{Math.min(currentPage * rowsPerPage, filteredAndSortedData.length)} of {filteredAndSortedData.length.toLocaleString()} rows
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            {/* Filter Buttons */}
-            <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-              {(['all', 'control', 'experimental'] as FilterGroup[]).map(group => (
-                <button
-                  key={group}
-                  onClick={() => { setFilterGroup(group); setCurrentPage(1); }}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${filterGroup === group
-                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                    }`}
-                >
-                  {group === 'all' ? 'All' : group === 'control' ? 'Control' : 'Experimental'}
-                </button>
-              ))}
-            </div>
-
-            {/* Export Button */}
-            <button
-              onClick={exportToCSV}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              Export CSV
-            </button>
+          {/* Filter Buttons */}
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+            {(['all', 'control', 'experimental'] as FilterGroup[]).map(group => (
+              <button
+                key={group}
+                onClick={() => { setFilterGroup(group); setCurrentPage(1); }}
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${filterGroup === group
+                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+              >
+                {group === 'all' ? 'All' : group === 'control' ? 'Control' : 'Experimental'}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -219,7 +212,7 @@ export default function ExperimentDataTable({
                   Group
                 </th>
                 <th
-                  className="text-left py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+                  className="text-left py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 select-none"
                   onClick={() => handleSort('generation')}
                 >
                   <div className="flex items-center gap-1">
@@ -227,7 +220,7 @@ export default function ExperimentDataTable({
                   </div>
                 </th>
                 <th
-                  className="text-right py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+                  className="text-right py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 select-none"
                   onClick={() => handleSort('avg_fitness')}
                 >
                   <div className="flex items-center justify-end gap-1">
@@ -235,7 +228,7 @@ export default function ExperimentDataTable({
                   </div>
                 </th>
                 <th
-                  className="text-right py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+                  className="text-right py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 select-none"
                   onClick={() => handleSort('peak_fitness')}
                 >
                   <div className="flex items-center justify-end gap-1">
@@ -243,7 +236,7 @@ export default function ExperimentDataTable({
                   </div>
                 </th>
                 <th
-                  className="text-right py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+                  className="text-right py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 select-none"
                   onClick={() => handleSort('entropy')}
                 >
                   <div className="flex items-center justify-end gap-1">
@@ -251,7 +244,7 @@ export default function ExperimentDataTable({
                   </div>
                 </th>
                 <th
-                  className="text-right py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+                  className="text-right py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 select-none"
                   onClick={() => handleSort('variance')}
                 >
                   <div className="flex items-center justify-end gap-1">
@@ -259,7 +252,7 @@ export default function ExperimentDataTable({
                   </div>
                 </th>
                 <th
-                  className="text-right py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+                  className="text-right py-3 px-2 font-semibold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 select-none"
                   onClick={() => handleSort('diversity')}
                 >
                   <div className="flex items-center justify-end gap-1">
@@ -325,7 +318,7 @@ export default function ExperimentDataTable({
         {totalPages > 1 && (
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
             <div className="text-sm text-gray-600 dark:text-gray-400">
-              Page {currentPage} of {totalPages}
+              Page {currentPage} of {totalPages.toLocaleString()}
             </div>
             <div className="flex gap-2">
               <button

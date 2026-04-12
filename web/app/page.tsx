@@ -9,6 +9,7 @@ import {
   MethodologyTimeline,
   ComparisonChart,
   ExperimentDataTable,
+  ConvergenceDataTable,
   StatsSummary,
   ConclusionCard,
   BoxPlotChart,
@@ -76,6 +77,7 @@ interface DashboardData {
     experimental: any
   }
   pairedAnalysis?: any
+  convergenceData?: { experimentId: string; group: string; seed: number; convergenceGeneration: number }[]
 }
 
 export default function DashboardPage() {
@@ -331,6 +333,7 @@ export default function DashboardPage() {
           <TabsTrigger value="overview" className="sci-tab">Overview</TabsTrigger>
           <TabsTrigger value="methodology" className="sci-tab">Methodology</TabsTrigger>
           <TabsTrigger value="results" className="sci-tab">Results & Analysis</TabsTrigger>
+          <TabsTrigger value="convergence-data" className="sci-tab">Convergence Data</TabsTrigger>
           <TabsTrigger value="data" className="sci-tab">Raw Data</TabsTrigger>
           <TabsTrigger value="references" className="sci-tab">References</TabsTrigger>
           <TabsTrigger value="conclusion" className="sci-tab">Conclusion</TabsTrigger>
@@ -561,6 +564,28 @@ export default function DashboardPage() {
                 />
               </div>
             </>
+          )}
+        </TabsContent>
+
+        {/* ── CONVERGENCE DATA TAB ── */}
+        <TabsContent value="convergence-data" className="space-y-6 animate-fade-in">
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center space-y-3">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-indigo-200 border-t-indigo-600" />
+                <p className="text-sm text-gray-500 dark:text-gray-400">Loading convergence data…</p>
+              </div>
+            </div>
+          ) : (
+            <ConvergenceDataTable
+              data={dashboardData?.convergenceData ?? []}
+              controlMean={stats?.convergenceControlMean ?? null}
+              experimentalMean={stats?.convergenceExperimentalMean ?? null}
+              controlStd={stats?.convergenceControlStd ?? null}
+              experimentalStd={stats?.convergenceExperimentalStd ?? null}
+              cohensD={stats?.convergenceCohensD ?? null}
+              pValue={stats?.convergencePValue ?? null}
+            />
           )}
         </TabsContent>
 
