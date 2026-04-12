@@ -1406,6 +1406,13 @@ export interface DashboardData {
   }
   // Scientific Rigor - Paired-Seed Analysis (matched-pairs t-test)
   pairedAnalysis?: PairedTTestResult
+  // Scientific Rigor - Data point collection
+  convergenceData?: {
+    experimentId: string
+    group: string
+    seed: number
+    convergenceGeneration: number
+  }[]
 }
 
 // =============================================================================
