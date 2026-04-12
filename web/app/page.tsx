@@ -329,15 +329,17 @@ export default function DashboardPage() {
 
       {/* ── TAB NAVIGATION ── */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="sci-tabs">
-          <TabsTrigger value="overview" className="sci-tab">Overview</TabsTrigger>
-          <TabsTrigger value="methodology" className="sci-tab">Methodology</TabsTrigger>
-          <TabsTrigger value="results" className="sci-tab">Results & Analysis</TabsTrigger>
-          <TabsTrigger value="convergence-data" className="sci-tab">Convergence Data</TabsTrigger>
-          <TabsTrigger value="data" className="sci-tab">Raw Data</TabsTrigger>
-          <TabsTrigger value="references" className="sci-tab">References</TabsTrigger>
-          <TabsTrigger value="conclusion" className="sci-tab">Conclusion</TabsTrigger>
-        </TabsList>
+        <div className="sci-tabs-wrapper">
+          <TabsList className="sci-tabs">
+            <TabsTrigger value="overview" className="sci-tab">Overview</TabsTrigger>
+            <TabsTrigger value="methodology" className="sci-tab">Methodology</TabsTrigger>
+            <TabsTrigger value="results" className="sci-tab">Results & Analysis</TabsTrigger>
+            <TabsTrigger value="convergence-data" className="sci-tab">Convergence Data</TabsTrigger>
+            <TabsTrigger value="data" className="sci-tab">Raw Data</TabsTrigger>
+            <TabsTrigger value="references" className="sci-tab">References</TabsTrigger>
+            <TabsTrigger value="conclusion" className="sci-tab">Conclusion</TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* ── OVERVIEW TAB ── */}
         <TabsContent value="overview" className="space-y-6 animate-fade-in">

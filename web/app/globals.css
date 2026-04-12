@@ -120,6 +120,39 @@ body {
 /* ============================================================
    TABS — pill-style
    ============================================================ */
+.sci-tabs-wrapper {
+  position: relative;
+  max-width: 100%;
+}
+
+/* Right fade gradient — scroll hint on mobile */
+@media (max-width: 900px) {
+  .sci-tabs-wrapper::after {
+    content: '›';
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 40px;
+    background: linear-gradient(to right, transparent, var(--bg-card-alt) 70%);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 6px;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    pointer-events: none;
+    border-radius: 0 10px 10px 0;
+    animation: nudge-right 1.5s ease-in-out infinite;
+  }
+}
+
+@keyframes nudge-right {
+  0%, 100% { transform: translateX(0); opacity: 0.5; }
+  50% { transform: translateX(3px); opacity: 1; }
+}
+
 .sci-tabs {
   display: inline-flex;
   gap: 4px;
