@@ -310,12 +310,17 @@ export default function DashboardPage() {
             <div className="metric-label">Speed Improvement</div>
           </div>
           <div className="metric-item">
-            <div className="metric-value">{loading ? '—' : powerLabel}</div>
-            <div className="metric-label">Statistical Power</div>
-          </div>
-          <div className="metric-item">
             <div className="metric-value">{loading ? '—' : (stats?.convergencePValue != null ? `p=${stats.convergencePValue < 0.0001 ? stats.convergencePValue.toExponential(2) : stats.convergencePValue.toFixed(4)}` : '—')}</div>
             <div className="metric-label">Significance</div>
+          </div>
+          <div className="metric-item">
+            <div className="metric-value">{loading ? '—' : powerLabel}</div>
+            <div className="metric-label">Statistical Power</div>
+            {!loading && stats?.convergenceCohensD != null && (
+              <div className="text-[10px] text-white/60 mt-0.5">
+                Cohen&apos;s d = {stats.convergenceCohensD.toFixed(3)}
+              </div>
+            )}
           </div>
         </div>
       </div>

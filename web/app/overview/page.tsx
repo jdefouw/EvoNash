@@ -19,6 +19,7 @@ const sectionIds = {
   entropyVsVariance: 'entropy-vs-variance',
   howWeMeasure: 'how-we-measure',
   statisticalTests: 'statistical-tests',
+  iqrAndCI: 'iqr-and-confidence-intervals',
   dataScale: 'data-scale',
   aiFuture: 'ai-future',
   tryItYourself: 'try-it-yourself',
@@ -42,10 +43,11 @@ const tocItems: { id: string; label: string; num: number }[] = [
   { id: sectionIds.entropyVsVariance, label: 'Policy entropy vs. entropy variance', num: 14 },
   { id: sectionIds.howWeMeasure, label: 'How do we measure and report results?', num: 15 },
   { id: sectionIds.statisticalTests, label: 'Understanding the statistical tests', num: 16 },
-  { id: sectionIds.dataScale, label: 'The scale of this experiment', num: 17 },
-  { id: sectionIds.aiFuture, label: 'Why is this relevant for the future of AI?', num: 18 },
-  { id: sectionIds.tryItYourself, label: 'Try it yourself', num: 19 },
-  { id: sectionIds.references, label: 'References', num: 20 },
+  { id: sectionIds.iqrAndCI, label: 'IQR and confidence intervals', num: 17 },
+  { id: sectionIds.dataScale, label: 'The scale of this experiment', num: 18 },
+  { id: sectionIds.aiFuture, label: 'Why is this relevant for the future of AI?', num: 19 },
+  { id: sectionIds.tryItYourself, label: 'Try it yourself', num: 20 },
+  { id: sectionIds.references, label: 'References', num: 21 },
 ]
 
 function SectionCard({
@@ -1137,7 +1139,127 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        <SectionCard num={17} id={sectionIds.dataScale} title="The scale of this experiment">
+        <SectionCard num={17} id={sectionIds.iqrAndCI} title="Understanding IQR and confidence intervals">
+          <p>
+            Two statistical concepts appear frequently on the results dashboard:
+            the <strong>Interquartile Range (IQR)</strong> and the <strong>95% Confidence
+            Interval (CI)</strong>. Both describe &quot;spread,&quot; but they answer very
+            different questions.
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+            IQR: &quot;Where did the middle 50% of experiments land?&quot;
+          </h3>
+          <p>
+            Imagine lining up every converged experiment from fastest to slowest. The <strong>first
+            quartile (Q1)</strong> is the point where 25% of experiments finished faster, and the
+            <strong> third quartile (Q3)</strong> is where 75% finished faster. The gap between
+            them is the IQR:
+          </p>
+          <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50">
+            <p className="font-mono text-sm text-center">
+              IQR = Q3 &minus; Q1
+            </p>
+            <p className="text-xs text-gray-500 text-center mt-1">
+              The range that contains the middle 50% of convergence generations
+            </p>
+          </div>
+          <p>
+            A <strong>small IQR</strong> means most experiments converged around the same
+            generation&mdash;the process is consistent. A <strong>large IQR</strong> means
+            there was more variability in how long experiments took.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+            <div className="sci-card p-4 !bg-blue-50 dark:!bg-blue-900/20 border-blue-200 dark:border-blue-800/40">
+              <h4 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">
+                Control group (Static &epsilon;)
+              </h4>
+              <p className="text-xs text-gray-700 dark:text-gray-300">
+                With a fixed mutation rate, every experiment faces the same evolutionary
+                pressure. The result is a <strong>tight IQR</strong>&mdash;most experiments
+                converge within a narrow window of generations. Think of it like a class of
+                students who all study the exact same way: they all finish the exam around
+                the same time.
+              </p>
+            </div>
+            <div className="sci-card p-4 !bg-amber-50 dark:!bg-amber-900/20 border-amber-200 dark:border-amber-800/40">
+              <h4 className="text-sm font-semibold text-amber-700 dark:text-amber-400 mb-1">
+                Experimental group (Adaptive &epsilon;)
+              </h4>
+              <p className="text-xs text-gray-700 dark:text-gray-300">
+                Adaptive mutation creates <strong>multiple evolutionary pathways</strong>.
+                Some experiments find a fast route and converge early; others explore longer
+                before settling. The result is a <strong>wider IQR</strong>&mdash;but on
+                average, convergence still happens faster. The students each develop their
+                own study strategy: some finish early, some later, but the class average
+                is better.
+              </p>
+            </div>
+          </div>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+            95% Confidence Interval: &quot;How sure are we about the true difference?&quot;
+          </h3>
+          <p>
+            Our experiments are a <em>sample</em>&mdash;we ran around 1,300, but we could
+            theoretically run millions. The confidence interval gives us a range where the
+            <strong> true average difference</strong> between control and experimental almost
+            certainly lives.
+          </p>
+          <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50">
+            <p className="font-mono text-sm text-center">
+              CI = (x&#x0304;₁ &minus; x&#x0304;₂) &plusmn; t &times; SE
+            </p>
+            <p className="text-xs text-gray-500 text-center mt-1">
+              where SE is the standard error of the difference between means
+            </p>
+          </div>
+          <p>
+            For example, if the 95% CI for the mean difference is <strong>[18, 26]</strong>,
+            it means: &quot;We are 95% confident the true average difference in convergence
+            speed is between 18 and 26 generations.&quot;
+          </p>
+
+          <div className="space-y-3 mt-3">
+            <div className="sci-card p-4 !bg-green-50 dark:!bg-green-900/20 border-green-200 dark:border-green-800/40">
+              <h4 className="text-sm font-semibold text-green-700 dark:text-green-400 mb-1">
+                &check; CI does NOT include zero
+              </h4>
+              <p className="text-xs text-gray-700 dark:text-gray-300">
+                The difference is <strong>statistically significant</strong>. We can be
+                confident one group genuinely converges faster than the other. In this
+                experiment, the CI is entirely above zero, meaning the experimental group
+                consistently converges faster.
+              </p>
+            </div>
+            <div className="sci-card p-4 !bg-red-50 dark:!bg-red-900/20 border-red-200 dark:border-red-800/40">
+              <h4 className="text-sm font-semibold text-red-700 dark:text-red-400 mb-1">
+                &cross; CI includes zero
+              </h4>
+              <p className="text-xs text-gray-700 dark:text-gray-300">
+                We <strong>cannot rule out</strong> that there is no real difference. The
+                observed gap might be due to random chance.
+              </p>
+            </div>
+          </div>
+
+          <div className="sci-card p-4 !bg-indigo-50 dark:!bg-indigo-900/20 border-indigo-200 dark:border-indigo-800/40 mt-4">
+            <p className="text-xs text-indigo-700 dark:text-indigo-300">
+              <strong>How they work together: </strong>
+              The IQR tells you how spread out <em>individual experiments</em> are within each
+              group. The confidence interval tells you how precisely we know the <em>average
+              difference between the two groups</em>. Even when a group has a wide IQR (high
+              variability among individual experiments), the CI can still be narrow if we have
+              enough data&mdash;which is exactly what we see in EvoNash with 700+ converged
+              experiments per group.
+            </p>
+          </div>
+        </SectionCard>
+
+        <SectionCard num={18} id={sectionIds.dataScale} title="The scale of this experiment">
           <p>
             One question people often ask is: <strong>&quot;Why do you need computers to do the
             statistics? Can&apos;t you just look at the numbers?&quot;</strong> The short answer is
@@ -1228,7 +1350,7 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        <SectionCard num={18} id={sectionIds.aiFuture} title="Why is this relevant for the future of AI, and how could it be expanded?">
+        <SectionCard num={19} id={sectionIds.aiFuture} title="Why is this relevant for the future of AI, and how could it be expanded?">
           <p>
             This experiment sits at the intersection of three powerful fields:
             <strong> evolutionary computing</strong><Cite ids={[10, 11, 12]} /> (improving AI through trial and error over
@@ -1327,7 +1449,7 @@ export default function OverviewPage() {
         </SectionCard>
 
         {/* Section 18 – Try It Yourself */}
-        <SectionCard num={19} id={sectionIds.tryItYourself} title="Try it yourself">
+        <SectionCard num={20} id={sectionIds.tryItYourself} title="Try it yourself">
           <p>
             EvoNash is fully open-source. If you would like to reproduce this experiment—or
             run your own variation of it—everything you need is on GitHub:
@@ -1424,7 +1546,7 @@ export default function OverviewPage() {
           className="scroll-mt-24 sci-card p-6 md:p-8 animate-fade-in"
         >
           <h2 className="section-heading">
-            <span className="section-number">20</span>
+            <span className="section-number">21</span>
             References
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 pl-10">
