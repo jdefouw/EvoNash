@@ -125,23 +125,31 @@ export default function PowerAnalysisCard({
       </div>
 
       {/* Experiment Counts */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-            {controlExperimentCount}
+      <div className="mb-6">
+        <div className="text-center mb-3">
+          <div className="text-3xl font-bold text-gray-900 dark:text-white">
+            {controlExperimentCount + experimentalExperimentCount}
           </div>
-          <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Control (Static)</div>
-          <div className="text-[10px] text-gray-400 dark:text-gray-600 mt-1">
-            {controlAvgGenerations.toLocaleString()} avg gen · {currentControlN} converged
-          </div>
+          <div className="text-xs font-medium text-gray-500 dark:text-gray-400">Total Experiments</div>
         </div>
-        <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-            {experimentalExperimentCount}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 text-center">
+            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+              {controlExperimentCount}
+            </div>
+            <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Control (Static)</div>
+            <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+              {currentControlN} converged ({controlExperimentCount > 0 ? Math.round((currentControlN / controlExperimentCount) * 100) : 0}%)
+            </div>
           </div>
-          <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Experimental (Adaptive)</div>
-          <div className="text-[10px] text-gray-400 dark:text-gray-600 mt-1">
-            {experimentalAvgGenerations.toLocaleString()} avg gen · {currentExperimentalN} converged
+          <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 text-center">
+            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+              {experimentalExperimentCount}
+            </div>
+            <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Experimental (Adaptive)</div>
+            <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+              {currentExperimentalN} converged ({experimentalExperimentCount > 0 ? Math.round((currentExperimentalN / experimentalExperimentCount) * 100) : 0}%)
+            </div>
           </div>
         </div>
       </div>

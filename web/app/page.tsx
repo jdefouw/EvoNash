@@ -290,10 +290,20 @@ export default function DashboardPage() {
           <div className="metric-item">
             <div className="metric-value">{loading ? '—' : totalExperiments}</div>
             <div className="metric-label">Experiments</div>
+            {!loading && (stats?.controlExperimentCount != null) && (
+              <div className="text-[10px] text-white/60 mt-0.5">
+                {stats.controlExperimentCount} control · {stats.experimentalExperimentCount} experimental
+              </div>
+            )}
           </div>
           <div className="metric-item">
             <div className="metric-value">{loading ? '—' : `${convergenceRate}%`}</div>
             <div className="metric-label">Convergence Rate</div>
+            {!loading && stats && (
+              <div className="text-[10px] text-white/60 mt-0.5">
+                {stats.controlExperimentCount > 0 ? Math.round(((stats.controlConvergedCount ?? 0) / stats.controlExperimentCount) * 100) : 0}% control · {stats.experimentalExperimentCount > 0 ? Math.round(((stats.experimentalConvergedCount ?? 0) / stats.experimentalExperimentCount) * 100) : 0}% experimental
+              </div>
+            )}
           </div>
           <div className="metric-item">
             <div className="metric-value">{loading ? '—' : (stats?.convergenceImprovement !== null ? `${stats?.convergenceImprovement?.toFixed(1)}%` : '—')}</div>
@@ -524,7 +534,7 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* Power Analysis */}
+              {/* Power Analysis & Effect Size */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <PowerAnalysisCard
                   achievedPower={dashboardData?.powerAnalysis?.achievedPower ?? null}
@@ -540,13 +550,11 @@ export default function DashboardPage() {
                   controlAvgGenerations={stats?.controlAvgGenerations ?? 0}
                   experimentalAvgGenerations={stats?.experimentalAvgGenerations ?? 0}
                 />
+                <EffectSizeCard
+                  hedgesG={dashboardData?.effectSizes?.hedgesG ?? null}
+                  cohensD={dashboardData?.effectSizes?.hedgesG?.cohensD ?? stats?.convergenceCohensD ?? null}
+                />
               </div>
-
-              {/* Effect Size */}
-              <EffectSizeCard
-                hedgesG={dashboardData?.effectSizes?.hedgesG ?? null}
-                cohensD={dashboardData?.effectSizes?.hedgesG?.cohensD ?? stats?.convergenceCohensD ?? null}
-              />
             </>
           )}
         </TabsContent>
