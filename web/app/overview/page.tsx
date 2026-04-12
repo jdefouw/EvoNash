@@ -16,6 +16,9 @@ const sectionIds = {
   nashDetectionTechnical: 'nash-detection-technical',
   gpuWorkers: 'gpu-workers',
   measuring: 'what-we-measure',
+  howWeMeasure: 'how-we-measure',
+  statisticalTests: 'statistical-tests',
+  dataScale: 'data-scale',
   aiFuture: 'ai-future',
   tryItYourself: 'try-it-yourself',
   references: 'references',
@@ -35,9 +38,12 @@ const tocItems: { id: string; label: string; num: number }[] = [
   { id: sectionIds.nashDetectionTechnical, label: 'How we detect Nash equilibrium (technical)', num: 11 },
   { id: sectionIds.gpuWorkers, label: 'Why do we need GPU workers?', num: 12 },
   { id: sectionIds.measuring, label: 'What are we measuring?', num: 13 },
-  { id: sectionIds.aiFuture, label: 'Why is this relevant for the future of AI?', num: 14 },
-  { id: sectionIds.tryItYourself, label: 'Try it yourself', num: 15 },
-  { id: sectionIds.references, label: 'References', num: 16 },
+  { id: sectionIds.howWeMeasure, label: 'How do we measure and report results?', num: 14 },
+  { id: sectionIds.statisticalTests, label: 'Understanding the statistical tests', num: 15 },
+  { id: sectionIds.dataScale, label: 'The scale of this experiment', num: 16 },
+  { id: sectionIds.aiFuture, label: 'Why is this relevant for the future of AI?', num: 17 },
+  { id: sectionIds.tryItYourself, label: 'Try it yourself', num: 18 },
+  { id: sectionIds.references, label: 'References', num: 19 },
 ]
 
 function SectionCard({
@@ -758,7 +764,339 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        <SectionCard num={14} id={sectionIds.aiFuture} title="Why is this relevant for the future of AI, and how could it be expanded?">
+        <SectionCard num={14} id={sectionIds.howWeMeasure} title="How do we measure and report results?">
+          <p>
+            The previous sections explain <strong>what</strong> we measure (convergence velocity,
+            peak fitness, policy entropy). This section explains <strong>how</strong> the software
+            actually captures those numbers from the organisms—step by step, in plain language.
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+            Step 1: Give every organism the same &quot;pop quiz&quot;
+          </h3>
+          <p>
+            We create a set of fake scenarios—like &quot;there&apos;s food to your left and an
+            enemy ahead.&quot; These are just made-up sensor readings (24 numbers). Every organism
+            gets the <strong>exact same quiz</strong> so we can compare their answers fairly.
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+            Step 2: See what each organism would do
+          </h3>
+          <p>
+            We feed those fake scenarios into each organism&apos;s neural network brain. The brain
+            spits out 4 numbers—one for each action (thrust, turn, shoot, split). For example:
+          </p>
+          <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50 font-mono text-sm space-y-1">
+            <p><strong>Organism A:</strong> [2.5, 0.1, 0.3, 0.1] &larr; strongly wants to move forward</p>
+            <p><strong>Organism B:</strong> [0.5, 0.4, 0.6, 0.5] &larr; can&apos;t really decide</p>
+          </div>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+            Step 3: Convert to percentages
+          </h3>
+          <p>
+            We turn those raw numbers into percentages that add up to 100% (using a math function
+            called <strong>softmax</strong>). Now the answers are easy to read:
+          </p>
+          <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50 font-mono text-sm space-y-1">
+            <p><strong>Organism A:</strong> [82%, 7%, 5%, 6%] &larr; &quot;I&apos;m going forward, no question&quot;</p>
+            <p><strong>Organism B:</strong> [25%, 23%, 28%, 24%] &larr; &quot;Uhhh&hellip; maybe shoot? I dunno&quot;</p>
+          </div>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+            Step 4: Measure how indecisive each one is (policy entropy)
+          </h3>
+          <p>
+            We plug those percentages into the <strong>entropy formula</strong>. You don&apos;t need
+            to know the math—just know that it produces a single number:
+          </p>
+          <ul className="list-disc pl-6 space-y-2">
+            <li>
+              <strong>Organism A</strong> &rarr; low entropy (~0.3) — it knows exactly what it wants.
+              Think of a student who circles &quot;A&quot; without hesitation.
+            </li>
+            <li>
+              <strong>Organism B</strong> &rarr; high entropy (~1.4) — it&apos;s basically guessing.
+              Think of a student who stares at the test and randomly picks an answer.
+            </li>
+          </ul>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+            Step 5: Check if everyone agrees (entropy variance)
+          </h3>
+          <p>
+            Now we have an &quot;indecisiveness score&quot; for each of the 200 sampled organisms. We
+            ask: <strong>&quot;Are these scores all similar, or are they all over the place?&quot;</strong>
+          </p>
+          <ul className="list-disc pl-6 space-y-2">
+            <li>
+              If the scores are <strong>[0.3, 0.31, 0.29, 0.3, 0.28&hellip;]</strong> &rarr; <strong>low
+              variance</strong> &rarr; everyone behaves the same way &rarr; the population has settled
+              on a shared strategy.
+            </li>
+            <li>
+              If the scores are <strong>[0.3, 1.2, 0.8, 0.1, 1.4&hellip;]</strong> &rarr; <strong>high
+              variance</strong> &rarr; organisms are doing their own thing &rarr; still evolving,
+              haven&apos;t reached agreement yet.
+            </li>
+          </ul>
+          <p>
+            Think of it like a classroom: <strong>low variance</strong> means everyone got roughly the
+            same grade on the test (they all &quot;agree&quot;). <strong>High variance</strong> means grades
+            are scattered from 20% to 95%—everyone is different.
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+            Step 6: Detect Nash equilibrium
+          </h3>
+          <p>
+            We repeat Steps 1–5 <strong>every single generation</strong> and track the entropy
+            variance over time. When it drops below a small threshold (0.01) and stays there for
+            20 generations in a row—after the population has already spread out and tried different
+            strategies—we declare that the population has reached <strong>Nash equilibrium</strong>.
+            We record which generation that happened at. That generation number is the key result
+            we compare between the control and experimental groups.
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-teal-500"></span>
+            Step 7: Compare the two groups with statistics
+          </h3>
+          <p>
+            After running many experiments in both the control and experimental groups, we have a
+            list of convergence generation numbers for each group—for example, the control group
+            might converge at generations [230, 241, 225, 238, &hellip;] and the experimental group
+            at [210, 195, 208, 193, &hellip;]. We use a standard statistical test (Welch&apos;s
+            t-test) to answer one question: <strong>&quot;Is the difference between these two lists
+            real, or could it be just luck?&quot;</strong>
+          </p>
+          <ul className="list-disc pl-6 space-y-2">
+            <li>
+              The <strong>p-value</strong> tells us the probability that the difference happened by
+              random chance. A very small p-value (like 0.001) means there&apos;s only a 0.1% chance
+              the result is a fluke—so we&apos;re confident the difference is real.
+            </li>
+            <li>
+              The <strong>effect size</strong> (Cohen&apos;s d) tells us <em>how big</em> the
+              difference is. A small p-value says &quot;the difference is real&quot;; the effect size
+              says &quot;and the difference is large&quot; (or small, or medium).
+            </li>
+          </ul>
+          <p>
+            The dashboard displays all of these results automatically as experiments finish—the
+            convergence generation for each experiment, the statistical comparison between groups,
+            and the conclusion of whether the hypothesis is supported.
+          </p>
+        </SectionCard>
+
+        <SectionCard num={15} id={sectionIds.statisticalTests} title="Understanding the statistical tests">
+          <p>
+            After running hundreds of experiments in both the control and experimental groups, we
+            need to answer two questions: <strong>&quot;Is the difference real?&quot;</strong> and
+            <strong>&quot;How big is the difference?&quot;</strong> We use two standard scientific
+            tools to answer them.
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+            Welch&apos;s t-test: &quot;Is the difference real, or just luck?&quot;
+          </h3>
+          <p>
+            Imagine you have two coins. You flip each one 100 times. Coin A lands on heads 53 times
+            and Coin B lands on heads 58 times. Is Coin B actually weighted differently, or did it
+            just get lucky? That&apos;s exactly what a <strong>t-test</strong> answers.
+          </p>
+          <p>
+            In our experiment, the &quot;coins&quot; are the two groups (control vs. experimental),
+            and the &quot;number of heads&quot; is the generation number where each experiment
+            converged. We collect all the convergence generations from each group and ask:
+            <strong> is the average different enough that it probably isn&apos;t a coincidence?</strong>
+          </p>
+          <p>
+            The t-test gives us a <strong>p-value</strong>. Think of the p-value as a
+            &quot;suspicion meter&quot;:
+          </p>
+          <ul className="list-disc pl-6 space-y-2">
+            <li>
+              <strong>p = 0.50</strong> &mdash; 50% chance the difference is just random noise.
+              Not suspicious at all. We&apos;d say &quot;there&apos;s no real difference.&quot;
+            </li>
+            <li>
+              <strong>p = 0.05</strong> &mdash; Only a 5% chance it&apos;s luck. That&apos;s the
+              standard cutoff in science. Below this, we call it <strong>statistically
+              significant</strong>.
+            </li>
+            <li>
+              <strong>p = 0.001</strong> &mdash; Only a 0.1% chance. Very strong evidence the
+              difference is real.
+            </li>
+            <li>
+              <strong>p = 6.69 &times; 10&#8315;&sup6;&#8311;</strong> &mdash; That&apos;s the p-value
+              from our actual experiment. It means there&apos;s essentially a
+              0.00000000000000000000000000000000000000000000000000000000000000000001% chance the
+              result is a fluke. In other words: <strong>the difference is absolutely real.</strong>
+            </li>
+          </ul>
+          <p>
+            We use <strong>Welch&apos;s</strong> version of the t-test (rather than the basic
+            Student&apos;s t-test) because it doesn&apos;t assume the two groups have the same
+            amount of spread in their data. Since our control and experimental groups might vary
+            differently, Welch&apos;s is the safer, more accurate choice.
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+            Cohen&apos;s d: &quot;Okay, the difference is real&mdash;but how big is it?&quot;
+          </h3>
+          <p>
+            A p-value tells you <em>whether</em> a difference exists, but not <em>how much</em> it
+            matters. With enough data, even a tiny, meaningless difference can be &quot;statistically
+            significant.&quot; That&apos;s where <strong>Cohen&apos;s d</strong> (the effect size)
+            comes in.
+          </p>
+          <p>
+            Think of it this way: imagine measuring the height of students in two
+            classrooms. Cohen&apos;s d answers: <strong>&quot;If I pulled a random student from each
+            classroom, how obvious would the height difference be?&quot;</strong>
+          </p>
+          <ul className="list-disc pl-6 space-y-2">
+            <li>
+              <strong>d &lt; 0.2 (Negligible)</strong> &mdash; You wouldn&apos;t notice the
+              difference. Like comparing heights of two random groups of the same age.
+            </li>
+            <li>
+              <strong>d = 0.2&ndash;0.5 (Small)</strong> &mdash; You&apos;d notice if you looked
+              carefully. Like comparing the heights of 13-year-olds to 14-year-olds.
+            </li>
+            <li>
+              <strong>d = 0.5&ndash;0.8 (Medium)</strong> &mdash; Clearly noticeable. Like comparing
+              the heights of 12-year-olds to 15-year-olds.
+            </li>
+            <li>
+              <strong>d &gt; 0.8 (Large)</strong> &mdash; Obvious to anyone. Like comparing the
+              heights of 10-year-olds to adults.
+            </li>
+          </ul>
+          <p>
+            Our experiment produced a Cohen&apos;s d of <strong>&minus;1.42</strong>, which is far
+            beyond the &quot;large&quot; threshold. The negative sign means the experimental group
+            converges in <em>fewer</em> generations (which supports our hypothesis). In practical
+            terms: the difference between the two groups is so large that you can clearly see it
+            just by looking at the raw numbers.
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+            Putting it together
+          </h3>
+          <p>
+            The t-test and Cohen&apos;s d work as a team. The t-test says <strong>&quot;yes, the
+            difference is real&quot;</strong> (p &asymp; 0). Cohen&apos;s d says <strong>&quot;and
+            the difference is large&quot;</strong> (d = &minus;1.42). Together, they give us strong
+            scientific confidence that adaptive mutation genuinely speeds up convergence to Nash
+            equilibrium&mdash;and by a meaningful amount, not just a technicality.
+          </p>
+        </SectionCard>
+
+        <SectionCard num={16} id={sectionIds.dataScale} title="The scale of this experiment">
+          <p>
+            One question people often ask is: <strong>&quot;Why do you need computers to do the
+            statistics? Can&apos;t you just look at the numbers?&quot;</strong> The short answer is
+            that the dataset is far too large for any human to process by hand.
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+            How much data does one experiment produce?
+          </h3>
+          <p>
+            Each experiment runs <strong>1,000 organisms</strong> for up to <strong>300
+            generations</strong>, with each generation comprising <strong>750 simulation
+            ticks</strong> (steps). That means a single experiment involves:
+          </p>
+          <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50 space-y-2">
+            <p className="font-mono text-sm">
+              1,000 organisms &times; 300 generations &times; 750 ticks = <strong>225,000,000
+              individual decisions</strong>
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              That&apos;s 225 million neural network evaluations per experiment.
+            </p>
+          </div>
+          <p>
+            At every tick, each organism&apos;s 1,860-weight neural network processes 24 sensor
+            inputs and produces 4 action outputs. All of these weights, inputs, and outputs are
+            numbers that contribute to the statistics.
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+            How much data does the full study produce?
+          </h3>
+          <p>
+            We don&apos;t run just one experiment&mdash;we run <strong>over 1,200</strong> of them
+            to achieve statistical significance. That multiplies the numbers above dramatically:
+          </p>
+          <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50 space-y-2">
+            <p className="font-mono text-sm">
+              1,200+ experiments &times; 225 million decisions each = <strong>over 270 billion
+              individual simulation steps</strong>
+            </p>
+          </div>
+          <p>
+            Each generation also logs a row of statistics (average fitness, peak fitness, policy
+            entropy, entropy variance, mutation rate, population diversity). With ~300 generations
+            per experiment and 1,200+ experiments, that&apos;s roughly <strong>360,000 rows of
+            statistical data</strong> in the database.
+          </p>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+            Why computers are essential
+          </h3>
+          <p>
+            With this volume of data, doing the analysis by hand would be impractical:
+          </p>
+          <ul className="list-disc pl-6 space-y-2">
+            <li>
+              <strong>Running the simulation itself</strong> requires a GPU (graphics processing
+              unit) because 1,000 neural networks need to make decisions simultaneously, 750 times
+              per generation. A GPU can process all 1,000 agents in parallel; a human calculator
+              would take years per experiment.
+            </li>
+            <li>
+              <strong>Computing entropy variance</strong> requires evaluating each organism&apos;s
+              neural network on sample inputs, applying softmax, calculating Shannon entropy, and
+              then computing the variance across all 200 sampled organisms&mdash;every single
+              generation. That&apos;s tens of thousands of entropy calculations.
+            </li>
+            <li>
+              <strong>Statistical testing</strong> across 1,200+ experiments means computing
+              Welch&apos;s t-test, Cohen&apos;s d, bootstrap confidence intervals (10,000
+              resamples), normality checks (Shapiro-Wilk), and power analysis. Each of these
+              involves hundreds or thousands of mathematical operations.
+            </li>
+            <li>
+              <strong>Real-time monitoring</strong> on the dashboard requires the database to query,
+              aggregate, and return data for charts and tables in under a second&mdash;something only
+              possible with a proper PostgreSQL database and a web application.
+            </li>
+          </ul>
+          <p>
+            In short, this experiment produces an enormous volume of data, and every layer&mdash;from
+            running the simulation to detecting convergence to testing the hypothesis&mdash;relies on
+            computational power that would be impossible to replicate by hand.
+          </p>
+        </SectionCard>
+
+        <SectionCard num={17} id={sectionIds.aiFuture} title="Why is this relevant for the future of AI, and how could it be expanded?">
           <p>
             This experiment sits at the intersection of three powerful fields:
             <strong> evolutionary computing</strong><Cite ids={[10, 11, 12]} /> (improving AI through trial and error over
@@ -856,8 +1194,8 @@ export default function OverviewPage() {
           </p>
         </SectionCard>
 
-        {/* Section 15 – Try It Yourself */}
-        <SectionCard num={15} id={sectionIds.tryItYourself} title="Try it yourself">
+        {/* Section 18 – Try It Yourself */}
+        <SectionCard num={18} id={sectionIds.tryItYourself} title="Try it yourself">
           <p>
             EvoNash is fully open-source. If you would like to reproduce this experiment—or
             run your own variation of it—everything you need is on GitHub:
@@ -954,7 +1292,7 @@ export default function OverviewPage() {
           className="scroll-mt-24 sci-card p-6 md:p-8 animate-fade-in"
         >
           <h2 className="section-heading">
-            <span className="section-number">16</span>
+            <span className="section-number">19</span>
             References
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 pl-10">
