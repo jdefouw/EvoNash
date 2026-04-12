@@ -422,22 +422,15 @@ export default function DashboardPage() {
                 statisticalPowerLevel={stats?.statisticalPowerLevel ?? 'insufficient'}
               />
 
-              {/* Charts: full-width stacked */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <ComparisonChart
-                  controlGenerations={controlGenerations}
-                  experimentalGenerations={experimentalGenerations}
-                  metric="fitness"
-                />
-                <ComparisonChart
-                  controlGenerations={controlGenerations}
-                  experimentalGenerations={experimentalGenerations}
-                  metric="entropy"
-                  showConvergenceMarker
-                  controlConvergenceGen={stats?.controlConvergenceGen ?? null}
-                  experimentalConvergenceGen={stats?.experimentalConvergenceGen ?? null}
-                />
-              </div>
+              {/* Entropy Convergence Chart */}
+              <ComparisonChart
+                controlGenerations={controlGenerations}
+                experimentalGenerations={experimentalGenerations}
+                metric="entropy"
+                showConvergenceMarker
+                controlConvergenceGen={stats?.controlConvergenceGen ?? null}
+                experimentalConvergenceGen={stats?.experimentalConvergenceGen ?? null}
+              />
 
               {/* Distribution Analysis & Convergence Range */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -451,6 +444,85 @@ export default function DashboardPage() {
                   experimentalData={dashboardData?.distributionData?.experimental ?? null}
                 />
               </div>
+
+              {/* Variance Analysis Insight */}
+              {dashboardData?.distributionData?.control && dashboardData?.distributionData?.experimental && (
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
+                  <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-0.5">
+                    Why is the experimental variance higher?
+                  </h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                    Explaining the observed difference in convergence spread between groups
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    {/* Control explanation */}
+                    <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40">
+                      <h5 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-blue-500" />
+                        Control (Static Mutation)
+                      </h5>
+                      <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                        <p>
+                          The control group uses a <strong>fixed mutation rate</strong> (&epsilon; = 0.05) 
+                          for every organism regardless of fitness. This means every experiment follows 
+                          essentially the <strong>same evolutionary pressure</strong>: a constant, 
+                          moderate amount of random change each generation.
+                        </p>
+                        <p>
+                          Because the mutation &quot;knob&quot; never moves, all experiments take a very 
+                          similar path to convergence. The result is a <strong>tight cluster</strong> of 
+                          convergence generations
+                          {dashboardData.distributionData.control.IQR != null && (
+                            <> (IQR = {dashboardData.distributionData.control.IQR.toFixed(0)} generations)</>
+                          )}.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Experimental explanation */}
+                    <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40">
+                      <h5 className="text-sm font-semibold text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-amber-500" />
+                        Experimental (Adaptive Mutation)
+                      </h5>
+                      <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                        <p>
+                          The experimental group <strong>dynamically scales</strong> the mutation rate 
+                          based on each organism&apos;s fitness. Low-fitness organisms mutate aggressively 
+                          (exploring new strategies), while high-fitness organisms mutate gently 
+                          (preserving what works).
+                        </p>
+                        <p>
+                          This creates <strong>multiple possible evolutionary pathways</strong>. Some 
+                          experiments find a fast path and converge early; others explore longer before 
+                          settling. The result is a <strong>wider spread</strong>
+                          {dashboardData.distributionData.experimental.IQR != null && (
+                            <> (IQR = {dashboardData.distributionData.experimental.IQR.toFixed(0)} generations)</>
+                          )}
+                          {' '}&mdash; but on average, convergence happens {' '}
+                          {stats?.convergenceMeanDifference != null && stats.convergenceMeanDifference > 0
+                            ? <strong>{stats.convergenceMeanDifference.toFixed(0)} generations faster</strong>
+                            : <strong>faster</strong>
+                          }.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800/40">
+                    <p className="text-xs text-indigo-700 dark:text-indigo-300">
+                      <strong>In other words: </strong>
+                      The control group is like a class of students who all study the same way &mdash; they 
+                      all finish at about the same time. The experimental group is like students who each 
+                      adapt their study strategy based on how well they&apos;re doing &mdash; some finish 
+                      much faster, some take a bit longer, but on average they finish sooner. The wider 
+                      spread is a <strong>natural consequence</strong> of having a more flexible, 
+                      responsive learning strategy, not a weakness.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Power Analysis */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
