@@ -114,11 +114,16 @@ export default function ConvergenceRangeCard({
                     {fmt(experimentalData?.Q1)}
                   </td>
                   <td className="py-2 pl-3 text-right font-mono text-sm">
-                    {controlData?.Q1 != null && experimentalData?.Q1 != null ? (
-                      <span className={controlData.Q1 - experimentalData.Q1 > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}>
-                        {controlData.Q1 - experimentalData.Q1 > 0 ? '−' : '+'}{Math.abs(controlData.Q1 - experimentalData.Q1).toFixed(0)}
-                      </span>
-                    ) : '—'}
+                    {controlData?.Q1 != null && experimentalData?.Q1 != null ? (() => {
+                      const cRound = Math.round(controlData.Q1!)
+                      const eRound = Math.round(experimentalData.Q1!)
+                      const diff = cRound - eRound
+                      return (
+                        <span className={diff > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}>
+                          {diff > 0 ? '−' : '+'}{Math.abs(diff)}
+                        </span>
+                      )
+                    })() : '—'}
                   </td>
                 </tr>
                 <tr>
@@ -135,11 +140,16 @@ export default function ConvergenceRangeCard({
                     {fmt(experimentalData?.median)}
                   </td>
                   <td className="py-2 pl-3 text-right font-mono text-sm">
-                    {controlData?.median != null && experimentalData?.median != null ? (
-                      <span className={controlData.median - experimentalData.median > 0 ? 'text-green-600 dark:text-green-400 font-semibold' : 'text-red-500 font-semibold'}>
-                        {controlData.median - experimentalData.median > 0 ? '−' : '+'}{Math.abs(controlData.median - experimentalData.median).toFixed(0)}
-                      </span>
-                    ) : '—'}
+                    {controlData?.median != null && experimentalData?.median != null ? (() => {
+                      const cRound = Math.round(controlData.median!)
+                      const eRound = Math.round(experimentalData.median!)
+                      const diff = cRound - eRound
+                      return (
+                        <span className={diff > 0 ? 'text-green-600 dark:text-green-400 font-semibold' : 'text-red-500 font-semibold'}>
+                          {diff > 0 ? '−' : '+'}{Math.abs(diff)}
+                        </span>
+                      )
+                    })() : '—'}
                   </td>
                 </tr>
                 <tr>
@@ -156,11 +166,16 @@ export default function ConvergenceRangeCard({
                     {fmt(experimentalData?.mean)} ± {fmt(experimentalData?.std)}
                   </td>
                   <td className="py-2 pl-3 text-right font-mono text-sm">
-                    {controlData?.mean != null && experimentalData?.mean != null ? (
-                      <span className={controlData.mean - experimentalData.mean > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}>
-                        {controlData.mean - experimentalData.mean > 0 ? '−' : '+'}{Math.abs(controlData.mean - experimentalData.mean).toFixed(0)}
-                      </span>
-                    ) : '—'}
+                    {controlData?.mean != null && experimentalData?.mean != null ? (() => {
+                      const cRound = Math.round(controlData.mean!)
+                      const eRound = Math.round(experimentalData.mean!)
+                      const diff = cRound - eRound
+                      return (
+                        <span className={diff > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}>
+                          {diff > 0 ? '−' : '+'}{Math.abs(diff)}
+                        </span>
+                      )
+                    })() : '—'}
                   </td>
                 </tr>
                 <tr>
@@ -177,11 +192,16 @@ export default function ConvergenceRangeCard({
                     {fmt(experimentalData?.Q3)}
                   </td>
                   <td className="py-2 pl-3 text-right font-mono text-sm">
-                    {controlData?.Q3 != null && experimentalData?.Q3 != null ? (
-                      <span className={controlData.Q3 - experimentalData.Q3 > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}>
-                        {controlData.Q3 - experimentalData.Q3 > 0 ? '−' : '+'}{Math.abs(controlData.Q3 - experimentalData.Q3).toFixed(0)}
-                      </span>
-                    ) : '—'}
+                    {controlData?.Q3 != null && experimentalData?.Q3 != null ? (() => {
+                      const cRound = Math.round(controlData.Q3!)
+                      const eRound = Math.round(experimentalData.Q3!)
+                      const diff = cRound - eRound
+                      return (
+                        <span className={diff > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}>
+                          {diff > 0 ? '−' : '+'}{Math.abs(diff)}
+                        </span>
+                      )
+                    })() : '—'}
                   </td>
                 </tr>
                 <tr>
