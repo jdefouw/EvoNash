@@ -150,6 +150,13 @@ body {
   background: transparent;
 }
 
+@media (max-width: 640px) {
+  .sci-tab {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+  }
+}
+
 .sci-tab:hover {
   color: var(--text-primary);
   background: rgba(var(--accent), .06);
@@ -174,6 +181,12 @@ body {
   overflow: hidden;
 }
 
+@media (max-width: 640px) {
+  .metrics-bar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 .metrics-bar .metric-item {
   background: rgba(255, 255, 255, .06);
   backdrop-filter: blur(20px);
@@ -181,12 +194,28 @@ body {
   text-align: center;
 }
 
+@media (max-width: 640px) {
+  .metrics-bar .metric-item {
+    padding: 10px 8px;
+  }
+}
+
 .metrics-bar .metric-item:first-child {
-  border-radius: 10px 0 0 10px;
+  border-radius: 10px 0 0 0;
 }
 
 .metrics-bar .metric-item:last-child {
-  border-radius: 0 10px 10px 0;
+  border-radius: 0 0 10px 0;
+}
+
+@media (min-width: 641px) {
+  .metrics-bar .metric-item:first-child {
+    border-radius: 10px 0 0 10px;
+  }
+
+  .metrics-bar .metric-item:last-child {
+    border-radius: 0 10px 10px 0;
+  }
 }
 
 .metrics-bar .metric-value {
@@ -196,12 +225,24 @@ body {
   line-height: 1.2;
 }
 
+@media (max-width: 640px) {
+  .metrics-bar .metric-value {
+    font-size: 1rem;
+  }
+}
+
 .metrics-bar .metric-label {
   font-size: 0.6875rem;
   color: rgba(255, 255, 255, .65);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-top: 2px;
+}
+
+@media (max-width: 640px) {
+  .metrics-bar .metric-label {
+    font-size: 0.5625rem;
+  }
 }
 
 /* ============================================================
