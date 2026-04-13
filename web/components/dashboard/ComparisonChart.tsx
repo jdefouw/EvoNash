@@ -118,7 +118,7 @@ export default function ComparisonChart({
   let experimentalStarted = false
 
   for (const d of overlayDataRaw) {
-    const rec = d as Record<string, number | null>
+    const rec = d as unknown as Record<string, number | null>
     // Control: update or carry forward
     if (controlKeys.some(k => rec[k] != null)) {
       controlStarted = true
