@@ -105,8 +105,8 @@ export default function OverviewPage() {
                 src="/petri-dish.png" 
                 alt="EvoNash digital petri dish with glowing circular organisms" 
                 width={1024} 
-                height={576} 
-                className="w-full h-auto max-h-[400px] object-cover"
+                height={1024} 
+                className="w-full h-auto"
               />
             </div>
             <div className="flex items-center gap-3 mt-4">
