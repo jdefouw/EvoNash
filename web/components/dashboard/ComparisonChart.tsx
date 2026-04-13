@@ -199,21 +199,26 @@ export default function ComparisonChart({
     )
   }
 
+  const xLabel = 'Generation Number'
+  const yLabel = metric === 'fitness' ? 'Fitness Score' : 'Policy Entropy H(π)'
+
   const renderOverlayChart = () => (
-    <ResponsiveContainer width="100%" height={320}>
-      <LineChart data={overlayData} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+    <ResponsiveContainer width="100%" height={340}>
+      <LineChart data={overlayData} margin={{ top: 10, right: 20, left: 10, bottom: 25 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
         <XAxis
           dataKey="generation"
           tick={{ fontSize: 11 }}
           tickLine={false}
           axisLine={{ className: 'stroke-gray-300 dark:stroke-gray-600' }}
+          label={{ value: xLabel, position: 'insideBottom', offset: -15, fontSize: 12, fill: '#6b7280' }}
         />
         <YAxis
           tick={{ fontSize: 11 }}
           tickLine={false}
           axisLine={false}
-          width={50}
+          width={60}
+          label={{ value: yLabel, angle: -90, position: 'insideLeft', offset: 5, fontSize: 12, fill: '#6b7280', style: { textAnchor: 'middle' } }}
         />
         <Tooltip content={renderTooltipContent} />
 
@@ -364,25 +369,52 @@ export default function ComparisonChart({
         </div>
       )}
 
-      {/* Compact legend below chart */}
+      {/* Legend & symbol explanations below chart */}
       {hasData && (
-        <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/50">
-          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
+        <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/50 space-y-2">
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 text-[11px] text-gray-500 dark:text-gray-400">
             <div className="flex items-center gap-1.5">
-              <div className="w-3 h-0.5 bg-blue-500 rounded" />
-              <span>Control (Static ε)</span>
+              <div className="w-4 h-[2px] bg-blue-500 rounded" />
+              <span>Control (Static ε) — H(π)</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-3 h-0.5 bg-purple-500 rounded" />
-              <span>Experimental (Adaptive ε)</span>
+              <div className="w-4 h-[2px] bg-purple-500 rounded" />
+              <span>Experimental (Adaptive ε) — H(π)</span>
             </div>
+            {metric === 'entropy' && (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-4 h-[1px] bg-blue-300 rounded" style={{ borderTop: '1px dashed #93c5fd' }} />
+                  <span>Control σ² (entropy variance)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-4 h-[1px] bg-purple-300 rounded" style={{ borderTop: '1px dashed #c4b5fd' }} />
+                  <span>Experimental σ² (entropy variance)</span>
+                </div>
+              </>
+            )}
             {metric === 'entropy' && showConvergenceMarker && (
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-px bg-red-400" style={{ borderTop: '1px dashed' }} />
-                <span>Convergence (σ &lt; 0.001)</span>
-              </div>
+              <>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-4 h-[1px]" style={{ borderTop: '1.5px dashed #ef4444' }} />
+                  <span>Convergence threshold (σ² = 0.001)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-4 h-3 border-l-[1.5px] border-dashed border-blue-500" />
+                  <span>Control mean convergence gen</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-4 h-3 border-l-[1.5px] border-dashed border-purple-500" />
+                  <span>Experimental mean convergence gen</span>
+                </div>
+              </>
             )}
           </div>
+          {metric === 'entropy' && (
+            <p className="text-[10px] text-center text-gray-400 dark:text-gray-500 max-w-xl mx-auto">
+              <strong>H(π)</strong> = Shannon entropy of agent strategy outputs (high = random, low = decisive). <strong>σ²</strong> = variance of H(π) across all agents (near zero = population consensus → Nash equilibrium).
+            </p>
+          )}
         </div>
       )}
     </div>
