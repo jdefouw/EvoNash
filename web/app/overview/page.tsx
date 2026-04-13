@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { Cite, references } from '@/components/dashboard/ReferencesSection'
 
 const sectionIds = {
@@ -549,6 +550,15 @@ export default function OverviewPage() {
         </SectionCard>
 
         <SectionCard num={6} id={sectionIds.organisms} title="What are the organisms?">
+          <div className="mb-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-md">
+            <Image 
+              src="/petri-dish.png" 
+              alt="EvoNash digital petri dish with glowing circular organisms" 
+              width={1024} 
+              height={1024} 
+              className="w-full h-auto object-cover"
+            />
+          </div>
           <p>
             The <strong>organisms</strong> (also called agents) are digital creatures represented
             as circles moving in the 2D petri dish. Each has <strong>energy</strong>—like health or
