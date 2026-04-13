@@ -410,11 +410,6 @@ export default function ComparisonChart({
               </>
             )}
           </div>
-          {metric === 'entropy' && (
-            <p className="text-[10px] text-center text-gray-400 dark:text-gray-500 max-w-xl mx-auto">
-              <strong>H(π)</strong> = Shannon entropy of agent strategy outputs (high = random, low = decisive). <strong>σ²</strong> = variance of H(π) across all agents (near zero = population consensus → Nash equilibrium).
-            </p>
-          )}
         </div>
       )}
     </div>
