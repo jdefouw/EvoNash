@@ -16,6 +16,7 @@ import {
   PowerAnalysisCard,
   EffectSizeCard,
   ConvergenceRangeCard,
+  ConvergenceHistogram,
   VerificationCard,
   ReferencesSection
 } from "@/components/dashboard";
@@ -464,6 +465,11 @@ export default function DashboardPage() {
                   experimentalData={dashboardData?.distributionData?.experimental ?? null}
                 />
               </div>
+
+              {/* Full Convergence Generation Distribution Histogram */}
+              <ConvergenceHistogram
+                data={dashboardData?.convergenceData ?? []}
+              />
 
               {/* Variance Analysis Insight */}
               {dashboardData?.distributionData?.control && dashboardData?.distributionData?.experimental && (
