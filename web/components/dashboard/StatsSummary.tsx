@@ -309,7 +309,12 @@ export default function StatsSummary({
                 <div>
                   <div className="text-xs text-gray-400">Mean Diff (Ctrl − Exp)</div>
                   <div className="font-mono font-bold text-gray-900 dark:text-white text-sm">
-                    {convergenceMeanDifference !== null ? (convergenceMeanDifference > 0 ? '+' : '') + convergenceMeanDifference.toFixed(0) + ' gen' : '—'}
+                    {convergenceControlMean !== null && convergenceExperimentalMean !== null
+                      ? (() => {
+                          const diff = Math.round(convergenceControlMean) - Math.round(convergenceExperimentalMean)
+                          return (diff > 0 ? '+' : '') + diff + ' gen'
+                        })()
+                      : '—'}
                   </div>
                 </div>
                 <div>
