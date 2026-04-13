@@ -79,7 +79,7 @@ export default function ComparisonChart({
 
   const mean = (arr: number[]) => (arr.length === 0 ? null : arr.reduce((a, b) => a + b, 0) / arr.length)
 
-  const overlayData = Array.from({ length: maxGen + 1 }, (_, i) => {
+  const overlayDataRaw = Array.from({ length: maxGen + 1 }, (_, i) => {
     const c = controlByGen.get(i)
     const e = experimentalByGen.get(i)
     if (metric === 'fitness') {
@@ -99,7 +99,43 @@ export default function ComparisonChart({
         experimentalVariance: e ? mean(e.variance) : null,
       }
     }
-  }).filter(d =>
+  })
+
+  // Carry forward the last known value for each group so chart lines don't
+  // die out when one group's experiments finish before the other's. This
+  // correctly represents that converged experiments maintain their final state.
+  let lastControl: Record<string, number | null> = {}
+  let lastExperimental: Record<string, number | null> = {}
+  const controlKeys = metric === 'fitness'
+    ? ['controlAvgFitness', 'controlPeakFitness'] as const
+    : ['controlEntropy', 'controlVariance'] as const
+  const expKeys = metric === 'fitness'
+    ? ['experimentalAvgFitness', 'experimentalPeakFitness'] as const
+    : ['experimentalEntropy', 'experimentalVariance'] as const
+
+  // Track if each group has started (had at least one non-null data point)
+  let controlStarted = false
+  let experimentalStarted = false
+
+  for (const d of overlayDataRaw) {
+    const rec = d as Record<string, number | null>
+    // Control: update or carry forward
+    if (controlKeys.some(k => rec[k] != null)) {
+      controlStarted = true
+      for (const k of controlKeys) if (rec[k] != null) lastControl[k] = rec[k]
+    } else if (controlStarted) {
+      for (const k of controlKeys) rec[k] = lastControl[k] ?? null
+    }
+    // Experimental: update or carry forward
+    if (expKeys.some(k => rec[k] != null)) {
+      experimentalStarted = true
+      for (const k of expKeys) if (rec[k] != null) lastExperimental[k] = rec[k]
+    } else if (experimentalStarted) {
+      for (const k of expKeys) rec[k] = lastExperimental[k] ?? null
+    }
+  }
+
+  const overlayData = overlayDataRaw.filter(d =>
     (metric === 'fitness' && (d.controlAvgFitness !== null || d.experimentalAvgFitness !== null)) ||
     (metric === 'entropy' && (d.controlEntropy !== null || d.experimentalEntropy !== null))
   )
