@@ -448,8 +448,8 @@ export default function DashboardPage() {
                 experimentalGenerations={experimentalGenerations}
                 metric="entropy"
                 showConvergenceMarker
-                controlConvergenceGen={stats?.controlConvergenceGen ?? null}
-                experimentalConvergenceGen={stats?.experimentalConvergenceGen ?? null}
+                controlConvergenceGen={stats?.convergenceControlMean != null ? Math.round(stats.convergenceControlMean) : null}
+                experimentalConvergenceGen={stats?.convergenceExperimentalMean != null ? Math.round(stats.convergenceExperimentalMean) : null}
               />
 
               {/* Distribution Analysis & Convergence Range */}
