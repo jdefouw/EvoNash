@@ -95,11 +95,20 @@ export default function OverviewPage() {
             <h1 className="text-3xl md:text-4xl font-bold text-white mb-3">
               Experiment Overview
             </h1>
-            <p className="text-base md:text-lg text-white/75 leading-relaxed max-w-3xl">
+            <p className="text-base md:text-lg text-white/75 leading-relaxed max-w-3xl mb-6">
               This page explains the EvoNash experiment in plain language: what we do, why we do it,
               and how it connects to game theory, neural networks, and the future of AI. No prior
               background is required.
             </p>
+            <div className="mb-6 rounded-xl overflow-hidden border border-white/20 shadow-xl max-w-4xl mx-auto md:mx-0 bg-black/50 backdrop-blur-sm">
+              <Image 
+                src="/petri-dish.png" 
+                alt="EvoNash digital petri dish with glowing circular organisms" 
+                width={1024} 
+                height={576} 
+                className="w-full h-auto max-h-[400px] object-cover"
+              />
+            </div>
             <div className="flex items-center gap-3 mt-4">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-white/90 text-xs font-medium backdrop-blur-sm">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -550,15 +559,6 @@ export default function OverviewPage() {
         </SectionCard>
 
         <SectionCard num={6} id={sectionIds.organisms} title="What are the organisms?">
-          <div className="mb-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-md">
-            <Image 
-              src="/petri-dish.png" 
-              alt="EvoNash digital petri dish with glowing circular organisms" 
-              width={1024} 
-              height={1024} 
-              className="w-full h-auto object-cover"
-            />
-          </div>
           <p>
             The <strong>organisms</strong> (also called agents) are digital creatures represented
             as circles moving in the 2D petri dish. Each has <strong>energy</strong>—like health or
