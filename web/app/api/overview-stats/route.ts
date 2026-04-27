@@ -8,54 +8,36 @@ export const dynamic = 'force-dynamic'
  * Returns aggregate statistics used by the /overview page.
  * All numbers are computed live from the database so the overview
  * never shows stale / hardcoded figures.
+ *
+ * Convergence detection mirrors the dashboard API exactly:
+ *   1. Skip first 5 generations
+ *   2. Find peak entropy_variance (must > 0.0001)
+ *   3. After peak, sliding window of 20 gens — at least 18/20 below 0.001
+ *   4. Earliest qualifying window = convergence generation
  */
 export async function GET() {
   try {
-    // Total experiments
+    // ── Basic counts ────────────────────────────────────────────────────
     const totalRow = await queryOne<{ count: string }>(
       `SELECT COUNT(*) as count FROM experiments`
     )
     const totalExperiments = parseInt(totalRow?.count ?? '0', 10)
 
-    // Completed experiments
     const completedRow = await queryOne<{ count: string }>(
       `SELECT COUNT(*) as count FROM experiments WHERE status = 'COMPLETED'`
     )
     const completedExperiments = parseInt(completedRow?.count ?? '0', 10)
 
-    // Converged experiments per group (experiments that reached Nash equilibrium)
-    // We detect convergence the same way the dashboard does — checking if
-    // convergence_generation is set, or falling back to entropy variance analysis
-    const convergedControl = await queryAll(
-      `SELECT DISTINCT e.id
-       FROM experiments e
-       JOIN generations g ON g.experiment_id = e.id
-       WHERE e.experiment_group = 'CONTROL'
-         AND e.status = 'COMPLETED'
-         AND e.convergence_generation IS NOT NULL`
-    )
-    const convergedExperimental = await queryAll(
-      `SELECT DISTINCT e.id
-       FROM experiments e
-       JOIN generations g ON g.experiment_id = e.id
-       WHERE e.experiment_group = 'EXPERIMENTAL'
-         AND e.status = 'COMPLETED'
-         AND e.convergence_generation IS NOT NULL`
-    )
-
-    const controlConvergedCount = convergedControl?.length ?? 0
-    const experimentalConvergedCount = convergedExperimental?.length ?? 0
-
-    // Total generation rows in the database
+    // ── Total generation rows ───────────────────────────────────────────
     const genCountRow = await queryOne<{ count: string }>(
       `SELECT COUNT(*) as count FROM generations`
     )
     const totalGenerationRows = parseInt(genCountRow?.count ?? '0', 10)
 
-    // Average generations per completed experiment
-    const avgGensRow = await queryOne<{ avg: string }>(
-      `SELECT AVG(gen_count) as avg FROM (
-         SELECT COUNT(*) as gen_count 
+    // ── Average generations per completed experiment ────────────────────
+    const avgGensRow = await queryOne<{ avg: string | null }>(
+      `SELECT AVG(gen_count)::text as avg FROM (
+         SELECT COUNT(*) as gen_count
          FROM generations g
          JOIN experiments e ON g.experiment_id = e.id
          WHERE e.status = 'COMPLETED'
@@ -64,32 +46,105 @@ export async function GET() {
     )
     const avgGenerationsPerExperiment = parseFloat(avgGensRow?.avg ?? '300')
 
-    // Max generations setting (from experiment config)
-    const maxGensRow = await queryOne<{ max_gens: number }>(
+    // ── Max generations setting ─────────────────────────────────────────
+    const maxGensRow = await queryOne<{ max_gens: number | null }>(
       `SELECT MAX(max_generations) as max_gens FROM experiments`
     )
     const maxGenerations = maxGensRow?.max_gens ?? 1500
 
-    // Convergence generation stats for overview text
-    const controlConvergenceGens = await queryAll(
-      `SELECT convergence_generation FROM experiments
-       WHERE experiment_group = 'CONTROL'
-         AND status = 'COMPLETED'
-         AND convergence_generation IS NOT NULL
-       ORDER BY convergence_generation ASC`
-    )
-    const experimentalConvergenceGens = await queryAll(
-      `SELECT convergence_generation FROM experiments
-       WHERE experiment_group = 'EXPERIMENTAL'
-         AND status = 'COMPLETED'
-         AND convergence_generation IS NOT NULL
-       ORDER BY convergence_generation ASC`
-    )
+    // ── Convergence detection (identical to dashboard API) ──────────────
+    const CONVERGENCE_THRESHOLD = 0.001
+    const STABILITY_WINDOW = 20
+    const MIN_BELOW_THRESHOLD = 18
 
-    const controlGens = (controlConvergenceGens ?? []).map((r: any) => r.convergence_generation as number)
-    const expGens = (experimentalConvergenceGens ?? []).map((r: any) => r.convergence_generation as number)
+    interface ExperimentConvergence {
+      experiment_id: string
+      experiment_group: string
+      convergence_generation: number
+    }
 
-    // Calculate Welch's t-test and Cohen's d for the overview page
+    const experimentConvergenceData = await queryAll<ExperimentConvergence>(`
+      WITH gen_data AS (
+        SELECT
+          g.experiment_id,
+          e.experiment_group,
+          g.generation_number,
+          g.entropy_variance::float as entropy_variance
+        FROM generations g
+        JOIN experiments e ON g.experiment_id = e.id
+        WHERE e.status = 'COMPLETED'
+          AND g.entropy_variance IS NOT NULL
+          AND g.generation_number > 5
+      ),
+      peak_info AS (
+        SELECT DISTINCT ON (experiment_id)
+          experiment_id,
+          entropy_variance as peak_variance,
+          generation_number as peak_gen
+        FROM gen_data
+        WHERE experiment_id IN (
+          SELECT experiment_id FROM gen_data
+          GROUP BY experiment_id
+          HAVING MAX(entropy_variance) > 0.0001
+        )
+        ORDER BY experiment_id, entropy_variance DESC, generation_number ASC
+      ),
+      after_peak AS (
+        SELECT
+          gd.experiment_id,
+          gd.experiment_group,
+          gd.generation_number,
+          CASE WHEN gd.entropy_variance < ${CONVERGENCE_THRESHOLD} THEN 1 ELSE 0 END as below_threshold
+        FROM gen_data gd
+        JOIN peak_info pi ON gd.experiment_id = pi.experiment_id
+        WHERE gd.generation_number >= pi.peak_gen
+      ),
+      sliding_window AS (
+        SELECT
+          experiment_id,
+          experiment_group,
+          generation_number,
+          SUM(below_threshold) OVER (
+            PARTITION BY experiment_id
+            ORDER BY generation_number
+            ROWS BETWEEN CURRENT ROW AND ${STABILITY_WINDOW - 1} FOLLOWING
+          ) as below_count,
+          COUNT(*) OVER (
+            PARTITION BY experiment_id
+            ORDER BY generation_number
+            ROWS BETWEEN CURRENT ROW AND ${STABILITY_WINDOW - 1} FOLLOWING
+          ) as window_size
+        FROM after_peak
+      ),
+      convergent_runs AS (
+        SELECT
+          experiment_id,
+          experiment_group,
+          generation_number
+        FROM sliding_window
+        WHERE window_size >= ${STABILITY_WINDOW}
+          AND below_count >= ${MIN_BELOW_THRESHOLD}
+      )
+      SELECT
+        experiment_id,
+        experiment_group,
+        MIN(generation_number)::int as convergence_generation
+      FROM convergent_runs
+      GROUP BY experiment_id, experiment_group
+    `) || []
+
+    // Separate convergence data by group
+    const controlGens = experimentConvergenceData
+      .filter(e => e.experiment_group === 'CONTROL')
+      .map(e => Number(e.convergence_generation))
+    const expGens = experimentConvergenceData
+      .filter(e => e.experiment_group === 'EXPERIMENTAL')
+      .map(e => Number(e.convergence_generation))
+
+    const controlConvergedCount = controlGens.length
+    const experimentalConvergedCount = expGens.length
+
+    // ── Welch's t-test and Cohen's d ────────────────────────────────────
     let pValue: number | null = null
     let cohensD: number | null = null
     let controlMean: number | null = null
@@ -106,19 +161,12 @@ export async function GET() {
       controlMean = mean1
       experimentalMean = mean2
 
-      // Welch's t-test
       const se = Math.sqrt(var1 / n1 + var2 / n2)
       if (se > 0) {
         const t = (mean1 - mean2) / se
-        const dfNum = (var1 / n1 + var2 / n2) ** 2
-        const dfDen = (var1 / n1) ** 2 / (n1 - 1) + (var2 / n2) ** 2 / (n2 - 1)
-        const df = dfNum / dfDen
-
-        // Approximate p-value using normal distribution for large df
         const absT = Math.abs(t)
         pValue = 2 * (1 - normalCDF(absT))
 
-        // Cohen's d (experimental - control, so negative means experimental is lower/faster)
         const pooledStd = Math.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
         if (pooledStd > 0) {
           cohensD = (mean2 - mean1) / pooledStd
@@ -126,10 +174,11 @@ export async function GET() {
       }
     }
 
-    // Scale calculations
+    // ── Scale calculations ──────────────────────────────────────────────
     const populationSize = 1000
     const ticksPerGeneration = 750
-    const decisionsPerExperiment = populationSize * avgGenerationsPerExperiment * ticksPerGeneration
+    const safeAvgGens = isNaN(avgGenerationsPerExperiment) ? 300 : avgGenerationsPerExperiment
+    const decisionsPerExperiment = populationSize * safeAvgGens * ticksPerGeneration
     const totalDecisions = completedExperiments * decisionsPerExperiment
 
     return NextResponse.json({
@@ -139,7 +188,7 @@ export async function GET() {
       experimentalConvergedCount,
       totalConvergedCount: controlConvergedCount + experimentalConvergedCount,
       totalGenerationRows,
-      avgGenerationsPerExperiment: Math.round(avgGenerationsPerExperiment),
+      avgGenerationsPerExperiment: Math.round(safeAvgGens),
       maxGenerations,
       populationSize,
       ticksPerGeneration,

@@ -131,13 +131,15 @@ export function DynamicSingleExperimentScale() {
       </div>
     )
   }
-  const s = stats!
-  const avgGens = s.avgGenerationsPerExperiment
-  const decisions = s.populationSize * avgGens * s.ticksPerGeneration
+  if (!stats) return null
+  const avgGens = stats.avgGenerationsPerExperiment || 300
+  const pop = stats.populationSize || 1000
+  const ticks = stats.ticksPerGeneration || 750
+  const decisions = pop * avgGens * ticks
   return (
     <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50 space-y-2">
       <p className="font-mono text-sm">
-        {fmt(s.populationSize)} organisms × {fmt(avgGens)} generations × {fmt(s.ticksPerGeneration)} ticks = <strong>{fmt(decisions)} individual decisions</strong>
+        {fmt(pop)} organisms × {fmt(avgGens)} generations × {fmt(ticks)} ticks = <strong>{fmt(decisions)} individual decisions</strong>
       </p>
       <p className="text-sm text-gray-600 dark:text-gray-400">
         That&apos;s {fmtLarge(decisions)} neural network evaluations per experiment.
@@ -159,11 +161,11 @@ export function DynamicFullStudyScale() {
       </div>
     )
   }
-  const s = stats!
+  if (!stats) return null
   return (
     <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50 space-y-2">
       <p className="font-mono text-sm">
-        {fmt(s.completedExperiments)}+ experiments × {fmt(s.decisionsPerExperiment)} decisions each = <strong>{fmtLarge(s.totalDecisions)} individual simulation steps</strong>
+        {fmt(stats.completedExperiments)}+ experiments × {fmt(stats.decisionsPerExperiment)} decisions each = <strong>{fmtLarge(stats.totalDecisions)} individual simulation steps</strong>
       </p>
     </div>
   )
@@ -176,10 +178,10 @@ export function DynamicFullStudyScale() {
 export function DynamicGenerationRows() {
   const { stats, loading } = useStats()
   if (loading) return <Skeleton w="30em" />
-  const s = stats!
+  if (!stats) return <>many generations per experiment across many experiments, producing hundreds of thousands of rows of statistical data in the database</>
   return (
     <>
-      ~{fmt(s.avgGenerationsPerExperiment)} generations per experiment and {fmt(s.completedExperiments)}+ experiments, that&apos;s roughly <strong>{fmt(s.totalGenerationRows)} rows of statistical data</strong> in the database
+      ~{fmt(stats.avgGenerationsPerExperiment)} generations per experiment and {fmt(stats.completedExperiments)}+ experiments, that&apos;s roughly <strong>{fmt(stats.totalGenerationRows)} rows of statistical data</strong> in the database
     </>
   )
 }
@@ -200,10 +202,16 @@ export function DynamicMaxGenerations() {
 export function DynamicStatsSummaryLine() {
   const { stats, loading } = useStats()
   if (loading) return <Skeleton w="30em" />
-  const s = stats!
-  const absD = Math.abs(s.cohensD ?? 0)
-  const dStr = `${(s.cohensD ?? 0) < 0 ? '−' : ''}${absD.toFixed(2)}`
-  const pStr = fmtPValue(s.pValue)
+  if (!stats || (stats.cohensD === null && stats.pValue === null)) {
+    return (
+      <>
+        The t-test and Cohen&apos;s d work as a team. The t-test tells us whether the difference is real, and Cohen&apos;s d tells us how large it is. Together, they give us scientific confidence about whether adaptive mutation genuinely speeds up convergence to Nash equilibrium.
+      </>
+    )
+  }
+  const absD = Math.abs(stats.cohensD ?? 0)
+  const dStr = `${(stats.cohensD ?? 0) < 0 ? '−' : ''}${absD.toFixed(2)}`
+  const pStr = fmtPValue(stats.pValue)
   const dLabel = absD < 0.2 ? 'negligible' : absD < 0.5 ? 'small' : absD < 0.8 ? 'medium' : 'large'
 
   return (
@@ -231,10 +239,16 @@ function useStats() {
 
     if (!cachePromise) {
       cachePromise = fetch('/api/overview-stats')
-        .then(r => r.json())
+        .then(r => {
+          if (!r.ok) return null
+          return r.json()
+        })
         .then(data => {
-          cachedStats = data
-          return data
+          if (data && !data.error) {
+            cachedStats = data
+            return data
+          }
+          return null
         })
         .catch(() => null)
     }
