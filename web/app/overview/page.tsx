@@ -1,6 +1,17 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { Cite, references } from '@/components/dashboard/ReferencesSection'
+import {
+  DynamicPValue,
+  DynamicCohensD,
+  DynamicExperimentCount,
+  DynamicConvergedPerGroup,
+  DynamicSingleExperimentScale,
+  DynamicFullStudyScale,
+  DynamicGenerationRows,
+  DynamicStatsSummaryLine,
+  DynamicMaxGenerations,
+} from '@/components/OverviewDynamicStats'
 
 const sectionIds = {
   intro: 'intro',
@@ -1082,10 +1093,9 @@ export default function OverviewPage() {
               difference is real.
             </li>
             <li>
-              <strong>p = 6.69 &times; 10&#8315;&sup6;&#8311;</strong> &mdash; That&apos;s the p-value
-              from our actual experiment. It means there&apos;s essentially a
-              0.00000000000000000000000000000000000000000000000000000000000000000001% chance the
-              result is a fluke. In other words: <strong>the difference is absolutely real.</strong>
+              <strong>p = <DynamicPValue /></strong> &mdash; That&apos;s the p-value
+              from our actual experiment (computed live from the database). It means there&apos;s essentially
+              no chance the result is a fluke. In other words: <strong>the difference is absolutely real.</strong>
             </li>
           </ul>
           <p>
@@ -1129,7 +1139,7 @@ export default function OverviewPage() {
             </li>
           </ul>
           <p>
-            Our experiment produced a Cohen&apos;s d of <strong>&minus;1.42</strong>, which is far
+            Our experiment produced a Cohen&apos;s d of <DynamicCohensD /> (computed live from the database), which is far
             beyond the &quot;large&quot; threshold. The negative sign means the experimental group
             converges in <em>fewer</em> generations (which supports our hypothesis). In practical
             terms: the difference between the two groups is so large that you can clearly see it
@@ -1141,11 +1151,7 @@ export default function OverviewPage() {
             Putting it together
           </h3>
           <p>
-            The t-test and Cohen&apos;s d work as a team. The t-test says <strong>&quot;yes, the
-            difference is real&quot;</strong> (p &asymp; 0). Cohen&apos;s d says <strong>&quot;and
-            the difference is large&quot;</strong> (d = &minus;1.42). Together, they give us strong
-            scientific confidence that adaptive mutation genuinely speeds up convergence to Nash
-            equilibrium&mdash;and by a meaningful amount, not just a technicality.
+            <DynamicStatsSummaryLine />
           </p>
         </SectionCard>
 
@@ -1214,7 +1220,7 @@ export default function OverviewPage() {
             95% Confidence Interval: &quot;How sure are we about the true difference?&quot;
           </h3>
           <p>
-            Our experiments are a <em>sample</em>&mdash;we ran around 1,300, but we could
+            Our experiments are a <em>sample</em>&mdash;we ran <DynamicExperimentCount />, but we could
             theoretically run millions. The confidence interval gives us a range where the
             <strong> true average difference</strong> between control and experimental almost
             certainly lives.
@@ -1263,8 +1269,7 @@ export default function OverviewPage() {
               group. The confidence interval tells you how precisely we know the <em>average
               difference between the two groups</em>. Even when a group has a wide IQR (high
               variability among individual experiments), the CI can still be narrow if we have
-              enough data&mdash;which is exactly what we see in EvoNash with 700+ converged
-              experiments per group.
+              enough data&mdash;which is exactly what we see in EvoNash with <DynamicConvergedPerGroup />.
             </p>
           </div>
         </SectionCard>
@@ -1281,19 +1286,11 @@ export default function OverviewPage() {
             How much data does one experiment produce?
           </h3>
           <p>
-            Each experiment runs <strong>1,000 organisms</strong> for up to <strong>300
-            generations</strong>, with each generation comprising <strong>750 simulation
+            Each experiment runs <strong>1,000 organisms</strong> for up to <DynamicMaxGenerations />{' '}
+            generations, with each generation comprising <strong>750 simulation
             ticks</strong> (steps). That means a single experiment involves:
           </p>
-          <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50 space-y-2">
-            <p className="font-mono text-sm">
-              1,000 organisms &times; 300 generations &times; 750 ticks = <strong>225,000,000
-              individual decisions</strong>
-            </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              That&apos;s 225 million neural network evaluations per experiment.
-            </p>
-          </div>
+          <DynamicSingleExperimentScale />
           <p>
             At every tick, each organism&apos;s 1,860-weight neural network processes 24 sensor
             inputs and produces 4 action outputs. All of these weights, inputs, and outputs are
@@ -1305,20 +1302,13 @@ export default function OverviewPage() {
             How much data does the full study produce?
           </h3>
           <p>
-            We don&apos;t run just one experiment&mdash;we run <strong>over 1,200</strong> of them
+            We don&apos;t run just one experiment&mdash;we run <DynamicExperimentCount /> of them
             to achieve statistical significance. That multiplies the numbers above dramatically:
           </p>
-          <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50 space-y-2">
-            <p className="font-mono text-sm">
-              1,200+ experiments &times; 225 million decisions each = <strong>over 270 billion
-              individual simulation steps</strong>
-            </p>
-          </div>
+          <DynamicFullStudyScale />
           <p>
             Each generation also logs a row of statistics (average fitness, peak fitness, policy
-            entropy, entropy variance, mutation rate, population diversity). With ~300 generations
-            per experiment and 1,200+ experiments, that&apos;s roughly <strong>360,000 rows of
-            statistical data</strong> in the database.
+            entropy, entropy variance, mutation rate, population diversity). With <DynamicGenerationRows />.
           </p>
 
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-4 mb-2 flex items-center gap-2">
