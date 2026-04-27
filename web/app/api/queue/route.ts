@@ -340,14 +340,63 @@ export async function POST(request: NextRequest) {
         continue
       }
 
-      // If any generations already exist, do not reassign in single-shot mode.
-      if (existingGenerationNumbers.size > 0) {
-        console.log(`[QUEUE] Experiment ${experiment.id} has existing generations; single-shot mode requires manual reset to rerun`)
-        continue
-      }
-
-      const generationStart = 0
+      // Resume support: If generations already exist, check for checkpoint to resume properly
+      // Scientific rigor requires continuous population state — can't resume without a checkpoint
+      let generationStart = 0
       const generationEnd = experiment.max_generations - 1
+
+      if (existingGenerationNumbers.size > 0) {
+        // Find the highest completed generation number
+        const maxCompletedGen = Math.max(...existingGenerationNumbers)
+
+        // If all generations are done, mark experiment as COMPLETED and skip
+        if (maxCompletedGen + 1 > generationEnd) {
+          console.log(`[QUEUE] Experiment ${experiment.id} has all ${existingGenerationNumbers.size} generations completed, marking COMPLETED`)
+          await query(
+            'UPDATE experiments SET status = $1, completed_at = NOW() WHERE id = $2',
+            ['COMPLETED', experiment.id]
+          )
+          continue
+        }
+
+        // Check if a checkpoint exists for the last completed generation
+        // The checkpoint contains the population state needed to continue deterministically
+        const checkpoint = await queryOne<{ generation_number: number }>(
+          `SELECT generation_number FROM experiment_checkpoints 
+           WHERE experiment_id = $1 
+           ORDER BY generation_number DESC 
+           LIMIT 1`,
+          [experiment.id]
+        )
+
+        if (checkpoint && checkpoint.generation_number >= maxCompletedGen) {
+          // Checkpoint exists — resume from after the checkpoint generation
+          generationStart = checkpoint.generation_number + 1
+          console.log(`[QUEUE] 🔄 Experiment ${experiment.id}: checkpoint found at gen ${checkpoint.generation_number}, resuming from gen ${generationStart}`)
+        } else {
+          // No valid checkpoint — must restart from generation 0 for scientific rigor
+          // Delete all partial generation data so the experiment starts clean
+          console.log(`[QUEUE] ⚠ Experiment ${experiment.id}: no valid checkpoint found (has ${existingGenerationNumbers.size} generations). Restarting from gen 0 for scientific rigor.`)
+          
+          // Delete existing generations for this experiment
+          await query(
+            'DELETE FROM generations WHERE experiment_id = $1',
+            [experiment.id]
+          )
+          // Delete any partial checkpoints too
+          await query(
+            'DELETE FROM experiment_checkpoints WHERE experiment_id = $1',
+            [experiment.id]
+          )
+          // Delete any failed job assignments so they don't confuse future logic
+          await query(
+            `DELETE FROM job_assignments WHERE experiment_id = $1 AND status IN ('failed', 'completed')`,
+            [experiment.id]
+          )
+          console.log(`[QUEUE] 🗑 Cleaned up partial data for experiment ${experiment.id}, starting fresh from gen 0`)
+          generationStart = 0
+        }
+      }
 
       const job_id = crypto.randomUUID()
       let assignedWorkerId = worker_id
@@ -418,7 +467,8 @@ export async function POST(request: NextRequest) {
           worker_id: assignedWorkerId,
           generation_start: generationStart,
           generation_end: generationEnd,
-          experiment_config: config
+          experiment_config: config,
+          resume_checkpoint: generationStart > 0  // Worker should load checkpoint before starting
         })
       } catch (insertError: any) {
         console.error(`[QUEUE] Failed to create job assignment: ${insertError.message}`)

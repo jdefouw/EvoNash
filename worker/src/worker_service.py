@@ -797,6 +797,7 @@ class WorkerService:
         generation_start = job.get('generation_start', 0)
         generation_end = job.get('generation_end', None)
         is_recovery = job.get('recovery', False)  # Check if this is a recovery job
+        resume_checkpoint = job.get('resume_checkpoint', False)  # Whether to load checkpoint before starting
         
         if not experiment_config:
             self.logger.error("Invalid job: missing experiment_config")
@@ -841,15 +842,13 @@ class WorkerService:
             # Create ExperimentConfig from job
             config = ExperimentManager.load_from_dict(experiment_config)
             
-            # Single-shot mode: do not resume or skip. If data already exists, stop.
-            self.logger.info("🔍 Single-shot mode: checking for existing progress...")
-            last_completed = self._get_last_completed_generation(experiment_id)
-            if last_completed >= 0:
-                self.logger.warning(f"⚠ Existing generations found (last completed: {last_completed}).")
-                self.logger.warning("   Single-shot mode requires a fresh experiment. Release job without processing.")
-                if job_id:
-                    self._release_job(job_id, "single_shot_existing_data")
-                return
+            # Resume support: check for existing progress and log accordingly
+            if resume_checkpoint:
+                self.logger.info(f"🔄 Resume job: will load checkpoint and start from generation {generation_start}")
+            elif generation_start > 0:
+                self.logger.info(f"🔍 Starting from generation {generation_start} (server-assigned)")
+            else:
+                self.logger.info("🔍 Starting fresh from generation 0")
             
             self.logger.info("=" * 80)
             self.logger.info("📋 EXPERIMENT CONFIGURATION")
@@ -897,6 +896,53 @@ class WorkerService:
                 checkpoint_loader_callback=None,
                 equilibrium_reached_callback=None  # Disabled: web app handles equilibrium detection
             )
+            
+            # If resuming, load checkpoint to restore population state before running
+            # Scientific rigor requires continuous population state
+            if resume_checkpoint and generation_start > 0:
+                self.logger.info("=" * 80)
+                self.logger.info(f"📦 Loading checkpoint for resume (generation {generation_start - 1})...")
+                self.logger.info("=" * 80)
+                try:
+                    # Fetch the latest checkpoint from the API
+                    checkpoint_response = requests.get(
+                        f"{self.controller_url}/api/experiments/{experiment_id}/checkpoint",
+                        timeout=60  # Large timeout for big checkpoint payloads
+                    )
+                    
+                    if checkpoint_response.status_code == 200:
+                        checkpoint_data = checkpoint_response.json()
+                        population_state = checkpoint_data.get('population_state')
+                        checkpoint_gen = checkpoint_data.get('generation_number')
+                        
+                        if population_state:
+                            runner.ga.load_population_state(population_state)
+                            # Sync the batched processor with the restored population
+                            runner.batched_processor.sync_networks(runner.ga.population)
+                            self.logger.info(f"✓ Checkpoint loaded from generation {checkpoint_gen}")
+                            self.logger.info(f"  Population restored: {len(runner.ga.population)} agents")
+                        else:
+                            self.logger.error("✗ Checkpoint response missing population_state")
+                            if job_id:
+                                self._release_job(job_id, "checkpoint_load_failed_no_state")
+                            return
+                    elif checkpoint_response.status_code == 404:
+                        # No checkpoint found — server should have restarted from 0
+                        self.logger.error(f"✗ No checkpoint found for experiment {experiment_id}")
+                        self.logger.error("  Server should have restarted this experiment from gen 0")
+                        if job_id:
+                            self._release_job(job_id, "checkpoint_not_found")
+                        return
+                    else:
+                        self.logger.error(f"✗ Checkpoint fetch failed: {checkpoint_response.status_code}")
+                        if job_id:
+                            self._release_job(job_id, f"checkpoint_fetch_error_{checkpoint_response.status_code}")
+                        return
+                except Exception as e:
+                    self.logger.error(f"✗ Error loading checkpoint: {e}")
+                    if job_id:
+                        self._release_job(job_id, f"checkpoint_load_exception: {e}")
+                    return
             
             self.logger.info("=" * 80)
             self.logger.info("🔄 Starting batch execution...")
