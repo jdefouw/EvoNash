@@ -238,8 +238,8 @@ export async function POST(request: NextRequest) {
       console.log(`[QUEUE]   ... and ${experiments.length - 10} more`)
     }
 
-    // EXPERIMENT AFFINITY: Workers should complete their current experiment before moving to another
-    // This is the KEY fix - workers stay on the same experiment until it's done
+    // EXPERIMENT AFFINITY — but ONLY within the same priority phase
+    // If a higher-priority seed needs work, break affinity and reassign.
     let experimentOrder: any[] = experiments
 
     if (worker_id) {
@@ -257,42 +257,28 @@ export async function POST(request: NextRequest) {
       )
 
       if (lastWorkerJob) {
-        // Worker was recently working on an experiment that still needs work
-        // Put that experiment FIRST so they continue with it
         const affinityExperiment = experiments.find((e: any) => e.id === lastWorkerJob.experiment_id)
-        if (affinityExperiment) {
-          const rest = experiments.filter((e: any) => e.id !== lastWorkerJob.experiment_id)
-          experimentOrder = [affinityExperiment, ...rest]
-          console.log(`[QUEUE] Worker ${worker_id.slice(0, 8)}… has affinity for ${affinityExperiment.experiment_name}, prioritizing it`)
-        }
-      } else {
-        // Worker doesn't have recent affinity - use group balancing for initial assignment
-        // Count workers per group to balance initial assignments
-        const activeWorkersByGroup = await queryAll<{ experiment_group: string; worker_count: number }>(
-          `SELECT e.experiment_group, COUNT(DISTINCT ja.worker_id) as worker_count
-           FROM job_assignments ja
-           JOIN experiments e ON e.id = ja.experiment_id
-           WHERE ja.status IN ('assigned', 'processing')
-           AND e.status IN ('PENDING', 'RUNNING')
-           GROUP BY e.experiment_group`
-        ) || []
+        const topExperiment = experiments[0] // already sorted by gap_score DESC
 
-        const controlExperiments = experiments.filter((e: any) => e.experiment_group === 'CONTROL')
-        const experimentalExperiments = experiments.filter((e: any) => e.experiment_group === 'EXPERIMENTAL')
-        const hasBothGroups = controlExperiments.length > 0 && experimentalExperiments.length > 0
+        if (affinityExperiment && topExperiment) {
+          const affinityScore = Number(affinityExperiment.gap_score) || 0
+          const topScore = Number(topExperiment.gap_score) || 0
 
-        if (hasBothGroups) {
-          const controlWorkers = activeWorkersByGroup.find((g: any) => g.experiment_group === 'CONTROL')?.worker_count || 0
-          const experimentalWorkers = activeWorkersByGroup.find((g: any) => g.experiment_group === 'EXPERIMENTAL')?.worker_count || 0
+          // Only keep affinity if the worker's experiment is in the same priority tier
+          // Phase boundaries: 3000 (Phase 1), 2000 (Phase 2), 1000 (Phase 3), 0 (Phase 4)
+          const affinityPhase = affinityScore >= 3000 ? 1 : affinityScore >= 2000 ? 2 : affinityScore >= 1000 ? 3 : 4
+          const topPhase = topScore >= 3000 ? 1 : topScore >= 2000 ? 2 : topScore >= 1000 ? 3 : 4
 
-          console.log(`[QUEUE] No affinity, balancing: CONTROL=${controlWorkers} workers, EXPERIMENTAL=${experimentalWorkers} workers`)
-
-          // Assign to group with fewer workers
-          const preferredGroup = controlWorkers <= experimentalWorkers ? 'CONTROL' : 'EXPERIMENTAL'
-          const preferredExperiments = experiments.filter((e: any) => e.experiment_group === preferredGroup)
-          const otherExperiments = experiments.filter((e: any) => e.experiment_group !== preferredGroup)
-          experimentOrder = [...preferredExperiments, ...otherExperiments]
-          console.log(`[QUEUE] Preferring ${preferredGroup} group for new worker`)
+          if (affinityPhase <= topPhase) {
+            // Affinity experiment is in same or higher priority phase — keep affinity
+            const rest = experiments.filter((e: any) => e.id !== lastWorkerJob.experiment_id)
+            experimentOrder = [affinityExperiment, ...rest]
+            console.log(`[QUEUE] Worker ${worker_id.slice(0, 8)}… keeping affinity for ${affinityExperiment.experiment_name} (phase ${affinityPhase})`)
+          } else {
+            // Higher priority seed needs work — BREAK affinity
+            console.log(`[QUEUE] Worker ${worker_id.slice(0, 8)}… BREAKING affinity: was on phase ${affinityPhase} (${affinityExperiment.experiment_name}), but phase ${topPhase} seed needs work (${topExperiment.experiment_name})`)
+            // experimentOrder stays as-is (gap_score sorted)
+          }
         }
       }
     }
