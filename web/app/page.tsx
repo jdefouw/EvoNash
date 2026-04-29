@@ -90,11 +90,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch dashboard data from API
+  // Fetch dashboard data from API (auto-refresh every 30s)
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchData = async (isRefresh = false) => {
       try {
-        setLoading(true);
+        if (!isRefresh) setLoading(true);
         const res = await fetch('/api/dashboard');
         if (!res.ok) {
           throw new Error(`Failed to fetch dashboard data: ${res.status}`);
@@ -107,12 +107,14 @@ export default function DashboardPage() {
         setError(null);
       } catch (err) {
         console.error('Dashboard fetch error:', err);
-        setError(err instanceof Error ? err.message : 'Unknown error');
+        if (!isRefresh) setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
-        setLoading(false);
+        if (!isRefresh) setLoading(false);
       }
     };
     fetchData();
+    const interval = setInterval(() => fetchData(true), 30000);
+    return () => clearInterval(interval);
   }, []);
 
   // Data for VariablesTable
