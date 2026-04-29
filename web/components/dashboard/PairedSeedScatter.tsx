@@ -58,14 +58,15 @@ export default function PairedSeedScatter({ convergenceData, pairedAnalysis }: P
   const allValues = pairs.flatMap(p => [p.control, p.experimental])
   const minVal = Math.min(...allValues)
   const maxVal = Math.max(...allValues)
-  const padding = (maxVal - minVal) * 0.1
+  const padding = (maxVal - minVal) * 0.15 || 10
   const axMin = Math.floor(minVal - padding)
   const axMax = Math.ceil(maxVal + padding)
 
-  const chartSize = 380
-  const margin = { top: 20, right: 20, bottom: 50, left: 55 }
-  const plotW = chartSize - margin.left - margin.right
-  const plotH = chartSize - margin.top - margin.bottom
+  const chartW = 440
+  const chartH = 420
+  const margin = { top: 20, right: 25, bottom: 60, left: 70 }
+  const plotW = chartW - margin.left - margin.right
+  const plotH = chartH - margin.top - margin.bottom
 
   const scaleX = (v: number) => margin.left + ((v - axMin) / (axMax - axMin)) * plotW
   const scaleY = (v: number) => margin.top + plotH - ((v - axMin) / (axMax - axMin)) * plotH
@@ -76,8 +77,9 @@ export default function PairedSeedScatter({ convergenceData, pairedAnalysis }: P
   const pctBelow = Math.round((belowLine / pairs.length) * 100)
 
   // Generate tick values
-  const tickCount = 5
-  const step = Math.round((axMax - axMin) / tickCount / 10) * 10 || 10
+  const range = axMax - axMin
+  const rawStep = range / 5
+  const step = rawStep >= 10 ? Math.round(rawStep / 10) * 10 : rawStep >= 5 ? 5 : rawStep >= 2 ? 2 : 1
   const ticks: number[] = []
   for (let v = Math.ceil(axMin / step) * step; v <= axMax; v += step) {
     ticks.push(v)
@@ -93,14 +95,14 @@ export default function PairedSeedScatter({ convergenceData, pairedAnalysis }: P
       </p>
 
       <div className="flex justify-center">
-        <svg viewBox={`0 0 ${chartSize} ${chartSize}`} width="100%" style={{ maxWidth: chartSize }} className="overflow-visible">
+        <svg viewBox={`0 0 ${chartW} ${chartH}`} width="100%" style={{ maxWidth: chartW }}>
           {/* Grid */}
           {ticks.map(v => (
             <g key={v}>
               <line x1={scaleX(v)} y1={margin.top} x2={scaleX(v)} y2={margin.top + plotH} stroke="#f3f4f6" strokeWidth={0.5} />
               <line x1={margin.left} y1={scaleY(v)} x2={margin.left + plotW} y2={scaleY(v)} stroke="#f3f4f6" strokeWidth={0.5} />
-              <text x={scaleX(v)} y={margin.top + plotH + 16} textAnchor="middle" fontSize={10} fill="#6b7280">{v}</text>
-              <text x={margin.left - 6} y={scaleY(v) + 3} textAnchor="end" fontSize={10} fill="#6b7280">{v}</text>
+              <text x={scaleX(v)} y={margin.top + plotH + 18} textAnchor="middle" fontSize={10} fill="#6b7280">{v}</text>
+              <text x={margin.left - 8} y={scaleY(v) + 3} textAnchor="end" fontSize={10} fill="#6b7280">{v}</text>
             </g>
           ))}
 
@@ -115,10 +117,10 @@ export default function PairedSeedScatter({ convergenceData, pairedAnalysis }: P
             stroke="#d1d5db" strokeWidth={1.5} strokeDasharray="6 3"
           />
           <text
-            x={scaleX(axMax) - 4} y={scaleY(axMax) - 6}
-            fontSize={9} fill="#9ca3af" textAnchor="end"
+            x={scaleX(axMax) - 2} y={scaleY(axMax) - 6}
+            fontSize={8} fill="#9ca3af" textAnchor="end"
           >
-            y = x (equal)
+            y = x
           </text>
 
           {/* Shaded region below diagonal = experimental faster */}
@@ -126,12 +128,6 @@ export default function PairedSeedScatter({ convergenceData, pairedAnalysis }: P
             points={`${scaleX(axMin)},${scaleY(axMin)} ${scaleX(axMax)},${scaleY(axMax)} ${scaleX(axMax)},${scaleY(axMin)}`}
             fill="#6366f1" fillOpacity={0.04}
           />
-          <text
-            x={scaleX(axMax) - 8} y={scaleY(axMin) + 14}
-            fontSize={9} fill="#6366f1" textAnchor="end" fontStyle="italic"
-          >
-            Adaptive faster →
-          </text>
 
           {/* Data points */}
           {pairs.map((p, i) => {
@@ -141,7 +137,7 @@ export default function PairedSeedScatter({ convergenceData, pairedAnalysis }: P
                 key={i}
                 cx={scaleX(p.control)}
                 cy={scaleY(p.experimental)}
-                r={3.5}
+                r={4}
                 fill={below ? '#6366f1' : '#ef4444'}
                 fillOpacity={0.7}
                 stroke={below ? '#4f46e5' : '#dc2626'}
@@ -150,12 +146,13 @@ export default function PairedSeedScatter({ convergenceData, pairedAnalysis }: P
             )
           })}
 
-          {/* Axis labels */}
-          <text x={margin.left + plotW / 2} y={chartSize - 4} textAnchor="middle" fontSize={12} fill="#374151" fontWeight={600}>
+          {/* X-axis label */}
+          <text x={margin.left + plotW / 2} y={chartH - 8} textAnchor="middle" fontSize={11} fill="#374151" fontWeight={600}>
             Control (Static ε) — Convergence Generation
           </text>
-          <text x={14} y={margin.top + plotH / 2} textAnchor="middle" fontSize={12} fill="#374151" fontWeight={600} transform={`rotate(-90, 14, ${margin.top + plotH / 2})`}>
-            Experimental (Adaptive ε) — Convergence Gen.
+          {/* Y-axis label */}
+          <text x={16} y={margin.top + plotH / 2} textAnchor="middle" fontSize={11} fill="#374151" fontWeight={600} transform={`rotate(-90, 16, ${margin.top + plotH / 2})`}>
+            Experimental (Adaptive ε) — Conv. Gen.
           </text>
         </svg>
       </div>
