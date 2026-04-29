@@ -22,4 +22,5 @@ export { default as ReferencesSection } from './ReferencesSection'
 export { default as ConvergenceHistogram } from './ConvergenceHistogram'
 export { default as ConvergenceMeanBarChart } from './ConvergenceMeanBarChart'
 export { default as PairedSeedScatter } from './PairedSeedScatter'
+export { default as SeedPairsCard } from './SeedPairsCard'
 

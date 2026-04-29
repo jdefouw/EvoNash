@@ -21,6 +21,7 @@ import {
   ConvergenceHistogram,
   ConvergenceMeanBarChart,
   PairedSeedScatter,
+  SeedPairsCard,
 } from "@/components/dashboard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -574,6 +575,11 @@ export default function DashboardPage() {
               {dashboardData?.convergenceData && dashboardData.convergenceData.length > 0 && (
                 <ConvergenceHistogram data={dashboardData.convergenceData} />
               )}
+
+              {/* Seed Pairs Progress Tracker */}
+              <SeedPairsCard
+                convergenceData={dashboardData?.convergenceData ?? []}
+              />
 
               {/* Mean with 95% CI Error Bars + Paired Seed Scatter */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
     //
     // Within each tier, seeds with the biggest gap go first.
     // =========================================================================
-    const TIER1_TARGET = 5
+    const TIER1_TARGET = 10
     const TIER2_TARGET = 30
     const experiments = await queryAll(
       `WITH seed_balance AS (
