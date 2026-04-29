@@ -135,23 +135,23 @@ export async function POST(request: NextRequest) {
     }
 
     // =========================================================================
-    // SEED-GAP-AWARE EXPERIMENT SELECTION
+    // SEED-GAP-AWARE EXPERIMENT SELECTION (with saturation cap)
     // =========================================================================
-    // Priority: experiments whose seed has a large imbalance between completed
-    // control and experimental counts get dispatched FIRST.
+    // Priority: experiments whose seed has a gap (opposite group has more
+    // completed experiments) get dispatched FIRST — BUT only until this
+    // seed+group reaches 30 completed+running. After 30, priority drops
+    // to normal so OTHER seeds' gaps get filled too.
     //
-    // Example: seed 42 has 200 completed CONTROL but 0 completed EXPERIMENTAL.
-    // Any PENDING EXPERIMENTAL with seed 42 gets gap_score = 200 → top priority.
-    //
-    // This ensures paired seed data is built before moving to new seeds,
-    // which is critical for the paired t-test analysis.
+    // This ensures we get ~30 paired experiments per seed QUICKLY across
+    // all seeds, rather than grinding 200 on one seed before touching others.
     // =========================================================================
+    const MIN_PAIRS_TARGET = 30
     const experiments = await queryAll(
       `WITH seed_balance AS (
         SELECT
           random_seed,
-          COUNT(*) FILTER (WHERE experiment_group = 'CONTROL' AND status = 'COMPLETED') as ctrl_done,
-          COUNT(*) FILTER (WHERE experiment_group = 'EXPERIMENTAL' AND status = 'COMPLETED') as exp_done
+          COUNT(*) FILTER (WHERE experiment_group = 'CONTROL' AND status IN ('COMPLETED', 'RUNNING')) as ctrl_done,
+          COUNT(*) FILTER (WHERE experiment_group = 'EXPERIMENTAL' AND status IN ('COMPLETED', 'RUNNING')) as exp_done
         FROM experiments
         GROUP BY random_seed
       )
@@ -159,16 +159,27 @@ export async function POST(request: NextRequest) {
         e.*,
         COALESCE(sb.ctrl_done, 0)::int as ctrl_done,
         COALESCE(sb.exp_done, 0)::int as exp_done,
+        -- Raw gap: how many more of the opposite group exist
         CASE
           WHEN e.experiment_group = 'CONTROL'
             THEN COALESCE(sb.exp_done, 0) - COALESCE(sb.ctrl_done, 0)
           ELSE COALESCE(sb.ctrl_done, 0) - COALESCE(sb.exp_done, 0)
+        END as raw_gap,
+        -- Effective priority: high if gap exists AND this group < 30 for this seed
+        -- Once this seed+group reaches 30, priority drops to 0 (normal)
+        CASE
+          WHEN e.experiment_group = 'CONTROL' AND COALESCE(sb.ctrl_done, 0) < ${MIN_PAIRS_TARGET}
+            THEN GREATEST(0, COALESCE(sb.exp_done, 0) - COALESCE(sb.ctrl_done, 0))
+          WHEN e.experiment_group = 'EXPERIMENTAL' AND COALESCE(sb.exp_done, 0) < ${MIN_PAIRS_TARGET}
+            THEN GREATEST(0, COALESCE(sb.ctrl_done, 0) - COALESCE(sb.exp_done, 0))
+          ELSE 0
         END as gap_score
       FROM experiments e
       LEFT JOIN seed_balance sb ON e.random_seed = sb.random_seed
       WHERE e.status IN ('PENDING', 'RUNNING')
       ORDER BY
         gap_score DESC,
+        random_seed ASC,
         created_at ASC`
     )
 
