@@ -134,12 +134,42 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Find experiments with status PENDING or RUNNING
-    // IMPORTANT: Never assign jobs from COMPLETED, FAILED, or STOPPED experiments
+    // =========================================================================
+    // SEED-GAP-AWARE EXPERIMENT SELECTION
+    // =========================================================================
+    // Priority: experiments whose seed has a large imbalance between completed
+    // control and experimental counts get dispatched FIRST.
+    //
+    // Example: seed 42 has 200 completed CONTROL but 0 completed EXPERIMENTAL.
+    // Any PENDING EXPERIMENTAL with seed 42 gets gap_score = 200 → top priority.
+    //
+    // This ensures paired seed data is built before moving to new seeds,
+    // which is critical for the paired t-test analysis.
+    // =========================================================================
     const experiments = await queryAll(
-      `SELECT * FROM experiments
-       WHERE status IN ('PENDING', 'RUNNING')
-       ORDER BY created_at ASC`
+      `WITH seed_balance AS (
+        SELECT
+          random_seed,
+          COUNT(*) FILTER (WHERE experiment_group = 'CONTROL' AND status = 'COMPLETED') as ctrl_done,
+          COUNT(*) FILTER (WHERE experiment_group = 'EXPERIMENTAL' AND status = 'COMPLETED') as exp_done
+        FROM experiments
+        GROUP BY random_seed
+      )
+      SELECT
+        e.*,
+        COALESCE(sb.ctrl_done, 0)::int as ctrl_done,
+        COALESCE(sb.exp_done, 0)::int as exp_done,
+        CASE
+          WHEN e.experiment_group = 'CONTROL'
+            THEN COALESCE(sb.exp_done, 0) - COALESCE(sb.ctrl_done, 0)
+          ELSE COALESCE(sb.ctrl_done, 0) - COALESCE(sb.exp_done, 0)
+        END as gap_score
+      FROM experiments e
+      LEFT JOIN seed_balance sb ON e.random_seed = sb.random_seed
+      WHERE e.status IN ('PENDING', 'RUNNING')
+      ORDER BY
+        gap_score DESC,
+        created_at ASC`
     )
 
     if (!experiments || experiments.length === 0) {
@@ -150,10 +180,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Log available experiments
-    console.log(`[QUEUE] Available experiments: ${experiments.length}`)
+    // Log available experiments with gap info
+    console.log(`[QUEUE] Available experiments: ${experiments.length} (seed-gap prioritized)`)
     experiments.slice(0, 10).forEach((exp: any, idx: number) => {
-      console.log(`[QUEUE]   ${idx + 1}. ${exp.experiment_name} (${exp.experiment_group})`)
+      console.log(`[QUEUE]   ${idx + 1}. ${exp.experiment_name} (${exp.experiment_group}) [seed=${exp.random_seed}, gap=${exp.gap_score}, ctrl=${exp.ctrl_done}, exp=${exp.exp_done}]`)
     })
     if (experiments.length > 10) {
       console.log(`[QUEUE]   ... and ${experiments.length - 10} more`)
