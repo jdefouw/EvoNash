@@ -7,8 +7,15 @@ interface ConvergenceEntry {
   convergenceGeneration: number
 }
 
+interface ActiveSeedWorker {
+  seed: number
+  group: string
+  runningCount: number
+}
+
 interface SeedPairsCardProps {
   convergenceData: ConvergenceEntry[]
+  activeSeedWorkers?: ActiveSeedWorker[]
   totalSeeds?: number
 }
 
@@ -20,16 +27,29 @@ interface SeedRow {
   experimentalMeanGen: number | null
   isPaired: boolean
   pairStrength: 'none' | 'weak' | 'moderate' | 'strong'
+  controlRunning: number
+  experimentalRunning: number
 }
 
-export default function SeedPairsCard({ convergenceData, totalSeeds }: SeedPairsCardProps) {
+export default function SeedPairsCard({ convergenceData, activeSeedWorkers = [], totalSeeds }: SeedPairsCardProps) {
+  // Build running counts lookup
+  const runningMap = new Map<string, number>()
+  for (const w of activeSeedWorkers) {
+    runningMap.set(`${w.seed}_${w.group}`, w.runningCount)
+  }
+
+  // Collect all seeds that have any activity (converged OR running)
+  const allSeeds = new Set<number>()
+  for (const entry of convergenceData) allSeeds.add(entry.seed)
+  for (const w of activeSeedWorkers) allSeeds.add(w.seed)
+
   // Build per-seed stats from convergence data
   const seedMap = new Map<number, { ctrl: number[]; exp: number[] }>()
+  for (const seed of allSeeds) {
+    seedMap.set(seed, { ctrl: [], exp: [] })
+  }
   
   for (const entry of convergenceData) {
-    if (!seedMap.has(entry.seed)) {
-      seedMap.set(entry.seed, { ctrl: [], exp: [] })
-    }
     const bucket = seedMap.get(entry.seed)!
     if (entry.group === 'CONTROL') {
       bucket.ctrl.push(entry.convergenceGeneration)
@@ -62,10 +82,15 @@ export default function SeedPairsCard({ convergenceData, totalSeeds }: SeedPairs
         experimentalMeanGen: expMean,
         isPaired,
         pairStrength,
+        controlRunning: runningMap.get(`${seed}_CONTROL`) || 0,
+        experimentalRunning: runningMap.get(`${seed}_EXPERIMENTAL`) || 0,
       }
     })
     .sort((a, b) => {
-      // Sort: paired first (by strength desc), then unpaired
+      // Sort: actively running first, then by strength
+      const aActive = a.controlRunning + a.experimentalRunning > 0 ? 0 : 1
+      const bActive = b.controlRunning + b.experimentalRunning > 0 ? 0 : 1
+      if (aActive !== bActive) return aActive - bActive
       const strengthOrder = { strong: 0, moderate: 1, weak: 2, none: 3 }
       return strengthOrder[a.pairStrength] - strengthOrder[b.pairStrength]
     })
@@ -76,6 +101,7 @@ export default function SeedPairsCard({ convergenceData, totalSeeds }: SeedPairs
   const weakCount = rows.filter(r => r.pairStrength === 'weak').length
   const unpairedCount = rows.filter(r => !r.isPaired).length
   const totalSeedsInSystem = totalSeeds ?? seedMap.size
+  const activeSeeds = rows.filter(r => r.controlRunning + r.experimentalRunning > 0).length
 
   const strengthColor = (s: SeedRow['pairStrength']) => {
     switch (s) {
@@ -95,6 +121,21 @@ export default function SeedPairsCard({ convergenceData, totalSeeds }: SeedPairs
     }
   }
 
+  const LiveDot = ({ running }: { running: number }) => (
+    running > 0 ? (
+      <span className="relative inline-flex items-center gap-0.5" title={`${running} experiment(s) running`}>
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+        </span>
+      </span>
+    ) : (
+      <span className="relative inline-flex items-center" title="Idle">
+        <span className="inline-flex rounded-full h-2 w-2 bg-gray-400/40" />
+      </span>
+    )
+  )
+
   return (
     <div className="rounded-xl border border-gray-200 dark:border-gray-700/50 bg-white dark:bg-gray-800/60 backdrop-blur-sm p-5 space-y-4">
       {/* Header */}
@@ -102,6 +143,15 @@ export default function SeedPairsCard({ convergenceData, totalSeeds }: SeedPairs
         <div>
           <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             🧬 Seed Pair Progress
+            {activeSeeds > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-500/15 text-green-400 border border-green-500/30">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
+                </span>
+                {activeSeeds} active
+              </span>
+            )}
           </h3>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
             Each seed needs ≥10 converged CTRL + ≥10 converged EXP to be a viable pair
@@ -160,6 +210,7 @@ export default function SeedPairsCard({ convergenceData, totalSeeds }: SeedPairs
         <table className="w-full text-xs">
           <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800 z-10">
             <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+              <th className="py-2 px-2 font-medium w-6"></th>
               <th className="py-2 px-2 font-medium">Seed</th>
               <th className="py-2 px-2 font-medium text-center">CTRL ✓</th>
               <th className="py-2 px-2 font-medium text-center">EXP ✓</th>
@@ -174,18 +225,32 @@ export default function SeedPairsCard({ convergenceData, totalSeeds }: SeedPairs
               const diff = (row.controlMeanGen !== null && row.experimentalMeanGen !== null)
                 ? row.controlMeanGen - row.experimentalMeanGen
                 : null
+              const isActive = row.controlRunning + row.experimentalRunning > 0
               return (
-                <tr key={row.seed} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors">
+                <tr key={row.seed} className={`transition-colors ${isActive ? 'bg-green-500/5 hover:bg-green-500/10' : 'hover:bg-gray-50/50 dark:hover:bg-gray-700/30'}`}>
+                  <td className="py-1.5 px-2">
+                    <LiveDot running={row.controlRunning + row.experimentalRunning} />
+                  </td>
                   <td className="py-1.5 px-2 font-mono text-gray-700 dark:text-gray-300">{row.seed}</td>
                   <td className="py-1.5 px-2 text-center">
-                    <span className={row.controlConverged >= 10 ? 'text-emerald-500 font-semibold' : row.controlConverged > 0 ? 'text-amber-400' : 'text-red-400'}>
-                      {row.controlConverged}
-                    </span>
+                    <div className="flex items-center justify-center gap-1">
+                      <span className={row.controlConverged >= 10 ? 'text-emerald-500 font-semibold' : row.controlConverged > 0 ? 'text-amber-400' : 'text-red-400'}>
+                        {row.controlConverged}
+                      </span>
+                      {row.controlRunning > 0 && (
+                        <span className="text-[9px] text-green-400 font-medium">+{row.controlRunning}⏳</span>
+                      )}
+                    </div>
                   </td>
                   <td className="py-1.5 px-2 text-center">
-                    <span className={row.experimentalConverged >= 10 ? 'text-emerald-500 font-semibold' : row.experimentalConverged > 0 ? 'text-amber-400' : 'text-red-400'}>
-                      {row.experimentalConverged}
-                    </span>
+                    <div className="flex items-center justify-center gap-1">
+                      <span className={row.experimentalConverged >= 10 ? 'text-emerald-500 font-semibold' : row.experimentalConverged > 0 ? 'text-amber-400' : 'text-red-400'}>
+                        {row.experimentalConverged}
+                      </span>
+                      {row.experimentalRunning > 0 && (
+                        <span className="text-[9px] text-green-400 font-medium">+{row.experimentalRunning}⏳</span>
+                      )}
+                    </div>
                   </td>
                   <td className="py-1.5 px-2 text-center text-gray-500 dark:text-gray-400">
                     {row.controlMeanGen !== null ? row.controlMeanGen.toFixed(1) : '—'}
@@ -212,7 +277,7 @@ export default function SeedPairsCard({ convergenceData, totalSeeds }: SeedPairs
             })}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-gray-400">
+                <td colSpan={8} className="py-8 text-center text-gray-400">
                   No convergence data yet — experiments are still running
                 </td>
               </tr>
@@ -225,6 +290,7 @@ export default function SeedPairsCard({ convergenceData, totalSeeds }: SeedPairs
       <div className="text-[10px] text-gray-400 dark:text-gray-500 pt-1 border-t border-gray-100 dark:border-gray-700/50">
         <strong>Δ Gen</strong> = Control mean − Experimental mean. Positive = adaptive mutation converges faster.
         Queue prioritizes seeds with {'<'}10 converged per group (Tier 1), then {'<'}30 (Tier 2).
+        <span className="ml-1 inline-flex items-center gap-0.5"><span className="inline-flex rounded-full h-1.5 w-1.5 bg-green-500" /> = worker actively processing</span>
       </div>
     </div>
   )

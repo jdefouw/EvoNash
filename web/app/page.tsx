@@ -579,6 +579,7 @@ export default function DashboardPage() {
               {/* Seed Pairs Progress Tracker */}
               <SeedPairsCard
                 convergenceData={dashboardData?.convergenceData ?? []}
+                activeSeedWorkers={dashboardData?.activeSeedWorkers ?? []}
               />
 
               {/* Mean with 95% CI Error Bars + Paired Seed Scatter */}

@@ -1413,6 +1413,12 @@ export interface DashboardData {
     seed: number
     convergenceGeneration: number
   }[]
+  // Live worker activity per seed
+  activeSeedWorkers?: {
+    seed: number
+    group: string
+    runningCount: number
+  }[]
 }
 
 // =============================================================================
@@ -2176,7 +2182,22 @@ export async function GET() {
         group: e.experiment_group,
         seed: Number(e.random_seed),
         convergenceGeneration: Number(e.convergence_generation)
-      }))
+      })),
+      activeSeedWorkers: await (async () => {
+        try {
+          const running = await queryAll<{ random_seed: string; experiment_group: string; cnt: string }>(
+            `SELECT random_seed, experiment_group, COUNT(*)::text as cnt
+             FROM experiments
+             WHERE status = 'RUNNING'
+             GROUP BY random_seed, experiment_group`
+          )
+          return (running || []).map(r => ({
+            seed: Number(r.random_seed),
+            group: r.experiment_group,
+            runningCount: parseInt(r.cnt, 10)
+          }))
+        } catch { return [] }
+      })()
     }
 
     return NextResponse.json(response, {
