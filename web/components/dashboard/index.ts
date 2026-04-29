@@ -18,3 +18,8 @@ export { default as EffectSizeCard } from './EffectSizeCard'
 export { default as ConvergenceRangeCard } from './ConvergenceRangeCard'
 export { VerificationCard } from './VerificationCard'
 export { default as ReferencesSection } from './ReferencesSection'
+// Additional Charts for CWSF
+export { default as ConvergenceHistogram } from './ConvergenceHistogram'
+export { default as ConvergenceMeanBarChart } from './ConvergenceMeanBarChart'
+export { default as PairedSeedScatter } from './PairedSeedScatter'
+

@@ -17,7 +17,10 @@ import {
   EffectSizeCard,
   ConvergenceRangeCard,
   VerificationCard,
-  ReferencesSection
+  ReferencesSection,
+  ConvergenceHistogram,
+  ConvergenceMeanBarChart,
+  PairedSeedScatter,
 } from "@/components/dashboard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -563,6 +566,30 @@ export default function DashboardPage() {
                 <EffectSizeCard
                   hedgesG={dashboardData?.effectSizes?.hedgesG ?? null}
                   cohensD={dashboardData?.effectSizes?.hedgesG?.cohensD ?? stats?.convergenceCohensD ?? null}
+                />
+              </div>
+
+              {/* ── CWSF Charts: Histogram, Mean Bar Chart, Paired Scatter ── */}
+              {/* Convergence Histogram */}
+              {dashboardData?.convergenceData && dashboardData.convergenceData.length > 0 && (
+                <ConvergenceHistogram data={dashboardData.convergenceData} />
+              )}
+
+              {/* Mean with 95% CI Error Bars + Paired Seed Scatter */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <ConvergenceMeanBarChart
+                  controlMean={stats?.convergenceControlMean ?? null}
+                  experimentalMean={stats?.convergenceExperimentalMean ?? null}
+                  controlStd={stats?.convergenceControlStd ?? null}
+                  experimentalStd={stats?.convergenceExperimentalStd ?? null}
+                  controlN={stats?.controlConvergedCount ?? 0}
+                  experimentalN={stats?.experimentalConvergedCount ?? 0}
+                  confidenceInterval={stats?.convergenceConfidenceInterval ?? null}
+                  meanDifference={stats?.convergenceMeanDifference ?? null}
+                />
+                <PairedSeedScatter
+                  convergenceData={dashboardData?.convergenceData ?? []}
+                  pairedAnalysis={dashboardData?.pairedAnalysis ?? null}
                 />
               </div>
             </>
