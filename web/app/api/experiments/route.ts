@@ -10,6 +10,7 @@ export interface ExperimentsSummary {
   completed: { control: number; experimental: number; total: number }
   pending: { control: number; experimental: number; total: number }
   running: { control: number; experimental: number; total: number }
+  seedPairs: { total: number; paired: number; unpaired: number }
 }
 
 async function getExperimentsSummary(): Promise<ExperimentsSummary> {
@@ -22,13 +23,14 @@ async function getExperimentsSummary(): Promise<ExperimentsSummary> {
   const summary: ExperimentsSummary = {
     completed: { control: 0, experimental: 0, total: 0 },
     pending: { control: 0, experimental: 0, total: 0 },
-    running: { control: 0, experimental: 0, total: 0 }
+    running: { control: 0, experimental: 0, total: 0 },
+    seedPairs: { total: 0, paired: 0, unpaired: 0 }
   }
   for (const row of rows || []) {
     const n = parseInt(row.count || '0', 10)
-    const key = row.status.toLowerCase() as keyof ExperimentsSummary
-    if (key in summary) {
-      const bucket = summary[key]
+    const key = row.status.toLowerCase() as keyof typeof summary
+    if (key in summary && key !== 'seedPairs') {
+      const bucket = summary[key] as { control: number; experimental: number; total: number }
       if (row.experiment_group === 'CONTROL') bucket.control += n
       else if (row.experiment_group === 'EXPERIMENTAL') bucket.experimental += n
     }
@@ -36,6 +38,20 @@ async function getExperimentsSummary(): Promise<ExperimentsSummary> {
   summary.completed.total = summary.completed.control + summary.completed.experimental
   summary.pending.total = summary.pending.control + summary.pending.experimental
   summary.running.total = summary.running.control + summary.running.experimental
+
+  // Seed pair stats: count unique seeds and how many have both C+E (completed or in queue)
+  const seedRows = await queryAll<{ seed: number; has_control: boolean; has_experimental: boolean }>(
+    `SELECT random_seed as seed,
+            BOOL_OR(experiment_group = 'CONTROL') as has_control,
+            BOOL_OR(experiment_group = 'EXPERIMENTAL') as has_experimental
+     FROM experiments
+     WHERE status IN ('COMPLETED', 'RUNNING', 'PENDING')
+     GROUP BY random_seed`
+  ) || []
+  summary.seedPairs.total = seedRows.length
+  summary.seedPairs.paired = seedRows.filter(r => r.has_control && r.has_experimental).length
+  summary.seedPairs.unpaired = summary.seedPairs.total - summary.seedPairs.paired
+
   return summary
 }
 

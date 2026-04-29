@@ -26,6 +26,7 @@ export default function ExperimentsPage() {
     completed: { control: number; experimental: number; total: number }
     pending: { control: number; experimental: number; total: number }
     running: { control: number; experimental: number; total: number }
+    seedPairs?: { total: number; paired: number; unpaired: number }
   } | null>(null)
 
   // Load workers visibility preference from localStorage
@@ -399,6 +400,15 @@ export default function ExperimentsPage() {
                   <div className="metric-value">{summary.completed.total + summary.running.total + summary.pending.total}</div>
                   <div className="metric-label">Total</div>
                 </div>
+                {summary.seedPairs && (
+                  <div className="metric-item">
+                    <div className="metric-value text-cyan-300">{summary.seedPairs.total}</div>
+                    <div className="metric-label">Seed Pairs</div>
+                    <div className="text-[10px] text-white/50 mt-0.5">
+                      {summary.seedPairs.paired} paired · {summary.seedPairs.unpaired} unpaired
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
