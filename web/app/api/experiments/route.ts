@@ -50,7 +50,8 @@ export async function GET(request: NextRequest) {
 
     // Query with limit to prevent timeout on large datasets
     // Sort by status priority: RUNNING first, then COMPLETED, then PENDING/others
-    // Within each status group, sort by created_at descending (newest first)
+    // COMPLETED sorted by completed_at (most recently finished first)
+    // Others sorted by created_at descending
     const data = await queryAll<Experiment>(
       `SELECT * FROM experiments 
        ORDER BY 
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest) {
            WHEN 'STOPPED' THEN 4 
            ELSE 5 
          END,
-         created_at DESC
+         COALESCE(completed_at, created_at) DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
     )
