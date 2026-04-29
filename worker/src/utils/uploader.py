@@ -3,16 +3,22 @@ import requests
 import json
 import logging
 import os
+import uuid
 import torch
 from datetime import datetime
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 class ExperimentUploader:
     def __init__(self, controller_url=None):
         self.worker_id = None
+        self.worker_name = None
         
-        # 1. Try to load config from standard location
+        # 1. Load worker ID first so it's available for config defaults
+        self._load_worker_id()
+        
+        # 2. Try to load config from standard location
         config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "config", "worker_config.json")
         loaded_url = None
         
@@ -27,7 +33,7 @@ class ExperimentUploader:
             except Exception as e:
                 print(f"[Uploader] Failed to load config: {e}")
 
-        # 2. Use argument or default
+        # 3. Use argument or default
         if controller_url:
             self.controller_url = controller_url.rstrip("/")
         elif loaded_url:
@@ -36,32 +42,50 @@ class ExperimentUploader:
             print("[Uploader] Warning: using default localhost URL")
             self.controller_url = "http://localhost:3000"
 
-        self._load_worker_id()
+        # 4. If still no worker_id, generate one now
+        if not self.worker_id:
+            self._generate_worker_id()
 
     def _load_worker_id(self):
+        """Load worker ID from machine_id.txt."""
         try:
-            # Look for machine_id.txt relative to this file
-            # this file is in worker/src/utils/uploader.py
-            # machine_id is in worker/data/machine_id.txt
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            worker_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir))) 
-            # Wait, path logic is tricky. 
-            # File: worker/src/utils/uploader.py
-            # Root: worker/
-            # Data: worker/data/machine_id.txt
+            # Resolve path from this file: worker/src/utils/uploader.py -> worker/data/machine_id.txt
+            utils_dir = Path(__file__).parent.resolve()  # worker/src/utils/
+            worker_root = utils_dir.parent.parent         # worker/
+            data_path = worker_root / "data" / "machine_id.txt"
             
-            # Let's try standard relative path from execution context usually 'worker/'
-            data_path = os.path.join("data", "machine_id.txt")
-            
-            if os.path.exists(data_path):
-                with open(data_path, 'r') as f:
-                    content = f.read().strip()
-                    if ":" in content:
-                        _, self.worker_id = content.split(":", 1)
-                    else:
-                        self.worker_id = content
+            if data_path.exists():
+                content = data_path.read_text().strip()
+                if ":" in content:
+                    _, self.worker_id = content.split(":", 1)
+                else:
+                    self.worker_id = content
+                print(f"[Uploader] Loaded worker ID: {self.worker_id[:8]}...")
+            else:
+                print(f"[Uploader] No machine_id.txt found at {data_path}")
         except Exception as e:
             logger.warning(f"Could not load worker_id: {e}")
+
+    def _generate_worker_id(self):
+        """Generate a new worker UUID and save it to machine_id.txt."""
+        import socket
+        try:
+            hostname = socket.gethostname()
+            new_id = str(uuid.uuid4())
+            
+            utils_dir = Path(__file__).parent.resolve()
+            worker_root = utils_dir.parent.parent
+            data_path = worker_root / "data" / "machine_id.txt"
+            
+            data_path.parent.mkdir(parents=True, exist_ok=True)
+            data_path.write_text(f"{hostname}:{new_id}")
+            
+            self.worker_id = new_id
+            print(f"[Uploader] Generated new worker ID: {new_id[:8]}... (host: {hostname})")
+        except Exception as e:
+            # Fallback: use a temporary UUID
+            self.worker_id = str(uuid.uuid4())
+            logger.warning(f"Could not save worker_id to file: {e}, using temporary ID")
 
     def _get_gpu_info(self):
         """Get GPU type and VRAM information."""
