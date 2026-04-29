@@ -166,45 +166,47 @@ export async function POST(request: NextRequest) {
         CASE
           -- ═══════════════════════════════════════════════════════════
           -- PHASE 1: Get to 10/10 — ONE seed at a time
-          -- Score = 3000 + (pair_level * 100) + bottleneck_bonus
-          -- Higher pair_level = closer to target = ALL workers focus here
+          -- Base 300000. Within phase: closer to target = higher score.
+          -- Range: 300000–300099. ALWAYS outranks Phase 2/3/4.
           -- ═══════════════════════════════════════════════════════════
           WHEN LEAST(COALESCE(sb.ctrl_done, 0), COALESCE(sb.exp_done, 0)) < 10
-            THEN 3000
-              + LEAST(COALESCE(sb.ctrl_done, 0), COALESCE(sb.exp_done, 0)) * 100
+            THEN 300000
+              + LEAST(COALESCE(sb.ctrl_done, 0), COALESCE(sb.exp_done, 0)) * 10
               + CASE
                   WHEN e.experiment_group = 'CONTROL'
-                       AND COALESCE(sb.ctrl_done, 0) <= COALESCE(sb.exp_done, 0) THEN 10
+                       AND COALESCE(sb.ctrl_done, 0) <= COALESCE(sb.exp_done, 0) THEN 1
                   WHEN e.experiment_group = 'EXPERIMENTAL'
-                       AND COALESCE(sb.exp_done, 0) <= COALESCE(sb.ctrl_done, 0) THEN 10
+                       AND COALESCE(sb.exp_done, 0) <= COALESCE(sb.ctrl_done, 0) THEN 1
                   ELSE 0
                 END
 
           -- ═══════════════════════════════════════════════════════════
           -- PHASE 2: Get to 20/20 — ONE seed at a time
+          -- Range: 200000–200299. Always outranks Phase 3/4.
           -- ═══════════════════════════════════════════════════════════
           WHEN LEAST(COALESCE(sb.ctrl_done, 0), COALESCE(sb.exp_done, 0)) < 20
-            THEN 2000
-              + LEAST(COALESCE(sb.ctrl_done, 0), COALESCE(sb.exp_done, 0)) * 100
+            THEN 200000
+              + LEAST(COALESCE(sb.ctrl_done, 0), COALESCE(sb.exp_done, 0)) * 10
               + CASE
                   WHEN e.experiment_group = 'CONTROL'
-                       AND COALESCE(sb.ctrl_done, 0) <= COALESCE(sb.exp_done, 0) THEN 10
+                       AND COALESCE(sb.ctrl_done, 0) <= COALESCE(sb.exp_done, 0) THEN 1
                   WHEN e.experiment_group = 'EXPERIMENTAL'
-                       AND COALESCE(sb.exp_done, 0) <= COALESCE(sb.ctrl_done, 0) THEN 10
+                       AND COALESCE(sb.exp_done, 0) <= COALESCE(sb.ctrl_done, 0) THEN 1
                   ELSE 0
                 END
 
           -- ═══════════════════════════════════════════════════════════
           -- PHASE 3: Get to 30/30 — ONE seed at a time
+          -- Range: 100000–100299. Always outranks Phase 4.
           -- ═══════════════════════════════════════════════════════════
           WHEN LEAST(COALESCE(sb.ctrl_done, 0), COALESCE(sb.exp_done, 0)) < 30
-            THEN 1000
-              + LEAST(COALESCE(sb.ctrl_done, 0), COALESCE(sb.exp_done, 0)) * 100
+            THEN 100000
+              + LEAST(COALESCE(sb.ctrl_done, 0), COALESCE(sb.exp_done, 0)) * 10
               + CASE
                   WHEN e.experiment_group = 'CONTROL'
-                       AND COALESCE(sb.ctrl_done, 0) <= COALESCE(sb.exp_done, 0) THEN 10
+                       AND COALESCE(sb.ctrl_done, 0) <= COALESCE(sb.exp_done, 0) THEN 1
                   WHEN e.experiment_group = 'EXPERIMENTAL'
-                       AND COALESCE(sb.exp_done, 0) <= COALESCE(sb.ctrl_done, 0) THEN 10
+                       AND COALESCE(sb.exp_done, 0) <= COALESCE(sb.ctrl_done, 0) THEN 1
                   ELSE 0
                 END
 
@@ -265,9 +267,9 @@ export async function POST(request: NextRequest) {
           const topScore = Number(topExperiment.gap_score) || 0
 
           // Only keep affinity if the worker's experiment is in the same priority tier
-          // Phase boundaries: 3000 (Phase 1), 2000 (Phase 2), 1000 (Phase 3), 0 (Phase 4)
-          const affinityPhase = affinityScore >= 3000 ? 1 : affinityScore >= 2000 ? 2 : affinityScore >= 1000 ? 3 : 4
-          const topPhase = topScore >= 3000 ? 1 : topScore >= 2000 ? 2 : topScore >= 1000 ? 3 : 4
+          // Phase boundaries: 300000 (Phase 1), 200000 (Phase 2), 100000 (Phase 3), 0 (Phase 4)
+          const affinityPhase = affinityScore >= 300000 ? 1 : affinityScore >= 200000 ? 2 : affinityScore >= 100000 ? 3 : 4
+          const topPhase = topScore >= 300000 ? 1 : topScore >= 200000 ? 2 : topScore >= 100000 ? 3 : 4
 
           if (affinityPhase <= topPhase) {
             // Affinity experiment is in same or higher priority phase — keep affinity
