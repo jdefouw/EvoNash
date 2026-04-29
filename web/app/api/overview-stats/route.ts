@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
  * Convergence detection mirrors the dashboard API exactly:
  *   1. Skip first 5 generations
  *   2. Find peak entropy_variance (must > 0.0001)
- *   3. After peak, sliding window of 20 gens — at least 18/20 below 0.001
+ *   3. After peak, sliding window of 10 gens — at least 8/10 below 0.001
  *   4. Earliest qualifying window = convergence generation
  */
 export async function GET() {
@@ -54,8 +54,8 @@ export async function GET() {
 
     // ── Convergence detection (identical to dashboard API) ──────────────
     const CONVERGENCE_THRESHOLD = 0.001
-    const STABILITY_WINDOW = 20
-    const MIN_BELOW_THRESHOLD = 18
+    const STABILITY_WINDOW = 10
+    const MIN_BELOW_THRESHOLD = 8
 
     interface ExperimentConvergence {
       experiment_id: string

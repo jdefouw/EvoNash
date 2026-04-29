@@ -1654,18 +1654,18 @@ export async function GET() {
     // The SQL convergence detection logic:
     //   1. Skip first 5 generations (unstable initialization data)
     //   2. Find peak entropy_variance per experiment (must be > 0.0001)
-    //   3. After peak, use a sliding window of 20 generations — if at least
-    //      18 out of 20 are below 0.001, the experiment has converged.
-    //      This tolerates up to 2 brief entropy spikes per window (common
-    //      with adaptive mutation) while still requiring strong convergence.
+    //   3. After peak, use a sliding window of 10 generations — if at least
+    //      8 out of 10 are below 0.001, the experiment has converged.
+    //      Matches worker-side detection (0.001 threshold, 20 consecutive)
+    //      but is slightly more lenient to catch early-stopped experiments.
     //   4. Return the generation_number starting the first qualifying window
     //
     // Both groups use the same threshold and window for fair comparison.
     // =========================================================================
 
     const CONVERGENCE_THRESHOLD = 0.001
-    const STABILITY_WINDOW = 20  // Check windows of 20 generations
-    const MIN_BELOW_THRESHOLD = 18  // Allow up to 2 brief spikes per window
+    const STABILITY_WINDOW = 10   // Check windows of 10 generations (relaxed from 20)
+    const MIN_BELOW_THRESHOLD = 8  // 8 of 10 below threshold (relaxed from 18/20)
 
     interface ExperimentConvergence {
       experiment_id: string
