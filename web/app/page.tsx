@@ -82,6 +82,7 @@ interface DashboardData {
   }
   pairedAnalysis?: any
   convergenceData?: { experimentId: string; group: string; seed: number; convergenceGeneration: number }[]
+  activeSeedWorkers?: { seed: number; group: string; runningCount: number }[]
 }
 
 export default function DashboardPage() {

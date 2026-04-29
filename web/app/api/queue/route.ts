@@ -135,18 +135,20 @@ export async function POST(request: NextRequest) {
     }
 
     // =========================================================================
-    // TIERED SEED-GAP PRIORITY QUEUE
+    // FOCUSED SEED QUEUE — ONE SEED AT A TIME
     // =========================================================================
-    // Tier 1 (gap_score 1000+): Get EVERY seed to 5 completed per group.
-    //   → Maximizes # of seed pairs as fast as possible.
-    // Tier 2 (gap_score 1-999): Deepen each seed to 30 completed per group.
-    //   → Builds statistical depth for paired t-test.
-    // Tier 3 (gap_score 0): Normal ordering — fill remaining experiments.
+    // Strategy: Focus ALL workers on the seed CLOSEST to reaching the current
+    // phase target. Once that seed hits the target, move to the next seed.
     //
-    // Within each tier, seeds with the biggest gap go first.
+    // Phase 1 (score 3000+): Get each seed to 10 CTRL + 10 EXP completed
+    //   → One seed at a time, closest to 10/10 first
+    // Phase 2 (score 2000+): Deepen each seed to 20/20
+    // Phase 3 (score 1000+): Deepen each seed to 30/30
+    // Phase 4 (score 0): Fill remaining experiments normally
+    //
+    // Within a seed, the BOTTLENECK group (fewer completions) gets priority
+    // so workers don't waste time on the group that's already ahead.
     // =========================================================================
-    const TIER1_TARGET = 10
-    const TIER2_TARGET = 30
     const experiments = await queryAll(
       `WITH seed_balance AS (
         SELECT
@@ -160,29 +162,55 @@ export async function POST(request: NextRequest) {
         e.*,
         COALESCE(sb.ctrl_done, 0)::int as ctrl_done,
         COALESCE(sb.exp_done, 0)::int as exp_done,
+        LEAST(COALESCE(sb.ctrl_done, 0), COALESCE(sb.exp_done, 0))::int as pair_level,
         CASE
-          -- TIER 1: This group has < 5 completed AND opposite group has more
-          -- Score 1000+ so it always ranks above Tier 2
-          WHEN e.experiment_group = 'CONTROL'
-               AND COALESCE(sb.ctrl_done, 0) < ${TIER1_TARGET}
-               AND COALESCE(sb.exp_done, 0) > COALESCE(sb.ctrl_done, 0)
-            THEN 1000 + COALESCE(sb.exp_done, 0) - COALESCE(sb.ctrl_done, 0)
-          WHEN e.experiment_group = 'EXPERIMENTAL'
-               AND COALESCE(sb.exp_done, 0) < ${TIER1_TARGET}
-               AND COALESCE(sb.ctrl_done, 0) > COALESCE(sb.exp_done, 0)
-            THEN 1000 + COALESCE(sb.ctrl_done, 0) - COALESCE(sb.exp_done, 0)
+          -- ═══════════════════════════════════════════════════════════
+          -- PHASE 1: Get to 10/10 — ONE seed at a time
+          -- Score = 3000 + (pair_level * 100) + bottleneck_bonus
+          -- Higher pair_level = closer to target = ALL workers focus here
+          -- ═══════════════════════════════════════════════════════════
+          WHEN LEAST(COALESCE(sb.ctrl_done, 0), COALESCE(sb.exp_done, 0)) < 10
+            THEN 3000
+              + LEAST(COALESCE(sb.ctrl_done, 0), COALESCE(sb.exp_done, 0)) * 100
+              + CASE
+                  WHEN e.experiment_group = 'CONTROL'
+                       AND COALESCE(sb.ctrl_done, 0) <= COALESCE(sb.exp_done, 0) THEN 10
+                  WHEN e.experiment_group = 'EXPERIMENTAL'
+                       AND COALESCE(sb.exp_done, 0) <= COALESCE(sb.ctrl_done, 0) THEN 10
+                  ELSE 0
+                END
 
-          -- TIER 2: This group has < 30 completed AND opposite group has more
-          WHEN e.experiment_group = 'CONTROL'
-               AND COALESCE(sb.ctrl_done, 0) < ${TIER2_TARGET}
-               AND COALESCE(sb.exp_done, 0) > COALESCE(sb.ctrl_done, 0)
-            THEN COALESCE(sb.exp_done, 0) - COALESCE(sb.ctrl_done, 0)
-          WHEN e.experiment_group = 'EXPERIMENTAL'
-               AND COALESCE(sb.exp_done, 0) < ${TIER2_TARGET}
-               AND COALESCE(sb.ctrl_done, 0) > COALESCE(sb.exp_done, 0)
-            THEN COALESCE(sb.ctrl_done, 0) - COALESCE(sb.exp_done, 0)
+          -- ═══════════════════════════════════════════════════════════
+          -- PHASE 2: Get to 20/20 — ONE seed at a time
+          -- ═══════════════════════════════════════════════════════════
+          WHEN LEAST(COALESCE(sb.ctrl_done, 0), COALESCE(sb.exp_done, 0)) < 20
+            THEN 2000
+              + LEAST(COALESCE(sb.ctrl_done, 0), COALESCE(sb.exp_done, 0)) * 100
+              + CASE
+                  WHEN e.experiment_group = 'CONTROL'
+                       AND COALESCE(sb.ctrl_done, 0) <= COALESCE(sb.exp_done, 0) THEN 10
+                  WHEN e.experiment_group = 'EXPERIMENTAL'
+                       AND COALESCE(sb.exp_done, 0) <= COALESCE(sb.ctrl_done, 0) THEN 10
+                  ELSE 0
+                END
 
-          -- TIER 3: Normal priority
+          -- ═══════════════════════════════════════════════════════════
+          -- PHASE 3: Get to 30/30 — ONE seed at a time
+          -- ═══════════════════════════════════════════════════════════
+          WHEN LEAST(COALESCE(sb.ctrl_done, 0), COALESCE(sb.exp_done, 0)) < 30
+            THEN 1000
+              + LEAST(COALESCE(sb.ctrl_done, 0), COALESCE(sb.exp_done, 0)) * 100
+              + CASE
+                  WHEN e.experiment_group = 'CONTROL'
+                       AND COALESCE(sb.ctrl_done, 0) <= COALESCE(sb.exp_done, 0) THEN 10
+                  WHEN e.experiment_group = 'EXPERIMENTAL'
+                       AND COALESCE(sb.exp_done, 0) <= COALESCE(sb.ctrl_done, 0) THEN 10
+                  ELSE 0
+                END
+
+          -- ═══════════════════════════════════════════════════════════
+          -- PHASE 4: Normal — fill remaining experiments
+          -- ═══════════════════════════════════════════════════════════
           ELSE 0
         END as gap_score
       FROM experiments e
@@ -190,7 +218,6 @@ export async function POST(request: NextRequest) {
       WHERE e.status IN ('PENDING', 'RUNNING')
       ORDER BY
         gap_score DESC,
-        random_seed ASC,
         created_at ASC`
     )
 
