@@ -170,7 +170,7 @@ export default function SeedPairsCard({ convergenceData, activeSeedWorkers = [],
           <span className="opacity-60">({strengthLabel('strong')})</span>
         </span>
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${strengthColor('moderate')}`}>
-          ● {moderateCount} Moderate
+          ● {moderateCount} Acceptable
           <span className="opacity-60">({strengthLabel('moderate')})</span>
         </span>
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${strengthColor('weak')}`}>
@@ -269,7 +269,7 @@ export default function SeedPairsCard({ convergenceData, activeSeedWorkers = [],
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border ${strengthColor(row.pairStrength)}`}>
                       {row.pairStrength === 'none' ? 'Unpaired' :
                        row.pairStrength === 'weak' ? 'Weak' :
-                       row.pairStrength === 'moderate' ? 'Building' : 'Ready'}
+                       row.pairStrength === 'moderate' ? 'Acceptable' : 'Ready'}
                     </span>
                   </td>
                 </tr>
