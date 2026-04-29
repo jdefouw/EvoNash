@@ -135,17 +135,18 @@ export async function POST(request: NextRequest) {
     }
 
     // =========================================================================
-    // SEED-GAP-AWARE EXPERIMENT SELECTION (with saturation cap)
+    // TIERED SEED-GAP PRIORITY QUEUE
     // =========================================================================
-    // Priority: experiments whose seed has a gap (opposite group has more
-    // completed experiments) get dispatched FIRST — BUT only until this
-    // seed+group reaches 30 completed+running. After 30, priority drops
-    // to normal so OTHER seeds' gaps get filled too.
+    // Tier 1 (gap_score 1000+): Get EVERY seed to 5 completed per group.
+    //   → Maximizes # of seed pairs as fast as possible.
+    // Tier 2 (gap_score 1-999): Deepen each seed to 30 completed per group.
+    //   → Builds statistical depth for paired t-test.
+    // Tier 3 (gap_score 0): Normal ordering — fill remaining experiments.
     //
-    // This ensures we get ~30 paired experiments per seed QUICKLY across
-    // all seeds, rather than grinding 200 on one seed before touching others.
+    // Within each tier, seeds with the biggest gap go first.
     // =========================================================================
-    const MIN_PAIRS_TARGET = 30
+    const TIER1_TARGET = 5
+    const TIER2_TARGET = 30
     const experiments = await queryAll(
       `WITH seed_balance AS (
         SELECT
@@ -159,19 +160,29 @@ export async function POST(request: NextRequest) {
         e.*,
         COALESCE(sb.ctrl_done, 0)::int as ctrl_done,
         COALESCE(sb.exp_done, 0)::int as exp_done,
-        -- Raw gap: how many more of the opposite group exist
         CASE
+          -- TIER 1: This group has < 5 completed AND opposite group has more
+          -- Score 1000+ so it always ranks above Tier 2
           WHEN e.experiment_group = 'CONTROL'
+               AND COALESCE(sb.ctrl_done, 0) < ${TIER1_TARGET}
+               AND COALESCE(sb.exp_done, 0) > COALESCE(sb.ctrl_done, 0)
+            THEN 1000 + COALESCE(sb.exp_done, 0) - COALESCE(sb.ctrl_done, 0)
+          WHEN e.experiment_group = 'EXPERIMENTAL'
+               AND COALESCE(sb.exp_done, 0) < ${TIER1_TARGET}
+               AND COALESCE(sb.ctrl_done, 0) > COALESCE(sb.exp_done, 0)
+            THEN 1000 + COALESCE(sb.ctrl_done, 0) - COALESCE(sb.exp_done, 0)
+
+          -- TIER 2: This group has < 30 completed AND opposite group has more
+          WHEN e.experiment_group = 'CONTROL'
+               AND COALESCE(sb.ctrl_done, 0) < ${TIER2_TARGET}
+               AND COALESCE(sb.exp_done, 0) > COALESCE(sb.ctrl_done, 0)
             THEN COALESCE(sb.exp_done, 0) - COALESCE(sb.ctrl_done, 0)
-          ELSE COALESCE(sb.ctrl_done, 0) - COALESCE(sb.exp_done, 0)
-        END as raw_gap,
-        -- Effective priority: high if gap exists AND this group < 30 for this seed
-        -- Once this seed+group reaches 30, priority drops to 0 (normal)
-        CASE
-          WHEN e.experiment_group = 'CONTROL' AND COALESCE(sb.ctrl_done, 0) < ${MIN_PAIRS_TARGET}
-            THEN GREATEST(0, COALESCE(sb.exp_done, 0) - COALESCE(sb.ctrl_done, 0))
-          WHEN e.experiment_group = 'EXPERIMENTAL' AND COALESCE(sb.exp_done, 0) < ${MIN_PAIRS_TARGET}
-            THEN GREATEST(0, COALESCE(sb.ctrl_done, 0) - COALESCE(sb.exp_done, 0))
+          WHEN e.experiment_group = 'EXPERIMENTAL'
+               AND COALESCE(sb.exp_done, 0) < ${TIER2_TARGET}
+               AND COALESCE(sb.ctrl_done, 0) > COALESCE(sb.exp_done, 0)
+            THEN COALESCE(sb.ctrl_done, 0) - COALESCE(sb.exp_done, 0)
+
+          -- TIER 3: Normal priority
           ELSE 0
         END as gap_score
       FROM experiments e
