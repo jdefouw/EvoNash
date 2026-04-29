@@ -160,7 +160,7 @@ export default function ConvergenceHistogram({ data }: ConvergenceHistogramProps
         <BarChart
           data={seedBars}
           layout="vertical"
-          margin={{ top: 10, right: 30, left: 55, bottom: 5 }}
+          margin={{ top: 30, right: 30, left: 55, bottom: 5 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" strokeOpacity={0.5} horizontal={false} />
           <XAxis
