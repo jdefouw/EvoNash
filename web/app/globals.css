@@ -154,20 +154,38 @@ body {
 }
 
 .sci-tabs {
-  display: inline-flex;
+  display: flex;
   gap: 4px;
   background: var(--bg-card-alt);
   border: 1px solid var(--border-card);
   border-radius: 10px;
   padding: 4px;
-  max-width: 100%;
+  width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;  /* Firefox */
+  scrollbar-width: thin;  /* Firefox — show thin scrollbar on mobile */
+  scroll-padding-left: 4px;
+}
+
+/* Hide scrollbar on desktop, show thin one on mobile */
+@media (min-width: 901px) {
+  .sci-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .sci-tabs {
+    scrollbar-width: none;
+  }
 }
 
 .sci-tabs::-webkit-scrollbar {
-  display: none;  /* Chrome/Safari */
+  height: 3px;
+}
+.sci-tabs::-webkit-scrollbar-thumb {
+  background: rgba(var(--accent), .3);
+  border-radius: 3px;
+}
+.sci-tabs::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .sci-tab {
