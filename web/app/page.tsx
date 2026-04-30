@@ -19,7 +19,6 @@ import {
   VerificationCard,
   ReferencesSection,
   ConvergenceHistogram,
-  ConvergenceMeanBarChart,
   PairedSeedScatter,
   SeedPairsCard,
 } from "@/components/dashboard";
@@ -585,23 +584,11 @@ export default function DashboardPage() {
                 activeSeedWorkers={dashboardData?.activeSeedWorkers ?? []}
               />
 
-              {/* Mean with 95% CI Error Bars + Paired Seed Scatter */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <ConvergenceMeanBarChart
-                  controlMean={stats?.convergenceControlMean ?? null}
-                  experimentalMean={stats?.convergenceExperimentalMean ?? null}
-                  controlStd={stats?.convergenceControlStd ?? null}
-                  experimentalStd={stats?.convergenceExperimentalStd ?? null}
-                  controlN={stats?.controlConvergedCount ?? 0}
-                  experimentalN={stats?.experimentalConvergedCount ?? 0}
-                  confidenceInterval={stats?.convergenceConfidenceInterval ?? null}
-                  meanDifference={stats?.convergenceMeanDifference ?? null}
-                />
-                <PairedSeedScatter
-                  convergenceData={dashboardData?.convergenceData ?? []}
-                  pairedAnalysis={dashboardData?.pairedAnalysis ?? null}
-                />
-              </div>
+              {/* Paired Seed Scatter */}
+              <PairedSeedScatter
+                convergenceData={dashboardData?.convergenceData ?? []}
+                pairedAnalysis={dashboardData?.pairedAnalysis ?? null}
+              />
             </>
           )}
         </TabsContent>
