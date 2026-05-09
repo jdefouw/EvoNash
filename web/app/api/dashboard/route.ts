@@ -1587,19 +1587,14 @@ async function computeDashboardData(): Promise<DashboardData> {
     // =========================================================================
 
     // ── Batch 1: Fetch completed + running experiments in parallel ──
-    const EXPERIMENT_COLUMNS = `id, experiment_name, experiment_group, mutation_mode, random_seed,
-       population_size, max_generations, status, created_at, completed_at,
-       mutation_rate, mutation_base, max_possible_elo, selection_pressure,
-       ticks_per_generation`
-
     const [allCompletedExperiments, runningExperiments] = await Promise.all([
       queryAll<Experiment>(
-        `SELECT ${EXPERIMENT_COLUMNS} FROM experiments
+        `SELECT * FROM experiments
          WHERE status = 'COMPLETED'
          ORDER BY created_at DESC`
       ),
       queryAll<Experiment>(
-        `SELECT ${EXPERIMENT_COLUMNS} FROM experiments
+        `SELECT * FROM experiments
          WHERE status = 'RUNNING'
          ORDER BY created_at DESC`
       )
