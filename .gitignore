@@ -51,6 +51,12 @@ worker/data/machine_id.txt
 # Vercel
 .vercel
 
-# NSSM binaries (excluded due to security warnings)
+# Worker logs (contain server URLs, experiment UUIDs, stack traces)
+worker/logs/
+
+# NSSM binaries and source (third-party Windows service manager)
 worker/nssm.exe
 worker/nssm.pdb
+worker/src/*.cpp
+worker/src/*.h
+worker/src/*.c

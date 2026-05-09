@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { queryAll, query } from '@/lib/postgres'
+import { requireAuth } from '@/lib/auth'
 
 // Force dynamic rendering since we modify the database
 export const dynamic = 'force-dynamic'
@@ -12,6 +13,9 @@ export const dynamic = 'force-dynamic'
  * Use this to remove stale/offline workers from the dashboard.
  */
 export async function POST(request: NextRequest) {
+  const authError = requireAuth(request)
+  if (authError) return authError
+
   try {
     const rows = await queryAll<{ id: string }>(
       'SELECT id FROM workers'

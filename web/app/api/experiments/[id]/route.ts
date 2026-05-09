@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { queryOne, queryAll, query, deleteRows } from '@/lib/postgres'
+import { requireAuth } from '@/lib/auth'
 
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
@@ -85,6 +86,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authError = requireAuth(request)
+  if (authError) return authError
+
   try {
     await deleteRows('experiments', 'id = $1', [params.id])
     

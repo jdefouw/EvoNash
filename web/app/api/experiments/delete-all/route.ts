@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/postgres'
+import { requireAuth } from '@/lib/auth'
 
 // Force dynamic rendering since we modify the database
 export const dynamic = 'force-dynamic'
@@ -14,6 +15,9 @@ const DELETE_ALL_KEYWORD = 'sciencefair2026'
  * This is a destructive operation that cannot be undone.
  */
 export async function DELETE(request: NextRequest) {
+  const authError = requireAuth(request)
+  if (authError) return authError
+
   try {
     const url = new URL(request.url)
     const keywordFromQuery = url.searchParams.get('keyword') || undefined
