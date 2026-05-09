@@ -60,3 +60,7 @@ worker/nssm.pdb
 worker/src/*.cpp
 worker/src/*.h
 worker/src/*.c
+
+# Personal CWSF prep notes (never commit)
+JUDGE_QUESTIONS.md
+JUDGE_PREP*.md
