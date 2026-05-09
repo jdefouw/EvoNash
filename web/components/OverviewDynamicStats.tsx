@@ -488,6 +488,70 @@ export function DynamicConvergenceDisparity() {
 }
 
 /**
+ * Just the adaptive win-rate as a percentage (e.g. "94%").
+ */
+export function DynamicAdaptiveWinPct({ decimals = 0 }: { decimals?: number } = {}) {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="3em" />
+  const p = stats?.pairedStats
+  if (!p) return <strong>—</strong>
+  return <strong>{(p.winRate * 100).toFixed(decimals)}%</strong>
+}
+
+/**
+ * Just the control win-rate as a percentage (e.g. "6%").
+ */
+export function DynamicControlWinPct({ decimals = 0 }: { decimals?: number } = {}) {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="3em" />
+  const p = stats?.pairedStats
+  if (!p) return <strong>—</strong>
+  const ctrlRate = (p.controlWins / Math.max(1, p.adaptiveWins + p.controlWins)) * 100
+  return <strong>{ctrlRate.toFixed(decimals)}%</strong>
+}
+
+/**
+ * Just the rounded mean per-pair difference in generations (e.g. "27").
+ */
+export function DynamicMeanDiffGens({ decimals = 0 }: { decimals?: number } = {}) {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="3em" />
+  const p = stats?.pairedStats
+  if (!p) return <strong>—</strong>
+  return <strong>{p.meanDiff.toFixed(decimals)}</strong>
+}
+
+/**
+ * 95% CI for mean diff as a bare bracket (e.g. "[21, 33]"), no surrounding text.
+ */
+export function DynamicCIBracket({ decimals = 0 }: { decimals?: number } = {}) {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="6em" />
+  const p = stats?.pairedStats
+  if (!p || p.ciLower === null || p.ciUpper === null) return <strong>—</strong>
+  return <strong>[{p.ciLower.toFixed(decimals)}, {p.ciUpper.toFixed(decimals)}]</strong>
+}
+
+/**
+ * Lower and upper of CI as bare numbers (for prose: "between X and Y generations").
+ */
+export function DynamicCILower({ decimals = 0 }: { decimals?: number } = {}) {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="2em" />
+  const p = stats?.pairedStats
+  if (!p || p.ciLower === null) return <strong>—</strong>
+  return <strong>{p.ciLower.toFixed(decimals)}</strong>
+}
+
+export function DynamicCIUpper({ decimals = 0 }: { decimals?: number } = {}) {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="2em" />
+  const p = stats?.pairedStats
+  if (!p || p.ciUpper === null) return <strong>—</strong>
+  return <strong>{p.ciUpper.toFixed(decimals)}</strong>
+}
+
+/**
  * Mean control vs experimental gens among matched seeds.
  */
 export function DynamicMatchedMeans() {

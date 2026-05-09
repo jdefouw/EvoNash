@@ -22,6 +22,12 @@ import {
   DynamicSensitivityTable,
   DynamicConvergenceDisparity,
   DynamicMatchedMeans,
+  DynamicAdaptiveWinPct,
+  DynamicControlWinPct,
+  DynamicMeanDiffGens,
+  DynamicCIBracket,
+  DynamicCILower,
+  DynamicCIUpper,
 } from '@/components/OverviewDynamicStats'
 
 const sectionIds = {
@@ -1324,8 +1330,8 @@ export default function OverviewPage() {
             seed. The diagonal line is &quot;tied.&quot; Dots <em>below</em> the diagonal are
             seeds where adaptive was faster; dots <em>above</em> are seeds where the control
             was faster. The dashboard reports both counts honestly &mdash; in the current data,
-            roughly <strong>94% of pairs</strong> go the adaptive way, but a small fraction
-            (about <strong>6%</strong>) come back the other direction.
+            roughly <DynamicAdaptiveWinPct /> of pairs go the adaptive way, but a small fraction
+            (about <DynamicControlWinPct />) come back the other direction.
           </p>
           <p>
             <strong>That is not a flaw &mdash; that is what real data looks like.</strong>
@@ -1354,10 +1360,11 @@ export default function OverviewPage() {
             <strong>The hypothesis is still strongly supported despite these outliers.</strong>
             The paired t-test does not ask &quot;does adaptive win every time?&quot; It asks
             &quot;across all paired seeds, is the average difference different from zero?&quot;
-            With about 94% of pairs leaning the adaptive way and a mean difference of
-            roughly 27 generations, the answer is yes with overwhelming confidence
-            (p far below 0.001, Cohen&apos;s d well past the &quot;large&quot; threshold). The
-            outliers reduce the average difference a little, but they cannot overturn it.
+            With about <DynamicAdaptiveWinPct /> of pairs leaning the adaptive way and a mean
+            difference of roughly <DynamicMeanDiffGens /> generations, the answer is yes with
+            overwhelming confidence (p far below 0.001, Cohen&apos;s d well past the
+            &quot;large&quot; threshold). The outliers reduce the average difference a little,
+            but they cannot overturn it.
           </p>
           <div className="sci-card p-4 !bg-green-50 dark:!bg-green-900/20 border-green-200 dark:border-green-800/40">
             <p className="text-sm text-green-700 dark:text-green-400">
@@ -1630,9 +1637,10 @@ export default function OverviewPage() {
             </p>
           </div>
           <p>
-            For example, if the 95% CI for the mean difference is <strong>[18, 26]</strong>,
-            it means: &quot;We are 95% confident the true average difference in convergence
-            speed is between 18 and 26 generations.&quot;
+            On the live data, the 95% CI for the mean per-pair difference is currently{' '}
+            <DynamicCIBracket /> generations. That reads as: &quot;We are 95% confident the true
+            average difference in convergence speed is between <DynamicCILower /> and{' '}
+            <DynamicCIUpper /> generations.&quot;
           </p>
 
           <div className="space-y-3 mt-3">
@@ -1728,10 +1736,10 @@ export default function OverviewPage() {
               generation. That&apos;s tens of thousands of entropy calculations.
             </li>
             <li>
-              <strong>Statistical testing</strong> across 1,200+ experiments means computing
-              Welch&apos;s t-test, Cohen&apos;s d, bootstrap confidence intervals (10,000
-              resamples), normality checks (Shapiro-Wilk), and power analysis. Each of these
-              involves hundreds or thousands of mathematical operations.
+              <strong>Statistical testing</strong> across <DynamicExperimentCount /> experiments
+              means computing Welch&apos;s t-test, Cohen&apos;s d, bootstrap confidence intervals
+              (10,000 resamples), normality checks (Shapiro-Wilk), and power analysis. Each of
+              these involves hundreds or thousands of mathematical operations.
             </li>
             <li>
               <strong>Real-time monitoring</strong> on the dashboard requires the database to query,
