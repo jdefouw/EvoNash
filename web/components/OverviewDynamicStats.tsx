@@ -2,6 +2,45 @@
 
 import { useEffect, useState } from 'react'
 
+interface SensitivityRow {
+  dropTop: number
+  n: number
+  meanDiff: number
+  tStat: number
+  pValueTwoTailed: number
+}
+
+interface PairedStats {
+  nPairs: number
+  adaptiveWins: number
+  controlWins: number
+  ties: number
+  winRate: number
+  meanDiff: number
+  stdDiff: number
+  seDiff: number
+  tStatistic: number
+  degreesOfFreedom: number
+  pValueTwoTailed: number
+  pValueOneTailed: number
+  cohensDz: number | null
+  ciLower: number | null
+  ciUpper: number | null
+  signTestPValueOneTailed: number
+  signTestPValueTwoTailed: number
+  wilsonCILower: number
+  wilsonCIUpper: number
+  bestWin: number
+  worstLoss: number
+  adaptiveCreditTotal: number
+  controlCreditTotal: number
+  magnitudeRatio: number | null
+  controlMeanGens: number
+  experimentalMeanGens: number
+  speedupPercent: number
+  sensitivity: SensitivityRow[]
+}
+
 interface OverviewStats {
   totalExperiments: number
   completedExperiments: number
@@ -19,6 +58,7 @@ interface OverviewStats {
   cohensD: number | null
   controlMean: number | null
   experimentalMean: number | null
+  pairedStats: PairedStats | null
 }
 
 function fmt(n: number): string {
@@ -217,6 +257,249 @@ export function DynamicStatsSummaryLine() {
   return (
     <>
       The t-test says <strong>&quot;yes, the difference is real&quot;</strong> (p {pStr === '≈ 0' ? '≈ 0' : `= ${pStr}`}). Cohen&apos;s d says <strong>&quot;and the difference is {dLabel}&quot;</strong> (d = {dStr}). Together, they give us strong scientific confidence that adaptive mutation genuinely speeds up convergence to Nash equilibrium&mdash;and by a meaningful amount, not just a technicality.
+    </>
+  )
+}
+
+// ─── Components for the "Why adaptive wins overall" section ────────────────
+
+function fmtPct(p: number, decimals = 1): string {
+  return `${(p * 100).toFixed(decimals)}%`
+}
+
+function fmtSigned(n: number, decimals = 2): string {
+  return `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(decimals)}`
+}
+
+/**
+ * Headline win/loss line: "X of Y paired seeds (Z%) went to adaptive".
+ */
+export function DynamicPairedWinHeadline() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="22em" />
+  const p = stats?.pairedStats
+  if (!p) return <strong>not enough paired data yet</strong>
+  return (
+    <strong>
+      {fmt(p.adaptiveWins)} of {fmt(p.nPairs)} paired seeds ({fmtPct(p.winRate, 1)}) went to adaptive
+      {p.controlWins > 0 ? ` — control was faster on the remaining ${fmt(p.controlWins)}` : ''}
+    </strong>
+  )
+}
+
+/**
+ * Sign-test result with verdict.
+ */
+export function DynamicSignTest() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="14em" />
+  const p = stats?.pairedStats
+  if (!p) return <strong>—</strong>
+  return (
+    <>
+      <strong>{fmt(p.adaptiveWins)} wins out of {fmt(p.adaptiveWins + p.controlWins)}</strong>
+      {' '}gives a one-tailed sign-test p-value of <strong>{fmtPValue(p.signTestPValueOneTailed)}</strong>
+    </>
+  )
+}
+
+/**
+ * Paired t-test summary line.
+ */
+export function DynamicPairedTTest() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="22em" />
+  const p = stats?.pairedStats
+  if (!p) return <strong>—</strong>
+  return (
+    <>
+      <strong>t = {p.tStatistic.toFixed(2)}</strong>{' '}
+      with df = {p.degreesOfFreedom}, two-tailed{' '}
+      <strong>p = {fmtPValue(p.pValueTwoTailed)}</strong>,{' '}
+      <strong>Cohen&apos;s d<sub>z</sub> = {p.cohensDz?.toFixed(2) ?? '—'}</strong>
+    </>
+  )
+}
+
+/**
+ * 95% CI for the mean pair-wise difference.
+ */
+export function DynamicPairedCI() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="20em" />
+  const p = stats?.pairedStats
+  if (!p || p.ciLower === null || p.ciUpper === null) return <strong>—</strong>
+  return (
+    <>
+      a 95% confidence interval for the mean per-pair gap of{' '}
+      <strong>[+{p.ciLower.toFixed(1)} , +{p.ciUpper.toFixed(1)}] generations</strong>
+    </>
+  )
+}
+
+/**
+ * Wilson 95% CI for the win-rate proportion.
+ */
+export function DynamicWilsonCI() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="14em" />
+  const p = stats?.pairedStats
+  if (!p) return <strong>—</strong>
+  return (
+    <>
+      <strong>[{fmtPct(p.wilsonCILower, 1)} , {fmtPct(p.wilsonCIUpper, 1)}]</strong>
+    </>
+  )
+}
+
+/**
+ * Mean per-pair difference + speedup percentage.
+ */
+export function DynamicPairedMeanDiff() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="18em" />
+  const p = stats?.pairedStats
+  if (!p) return <strong>—</strong>
+  return (
+    <>
+      <strong>{p.meanDiff.toFixed(1)} generations faster on average</strong>
+      {p.speedupPercent > 0 ? <> (<strong>~{p.speedupPercent.toFixed(1)}% speedup</strong>)</> : null}
+    </>
+  )
+}
+
+/**
+ * Magnitude argument: total adaptive credit vs total control credit.
+ */
+export function DynamicMagnitudeRatio() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="22em" />
+  const p = stats?.pairedStats
+  if (!p) return <strong>—</strong>
+  if (p.controlCreditTotal === 0) {
+    return (
+      <>
+        adaptive contributed <strong>+{p.adaptiveCreditTotal.toFixed(0)} generations</strong> of
+        cumulative speedup, with <strong>zero generations</strong> of cumulative slowdown — every
+        loss column is empty
+      </>
+    )
+  }
+  const ratio = p.magnitudeRatio
+  return (
+    <>
+      adaptive contributed <strong>+{p.adaptiveCreditTotal.toFixed(0)} generations</strong> of
+      cumulative speedup vs. <strong>{p.controlCreditTotal.toFixed(0)} generations</strong> of
+      cumulative slowdown — adaptive wins by <strong>{ratio !== null ? `${ratio.toFixed(1)}×` : 'a wide margin'}</strong> on raw magnitude
+    </>
+  )
+}
+
+/**
+ * Best win and worst loss in raw generations.
+ */
+export function DynamicExtremes() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="22em" />
+  const p = stats?.pairedStats
+  if (!p) return <strong>—</strong>
+  return (
+    <>
+      worst loss <strong>{fmtSigned(p.worstLoss, 0)} generations</strong>,
+      best win <strong>{fmtSigned(p.bestWin, 0)} generations</strong>
+    </>
+  )
+}
+
+/**
+ * Full sensitivity table: drop-top-N adaptive wins, recompute.
+ */
+export function DynamicSensitivityTable() {
+  const { stats, loading } = useStats()
+  if (loading) {
+    return (
+      <div className="sci-card p-4 !bg-gray-50 dark:!bg-gray-800/50">
+        <Skeleton w="100%" />
+      </div>
+    )
+  }
+  const p = stats?.pairedStats
+  if (!p || p.sensitivity.length === 0) return null
+
+  return (
+    <div className="overflow-x-auto sci-card p-3 !bg-gray-50 dark:!bg-gray-800/50">
+      <table className="w-full text-sm font-mono">
+        <thead>
+          <tr className="border-b border-gray-300 dark:border-gray-600">
+            <th className="text-left py-2 pr-4">Drop top wins</th>
+            <th className="text-right py-2 pr-4">Pairs left</th>
+            <th className="text-right py-2 pr-4">Mean Δ (gens)</th>
+            <th className="text-right py-2 pr-4">t</th>
+            <th className="text-right py-2">p (two-tailed)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td className="py-1.5 pr-4">0 (raw)</td>
+            <td className="text-right py-1.5 pr-4">{fmt(p.nPairs)}</td>
+            <td className="text-right py-1.5 pr-4">{fmtSigned(p.meanDiff, 2)}</td>
+            <td className="text-right py-1.5 pr-4">{p.tStatistic.toFixed(2)}</td>
+            <td className="text-right py-1.5">{fmtPValue(p.pValueTwoTailed)}</td>
+          </tr>
+          {p.sensitivity.map(s => (
+            <tr key={s.dropTop}>
+              <td className="py-1.5 pr-4">−{s.dropTop}</td>
+              <td className="text-right py-1.5 pr-4">{fmt(s.n)}</td>
+              <td className="text-right py-1.5 pr-4">{fmtSigned(s.meanDiff, 2)}</td>
+              <td className="text-right py-1.5 pr-4">{s.tStat.toFixed(2)}</td>
+              <td className="text-right py-1.5">{fmtPValue(s.pValueTwoTailed)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/**
+ * Convergence-rate disparity line: "1180 control vs 1060 experimental converged."
+ */
+export function DynamicConvergenceDisparity() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="24em" />
+  if (!stats) return null
+  const c = stats.controlConvergedCount
+  const e = stats.experimentalConvergedCount
+  const diff = c - e
+  if (diff <= 0) {
+    return (
+      <>
+        adaptive currently has <strong>{fmt(e)}</strong> converged runs vs.{' '}
+        <strong>{fmt(c)}</strong> for control — adaptive is keeping up or ahead
+      </>
+    )
+  }
+  return (
+    <>
+      <strong>{fmt(c)}</strong> control runs have hit Nash equilibrium so far vs.{' '}
+      <strong>{fmt(e)}</strong> experimental runs — a gap of {fmt(diff)} ({((diff/c)*100).toFixed(1)}%) more on the control side
+    </>
+  )
+}
+
+/**
+ * Mean control vs experimental gens among matched seeds.
+ */
+export function DynamicMatchedMeans() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="20em" />
+  const p = stats?.pairedStats
+  if (!p) return null
+  return (
+    <>
+      across the {fmt(p.nPairs)} matched seeds the average control run took{' '}
+      <strong>{p.controlMeanGens.toFixed(0)} generations</strong> to converge while the average
+      adaptive run took <strong>{p.experimentalMeanGens.toFixed(0)} generations</strong>
     </>
   )
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { queryAll, queryOne } from '@/lib/postgres'
+import { computePairedStats, type PairedStatsInput } from '@/lib/paired-stats'
 
 // Force dynamic rendering since we query the database
 export const dynamic = 'force-dynamic'
@@ -60,6 +61,7 @@ export async function GET() {
     interface ExperimentConvergence {
       experiment_id: string
       experiment_group: string
+      random_seed: number | null
       convergence_generation: number
     }
 
@@ -68,6 +70,7 @@ export async function GET() {
         SELECT
           g.experiment_id,
           e.experiment_group,
+          e.random_seed,
           g.generation_number,
           g.entropy_variance::float as entropy_variance
         FROM generations g
@@ -93,6 +96,7 @@ export async function GET() {
         SELECT
           gd.experiment_id,
           gd.experiment_group,
+          gd.random_seed,
           gd.generation_number,
           CASE WHEN gd.entropy_variance < ${CONVERGENCE_THRESHOLD} THEN 1 ELSE 0 END as below_threshold
         FROM gen_data gd
@@ -103,6 +107,7 @@ export async function GET() {
         SELECT
           experiment_id,
           experiment_group,
+          random_seed,
           generation_number,
           SUM(below_threshold) OVER (
             PARTITION BY experiment_id
@@ -120,6 +125,7 @@ export async function GET() {
         SELECT
           experiment_id,
           experiment_group,
+          random_seed,
           generation_number
         FROM sliding_window
         WHERE window_size >= ${STABILITY_WINDOW}
@@ -128,9 +134,10 @@ export async function GET() {
       SELECT
         experiment_id,
         experiment_group,
+        random_seed,
         MIN(generation_number)::int as convergence_generation
       FROM convergent_runs
-      GROUP BY experiment_id, experiment_group
+      GROUP BY experiment_id, experiment_group, random_seed
     `) || []
 
     // Separate convergence data by group
@@ -174,6 +181,16 @@ export async function GET() {
       }
     }
 
+    // ── Paired analysis (matched-seed comparison) ───────────────────────
+    const pairedInputs: PairedStatsInput[] = experimentConvergenceData
+      .filter(e => e.random_seed != null && (e.experiment_group === 'CONTROL' || e.experiment_group === 'EXPERIMENTAL'))
+      .map(e => ({
+        seed: Number(e.random_seed),
+        group: e.experiment_group as 'CONTROL' | 'EXPERIMENTAL',
+        convergenceGeneration: Number(e.convergence_generation)
+      }))
+    const pairedStats = computePairedStats(pairedInputs)
+
     // ── Scale calculations ──────────────────────────────────────────────
     const populationSize = 1000
     const ticksPerGeneration = 750
@@ -198,6 +215,7 @@ export async function GET() {
       cohensD,
       controlMean: controlMean !== null ? Math.round(controlMean) : null,
       experimentalMean: experimentalMean !== null ? Math.round(experimentalMean) : null,
+      pairedStats,
     })
   } catch (error: any) {
     console.error('Error fetching overview stats:', error)
