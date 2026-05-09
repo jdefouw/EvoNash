@@ -1497,27 +1497,113 @@ function calculatePowerLevel(input: PowerLevelInput): StatisticalPowerLevel {
 }
 
 
+// =============================================================================
+// SERVER-SIDE RESPONSE CACHE (Stale-While-Revalidate)
+// =============================================================================
+// The dashboard data changes slowly (experiments complete over minutes/hours).
+// We cache the full computed JSON response in memory and serve it instantly.
+//
+// Strategy:
+//   - Fresh (< 15s old): Return cached response immediately
+//   - Stale (15s–120s): Return stale response, recompute in background
+//   - Expired (> 120s) or missing: Compute synchronously
+//
+// This is safe because:
+//   - All data is read-only (no mutations)
+//   - The frontend already polls every 30s (tolerates staleness)
+//   - If cache fails, falls through to full computation
+// =============================================================================
+
+let _cachedResponseBody: string | null = null
+let _cacheTimestamp: number = 0
+let _isRevalidating: boolean = false
+
+const CACHE_TTL_MS = 15_000   // Serve fresh cache for 15 seconds
+const STALE_TTL_MS = 120_000  // Serve stale cache for up to 2 minutes
+
+const JSON_HEADERS = {
+  'Content-Type': 'application/json',
+  'Cache-Control': 'private, no-store, no-cache, max-age=0, must-revalidate',
+  'Pragma': 'no-cache',
+}
+
+async function computeDashboardResponse(): Promise<string> {
+  const response = await computeDashboardData()
+  return JSON.stringify(response)
+}
+
 export async function GET() {
+  const now = Date.now()
+  const cacheAge = now - _cacheTimestamp
+
+  // 1. Fresh cache → return immediately
+  if (_cachedResponseBody && cacheAge < CACHE_TTL_MS) {
+    return new Response(_cachedResponseBody, { headers: JSON_HEADERS })
+  }
+
+  // 2. Stale cache → return stale, revalidate in background
+  if (_cachedResponseBody && cacheAge < STALE_TTL_MS) {
+    if (!_isRevalidating) {
+      _isRevalidating = true
+      computeDashboardResponse()
+        .then(body => {
+          _cachedResponseBody = body
+          _cacheTimestamp = Date.now()
+        })
+        .catch(err => console.error('Background revalidation failed:', err))
+        .finally(() => { _isRevalidating = false })
+    }
+    return new Response(_cachedResponseBody, { headers: JSON_HEADERS })
+  }
+
+  // 3. No cache or very stale → compute synchronously
   try {
+    const body = await computeDashboardResponse()
+    _cachedResponseBody = body
+    _cacheTimestamp = Date.now()
+    return new Response(body, { headers: JSON_HEADERS })
+  } catch (error) {
+    console.error('Dashboard API error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const isDbError = errorMessage.includes('DATABASE_URL') ||
+      errorMessage.includes('ECONNREFUSED') ||
+      errorMessage.includes('connection')
+    return NextResponse.json(
+      {
+        error: 'Failed to fetch dashboard data',
+        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
+        isDbError
+      },
+      { status: 500 }
+    )
+  }
+}
+
+async function computeDashboardData(): Promise<DashboardData> {
     // =========================================================================
     // DATA FETCHING STRATEGY:
     // 1. Statistics: Use ALL completed experiments for statistical accuracy
     // 2. Charts: Use subset (20 per group) for UI performance
     // =========================================================================
 
-    // Fetch ALL completed experiments for statistics (no limit)
-    const allCompletedExperiments = await queryAll<Experiment>(
-      `SELECT * FROM experiments 
-       WHERE status = 'COMPLETED' 
-       ORDER BY created_at DESC`
-    )
+    // ── Batch 1: Fetch completed + running experiments in parallel ──
+    const EXPERIMENT_COLUMNS = `id, experiment_name, experiment_group, mutation_mode, random_seed,
+       population_size, max_generations, status, created_at, completed_at,
+       mutation_rate, mutation_base, max_possible_elo, selection_pressure,
+       ticks_per_generation`
 
-    // Also fetch running experiments for display purposes
-    const runningExperiments = await queryAll<Experiment>(
-      `SELECT * FROM experiments 
-       WHERE status = 'RUNNING' 
-       ORDER BY created_at DESC`
-    )
+    const [allCompletedExperiments, runningExperiments] = await Promise.all([
+      queryAll<Experiment>(
+        `SELECT ${EXPERIMENT_COLUMNS} FROM experiments
+         WHERE status = 'COMPLETED'
+         ORDER BY created_at DESC`
+      ),
+      queryAll<Experiment>(
+        `SELECT ${EXPERIMENT_COLUMNS} FROM experiments
+         WHERE status = 'RUNNING'
+         ORDER BY created_at DESC`
+      )
+    ])
 
     // Separate completed experiments by group (for statistics)
     const allControlExperiments = (allCompletedExperiments || []).filter(
@@ -1547,32 +1633,48 @@ export async function GET() {
       final_fitness: number
     }
 
-    const experimentFinalFitnesses = await queryAll<ExperimentFinalFitness>(
-      `WITH ranked_generations AS (
+    interface ExperimentPeakFitness {
+      experiment_id: string
+      experiment_group: string
+      peak_fitness: number
+    }
+
+    // ── Batch 2: Final fitness, peak fitness, and gen counts in parallel ──
+    const [experimentFinalFitnesses, experimentPeakFitnesses] = await Promise.all([
+      queryAll<ExperimentFinalFitness>(
+        `WITH ranked_generations AS (
+          SELECT 
+            g.experiment_id,
+            e.experiment_group,
+            g.avg_fitness,
+            g.generation_number,
+            ROW_NUMBER() OVER (
+              PARTITION BY g.experiment_id 
+              ORDER BY g.generation_number DESC
+            ) as rn,
+            COUNT(*) OVER (PARTITION BY g.experiment_id) as total_gens
+          FROM generations g
+          JOIN experiments e ON g.experiment_id = e.id
+          WHERE e.status = 'COMPLETED'
+            AND g.avg_fitness IS NOT NULL
+        )
         SELECT 
-          g.experiment_id,
-          e.experiment_group,
-          g.avg_fitness,
-          g.generation_number,
-          ROW_NUMBER() OVER (
-            PARTITION BY g.experiment_id 
-            ORDER BY g.generation_number DESC
-          ) as rn,
-          COUNT(*) OVER (PARTITION BY g.experiment_id) as total_gens
-        FROM generations g
-        JOIN experiments e ON g.experiment_id = e.id
-        WHERE e.status = 'COMPLETED'
-          AND g.avg_fitness IS NOT NULL
-      )
-      SELECT 
-        experiment_id,
-        experiment_group,
-        AVG(avg_fitness) as final_fitness
-      FROM ranked_generations
-      WHERE rn <= LEAST(10, total_gens)
-      GROUP BY experiment_id, experiment_group
-      HAVING AVG(avg_fitness) > 0`
-    ) || []
+          experiment_id,
+          experiment_group,
+          AVG(avg_fitness) as final_fitness
+        FROM ranked_generations
+        WHERE rn <= LEAST(10, total_gens)
+        GROUP BY experiment_id, experiment_group
+        HAVING AVG(avg_fitness) > 0`
+      ).then(r => r || []),
+      queryAll<ExperimentPeakFitness>(
+        `SELECT g.experiment_id, e.experiment_group, MAX(g.peak_fitness) as peak_fitness
+         FROM generations g
+         JOIN experiments e ON g.experiment_id = e.id
+         WHERE e.status = 'COMPLETED' AND g.peak_fitness IS NOT NULL
+         GROUP BY g.experiment_id, e.experiment_group`
+      ).then(r => r || [])
+    ])
 
     // Separate final Fitness scores by group for statistical calculations
     const allControlFinalFitnesses = experimentFinalFitnesses
@@ -1581,20 +1683,6 @@ export async function GET() {
     const allExperimentalFinalFitnesses = experimentFinalFitnesses
       .filter(e => e.experiment_group === 'EXPERIMENTAL')
       .map(e => e.final_fitness)
-
-    // Per-experiment peak Fitness (for descriptive cards; comparable across groups)
-    interface ExperimentPeakFitness {
-      experiment_id: string
-      experiment_group: string
-      peak_fitness: number
-    }
-    const experimentPeakFitnesses = await queryAll<ExperimentPeakFitness>(
-      `SELECT g.experiment_id, e.experiment_group, MAX(g.peak_fitness) as peak_fitness
-       FROM generations g
-       JOIN experiments e ON g.experiment_id = e.id
-       WHERE e.status = 'COMPLETED' AND g.peak_fitness IS NOT NULL
-       GROUP BY g.experiment_id, e.experiment_group`
-    ) || []
     const allControlPeakFitnesses = experimentPeakFitnesses
       .filter(e => e.experiment_group === 'CONTROL')
       .map(e => e.peak_fitness)
@@ -1611,37 +1699,36 @@ export async function GET() {
     const controlIdsForCharts = allControlExperiments.slice(0, MAX_EXPERIMENTS_FOR_CHARTS).map((exp: Experiment) => exp.id)
     const experimentalIdsForCharts = allExperimentalExperiments.slice(0, MAX_EXPERIMENTS_FOR_CHARTS).map((exp: Experiment) => exp.id)
 
-    let controlGenerations: Generation[] = []
-    let experimentalGenerations: Generation[] = []
-
-    if (controlIdsForCharts.length > 0) {
-      const placeholders = controlIdsForCharts.map((_: string, i: number) => `$${i + 1}`).join(', ')
-      controlGenerations = (await queryAll<Generation>(
-        `SELECT g.id, g.experiment_id, g.generation_number, g.created_at, g.population_size,
-                g.avg_fitness, g.peak_fitness, g.min_fitness, g.std_fitness,
-                g.policy_entropy, g.entropy_variance, g.win_rate_variance, g.population_diversity,
-                g.mutation_rate
-         FROM generations g
-         INNER JOIN experiments e ON g.experiment_id = e.id AND e.experiment_group = 'CONTROL'
-         WHERE g.experiment_id IN (${placeholders})
-         ORDER BY g.generation_number ASC`,
-        controlIdsForCharts
-      )) || []
-    }
-    if (experimentalIdsForCharts.length > 0) {
-      const placeholders = experimentalIdsForCharts.map((_: string, i: number) => `$${i + 1}`).join(', ')
-      experimentalGenerations = (await queryAll<Generation>(
-        `SELECT g.id, g.experiment_id, g.generation_number, g.created_at, g.population_size,
-                g.avg_fitness, g.peak_fitness, g.min_fitness, g.std_fitness,
-                g.policy_entropy, g.entropy_variance, g.win_rate_variance, g.population_diversity,
-                g.mutation_rate
-         FROM generations g
-         INNER JOIN experiments e ON g.experiment_id = e.id AND e.experiment_group = 'EXPERIMENTAL'
-         WHERE g.experiment_id IN (${placeholders})
-         ORDER BY g.generation_number ASC`,
-        experimentalIdsForCharts
-      )) || []
-    }
+    // ── Batch 3: Chart generations (control + experimental) in parallel ──
+    const chartGenPromises: [Promise<Generation[]>, Promise<Generation[]>] = [
+      (controlIdsForCharts.length > 0)
+        ? queryAll<Generation>(
+            `SELECT g.id, g.experiment_id, g.generation_number, g.created_at, g.population_size,
+                    g.avg_fitness, g.peak_fitness, g.min_fitness, g.std_fitness,
+                    g.policy_entropy, g.entropy_variance, g.win_rate_variance, g.population_diversity,
+                    g.mutation_rate
+             FROM generations g
+             INNER JOIN experiments e ON g.experiment_id = e.id AND e.experiment_group = 'CONTROL'
+             WHERE g.experiment_id IN (${controlIdsForCharts.map((_: string, i: number) => `$${i + 1}`).join(', ')})
+             ORDER BY g.generation_number ASC`,
+            controlIdsForCharts
+          ).then(r => r || [])
+        : Promise.resolve([]),
+      (experimentalIdsForCharts.length > 0)
+        ? queryAll<Generation>(
+            `SELECT g.id, g.experiment_id, g.generation_number, g.created_at, g.population_size,
+                    g.avg_fitness, g.peak_fitness, g.min_fitness, g.std_fitness,
+                    g.policy_entropy, g.entropy_variance, g.win_rate_variance, g.population_diversity,
+                    g.mutation_rate
+             FROM generations g
+             INNER JOIN experiments e ON g.experiment_id = e.id AND e.experiment_group = 'EXPERIMENTAL'
+             WHERE g.experiment_id IN (${experimentalIdsForCharts.map((_: string, i: number) => `$${i + 1}`).join(', ')})
+             ORDER BY g.generation_number ASC`,
+            experimentalIdsForCharts
+          ).then(r => r || [])
+        : Promise.resolve([])
+    ]
+    const [controlGenerations, experimentalGenerations] = await Promise.all(chartGenPromises)
 
     // =========================================================================
     // CONVERGENCE DATA: Compute per-experiment convergence generation via SQL
@@ -2200,28 +2287,5 @@ export async function GET() {
       })()
     }
 
-    return NextResponse.json(response, {
-      headers: {
-        'Cache-Control': 'private, no-store, no-cache, max-age=0, must-revalidate',
-        Pragma: 'no-cache'
-      }
-    })
-  } catch (error) {
-    console.error('Dashboard API error:', error)
-
-    // Return more detailed error information for debugging
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    const isDbError = errorMessage.includes('DATABASE_URL') ||
-      errorMessage.includes('ECONNREFUSED') ||
-      errorMessage.includes('connection')
-
-    return NextResponse.json(
-      {
-        error: 'Failed to fetch dashboard data',
-        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
-        isDbError
-      },
-      { status: 500 }
-    )
-  }
+    return response
 }
