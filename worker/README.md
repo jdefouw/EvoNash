@@ -244,7 +244,7 @@ View experiment progress in real-time on the web dashboard at `https://sf.defouw
 
 2. **Check internet connection:**
    ```cmd
-   ping your-app.vercel.app
+   ping sf.defouw.ca
    ```
 
 3. **Check firewall:**

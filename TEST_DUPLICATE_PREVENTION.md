@@ -1,5 +1,8 @@
 # Test Plan: Duplicate Generation Processing Prevention
 
+> **Status:** Shipped. The duplicate-prevention logic this plan validates is in production.
+> The checklist below was used during the original verification pass and is preserved as a record.
+
 This document outlines tests to verify that duplicate generation processing is prevented.
 
 ## Test Scenarios

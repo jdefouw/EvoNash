@@ -9,20 +9,21 @@ description: How to build and deploy the EvoNash web application
 
 ## Deploy to Server
 
-SSH into the server and run:
+The web app runs under PM2 (see `web/ecosystem.config.js`). SSH into the server and run:
 
 ```bash
-git config --global --add safe.directory /opt/evonash; cd /opt/evonash && git pull && cd web && npm install && npm run build && nohup npm run start > /tmp/evonash.log 2>&1 &
+git config --global --add safe.directory /opt/evonash
+cd /opt/evonash && git pull && cd web && npm install && npm run build && pm2 restart evonash
 ```
 
-### If the old process is still running:
+To watch the rolling logs:
 
 ```bash
-pkill -f "next start" || true
-cd /opt/evonash && git pull && cd web && npm install && npm run build && nohup npm run start > /tmp/evonash.log 2>&1 &
+pm2 logs evonash
 ```
 
 ## Notes
 - The live site is at https://sf.defouw.ca/
 - There is **no local dev environment** — all testing happens on the server
 - Git push from Windows first (`/git-commit`), then deploy on the server
+- PM2 process metadata: `~/.pm2/dump.pm2` — `pm2 save` after any topology change

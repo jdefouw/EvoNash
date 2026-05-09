@@ -307,6 +307,13 @@ Edit `.env` with your settings:
 
 ```bash
 DATABASE_URL=postgresql://evonash:your_secure_password@localhost:5432/evonash
+
+# Bearer token for destructive endpoints (DELETE /api/experiments/delete-all,
+# DELETE /api/experiments/[id], POST /api/workers/clear). Generate with:
+#   openssl rand -hex 32
+# Without it, those endpoints fall open — set this even for single-host installs.
+API_SECRET_KEY=
+
 NODE_ENV=production
 PORT=3000
 ```

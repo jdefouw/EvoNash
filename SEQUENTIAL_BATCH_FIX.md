@@ -1,5 +1,8 @@
 # Sequential Batch Processing Fix
 
+> **Status:** Shipped. The fix described below was merged and is in production.
+> This document is retained as a postmortem of the original race-condition bug.
+
 ## Problem
 The system was assigning multiple batches for the same generation range (e.g., multiple workers all getting batches 0-9) because:
 1. Multiple workers polled simultaneously
