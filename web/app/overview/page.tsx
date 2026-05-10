@@ -28,6 +28,18 @@ import {
   DynamicCIBracket,
   DynamicCILower,
   DynamicCIUpper,
+  DynamicPValueStrength,
+  DynamicCohensDQualifier,
+  DynamicCohensDzQualifier,
+  DynamicCohensDDirection,
+  DynamicSignTestVerdict,
+  DynamicCILowerStrength,
+  DynamicWilsonStrength,
+  DynamicMagnitudeVerdict,
+  DynamicMatchedDirection,
+  DynamicExtremesComparison,
+  DynamicHypothesisVerdict,
+  DynamicCIZeroAssertion,
 } from '@/components/OverviewDynamicStats'
 
 const sectionIds = {
@@ -1114,9 +1126,8 @@ export default function OverviewPage() {
               difference is real.
             </li>
             <li>
-              <strong>p = <DynamicPValue /></strong> &mdash; That&apos;s the p-value
-              from our actual experiment (computed live from the database). It means there&apos;s essentially
-              no chance the result is a fluke. In other words: <strong>the difference is absolutely real.</strong>
+              <strong>p = <DynamicPValue /></strong> &mdash; the p-value from our actual experiment
+              (computed live from the database). In plain language: <DynamicPValueStrength />.
             </li>
           </ul>
           <p>
@@ -1160,11 +1171,9 @@ export default function OverviewPage() {
             </li>
           </ul>
           <p>
-            Our experiment produced a Cohen&apos;s d of <DynamicCohensD /> (computed live from the database), which is far
-            beyond the &quot;large&quot; threshold. The negative sign means the experimental group
-            converges in <em>fewer</em> generations (which supports our hypothesis). In practical
-            terms: the difference between the two groups is so large that you can clearly see it
-            just by looking at the raw numbers.
+            Our experiment&apos;s Cohen&apos;s d is <DynamicCohensD /> (computed live from the
+            database), which puts the effect <DynamicCohensDQualifier />.{' '}
+            <DynamicCohensDDirection />
           </p>
 
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
@@ -1308,16 +1317,16 @@ export default function OverviewPage() {
             <p className="text-sm text-indigo-700 dark:text-indigo-300">
               <strong>Why this matters:</strong> the paired t-test has more
               <strong> statistical power</strong> than the unpaired version because it removes
-              seed-to-seed noise. That is why the paired analysis on the dashboard tends to
-              produce extremely small p-values and a large Cohen&apos;s d &mdash; not only is
-              the average gap large, but the gap is consistent across nearly every pair.
+              seed-to-seed noise. When the per-pair gap is consistent in direction and size,
+              the paired analysis can detect it with much smaller p-values and larger effect
+              sizes than the unpaired version on the same data.
             </p>
           </div>
           <p>
             <strong>Cohen&apos;s d for the paired test</strong> (sometimes written
             d<sub>z</sub>) is computed from the per-pair differences: the mean difference
             divided by the standard deviation of those differences. A small standard deviation
-            of differences means adaptive wins by a similar amount on essentially every seed,
+            of differences means the per-seed gaps cluster tightly around a single value,
             which is even stronger evidence than a large average alone could provide.
           </p>
 
@@ -1357,14 +1366,13 @@ export default function OverviewPage() {
             </li>
           </ul>
           <p>
-            <strong>The hypothesis is still strongly supported despite these outliers.</strong>
-            The paired t-test does not ask &quot;does adaptive win every time?&quot; It asks
-            &quot;across all paired seeds, is the average difference different from zero?&quot;
-            With about <DynamicAdaptiveWinPct /> of pairs leaning the adaptive way and a mean
-            difference of roughly <DynamicMeanDiffGens /> generations, the answer is yes with
-            overwhelming confidence (p far below 0.001, Cohen&apos;s d well past the
-            &quot;large&quot; threshold). The outliers reduce the average difference a little,
-            but they cannot overturn it.
+            <strong>The paired t-test does not ask &quot;does adaptive win every time?&quot;</strong>{' '}
+            It asks &quot;across all paired seeds, is the average difference different from
+            zero?&quot; With <DynamicAdaptiveWinPct /> of pairs leaning the adaptive way and
+            a mean difference of <DynamicMeanDiffGens /> generations, the paired test&apos;s
+            current verdict on the live data is: <DynamicPValueStrength />, with the effect
+            size <DynamicCohensDzQualifier />. The outliers contribute to the spread of the
+            difference distribution, but the test reports their effect transparently.
           </p>
           <div className="sci-card p-4 !bg-green-50 dark:!bg-green-900/20 border-green-200 dark:border-green-800/40">
             <p className="text-sm text-green-700 dark:text-green-400">
@@ -1380,11 +1388,10 @@ export default function OverviewPage() {
           <div className="sci-card p-4 !bg-indigo-50 dark:!bg-indigo-900/20 border-indigo-200 dark:border-indigo-800/40 mt-3">
             <p className="text-xs text-indigo-700 dark:text-indigo-300">
               <strong>In one sentence:</strong> seed pairs are what turn this from &quot;we ran
-              some experiments and adaptive looked faster&quot; into &quot;we ran the same
-              experiment under both conditions on every seed, the adaptive condition won on the
-              vast majority of them by a consistent margin, and the few cases where it lost are
-              documented and don&apos;t change the conclusion.&quot; That is the scientific
-              method, applied honestly.
+              some experiments and one group looked different&quot; into &quot;we ran the same
+              experiment under both conditions on every seed, and the live paired analysis
+              reports the result &mdash; direction, magnitude, and outliers &mdash; transparently
+              and dynamically.&quot; That is the scientific method, applied honestly.
             </p>
           </div>
         </SectionCard>
@@ -1438,12 +1445,12 @@ export default function OverviewPage() {
             wins, half losses, give or take random luck.
           </p>
           <p>
-            What we actually see is <DynamicSignTest />. To put that p-value into perspective:
-            getting that many wins by random chance alone, if adaptive had no real advantage,
-            is roughly as likely as flipping <em>tens of fair coins in a row and getting
-            heads every single time</em>. The sign test makes <em>no</em> assumptions about
-            distributions, normality, or magnitudes &mdash; it just counts directions, and the
-            direction it counts is overwhelmingly toward adaptive.
+            What we actually see is <DynamicSignTest />. The sign test makes <em>no</em>
+            assumptions about distributions, normality, or magnitudes &mdash; it just counts
+            directions, and the direction it counts is currently <DynamicSignTestVerdict />.
+            If the live p-value is small, getting that many wins by random chance alone (if
+            the two strategies were truly equivalent) would be vanishingly unlikely. If it
+            ever rises, this paragraph will reflect that.
           </p>
 
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
@@ -1456,18 +1463,16 @@ export default function OverviewPage() {
             zero to be unlikely under the null hypothesis &quot;the two groups are equivalent.&quot;
           </p>
           <p>
-            Live result: <DynamicPairedTTest />. By Cohen&apos;s convention, d<sub>z</sub>
-            {' '}values above 0.8 are considered &quot;large&quot;; what we are seeing is well
-            into that territory. And we are not just relying on a single point estimate &mdash;
-            we get <DynamicPairedCI />. The lower bound of that interval is itself many
-            generations <em>above zero</em>: even taking the most pessimistic plausible
-            estimate of the gap, adaptive is still meaningfully faster.
+            Live result: <DynamicPairedTTest />. By Cohen&apos;s convention, d<sub>z</sub>{' '}
+            values above 0.8 are considered &quot;large&quot;; the current paired effect size
+            sits <DynamicCohensDzQualifier />. And we are not just relying on a single point
+            estimate &mdash; we get <DynamicPairedCI />. The lower bound of that interval is
+            currently <DynamicCILowerStrength />.
           </p>
           <p>
             On the proportion side, a Wilson 95% confidence interval for the true win-rate
             (the probability that adaptive will beat control on a fresh seed) lands at{' '}
-            <DynamicWilsonCI />. The lower bound of that interval is far above the 50%
-            coin-flip line.
+            <DynamicWilsonCI />. That lower bound is currently <DynamicWilsonStrength />.
           </p>
 
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
@@ -1482,11 +1487,12 @@ export default function OverviewPage() {
           </p>
           <DynamicSensitivityTable />
           <p>
-            The pattern in that table is the point. Even after deleting the largest adaptive
-            wins from the dataset, the remaining differences still produce extreme p-values and
-            a substantial mean gap. The result is <em>not</em> propped up by a handful of lucky
-            seeds &mdash; it is a population-wide phenomenon that survives aggressive trimming.
-
+            The pattern in that table is the point. The bottom row shows what happens after
+            the most favorable adaptive wins are deleted from the dataset. If the remaining
+            differences still produce small p-values and a non-trivial mean gap, the result is
+            not propped up by a handful of lucky seeds &mdash; it is a population-wide
+            phenomenon. If the trimmed test starts to lose significance, that is also visible
+            here in the live numbers, and the conclusion is correspondingly less robust.
           </p>
 
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
@@ -1502,14 +1508,12 @@ export default function OverviewPage() {
           </p>
           <div className="sci-card p-4 !bg-indigo-50 dark:!bg-indigo-900/20 border-indigo-200 dark:border-indigo-800/40">
             <p className="text-sm text-indigo-700 dark:text-indigo-300">
-              <DynamicMagnitudeRatio />.
+              <DynamicMagnitudeRatio />. In summary, <DynamicMagnitudeVerdict />.
             </p>
           </div>
           <p>
-            For colour, the extreme pairs are: <DynamicExtremes />. The biggest single adaptive
-            win is much larger in magnitude than even the worst control win, and there are far
-            more wins than losses to begin with. The losses are real, but they are dwarfed by
-            the wins many times over.
+            For colour, the extreme pairs are: <DynamicExtremes />.{' '}
+            <DynamicExtremesComparison />
           </p>
 
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
@@ -1517,20 +1521,20 @@ export default function OverviewPage() {
             What about the convergence-rate gap?
           </h3>
           <p>
-            The other disparity is that, as of the moment you load this page, more control
-            runs have hit Nash equilibrium than experimental runs. There are two things to say
-            about this. First, the headline paired analysis specifically <em>only</em> uses
-            seeds where <strong>both</strong> sides have converged data &mdash; so the gap
-            cannot bias that comparison. Second, looking just at the matched seeds where the
-            comparison is fair: <DynamicMatchedMeans />. The control side is taking longer to
-            reach equilibrium, on average, than the adaptive side &mdash; that is the very
-            thing the paired t-test is detecting.
+            The other disparity is that, as of the moment you load this page, the two sides
+            may have different numbers of converged runs (see the live counters above). There
+            are two things to say about this. First, the headline paired analysis specifically{' '}
+            <em>only</em> uses seeds where <strong>both</strong> sides have converged data
+            &mdash; so the count gap cannot bias that comparison. Second, looking just at the
+            matched seeds where the comparison is fair: <DynamicMatchedMeans />.{' '}
+            <DynamicMatchedDirection />
           </p>
           <p>
-            In other words: control has more converged runs because the queue happens to have
-            scheduled more control runs to completion at this moment, not because adaptive
-            runs are failing to converge. Adaptive is going to <em>finish</em> &mdash; on
-            average, it just takes <DynamicPairedMeanDiff />.
+            In other words: convergence-count differences are mostly a function of which
+            experiments the queue has scheduled to completion at this moment in time, not a
+            statement about whether adaptive runs are failing to converge. The
+            paired-mean-difference number above is the right summary of which side, on
+            average, takes longer.
           </p>
 
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2 flex items-center gap-2">
@@ -1539,15 +1543,7 @@ export default function OverviewPage() {
           </h3>
           <div className="sci-card p-4 !bg-green-50 dark:!bg-green-900/20 border-green-200 dark:border-green-800/40">
             <p className="text-sm text-green-700 dark:text-green-400">
-              <strong>The verdict:</strong> the hypothesis &quot;adaptive mutation reaches Nash
-              equilibrium faster than fixed mutation&quot; is supported under every test we ran.
-              The sign test rules out chance. The paired t-test rules out a small-effect-and-noise
-              explanation. The sensitivity analysis rules out an outlier-driven illusion. The
-              magnitude argument shows that even raw arithmetic agrees. And the conservative
-              lower bound of the 95% confidence interval still puts adaptive comfortably ahead
-              by many generations. The losses on individual seeds are real and reported honestly,
-              but they don&apos;t change the conclusion &mdash; they make it more credible by
-              showing that we are not cherry-picking a clean &quot;100%&quot; story.
+              <DynamicHypothesisVerdict />
             </p>
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 italic">
@@ -1650,9 +1646,8 @@ export default function OverviewPage() {
               </h4>
               <p className="text-xs text-gray-700 dark:text-gray-300">
                 The difference is <strong>statistically significant</strong>. We can be
-                confident one group genuinely converges faster than the other. In this
-                experiment, the CI is entirely above zero, meaning the experimental group
-                consistently converges faster.
+                confident one group genuinely converges faster than the other.{' '}
+                <DynamicCIZeroAssertion />
               </p>
             </div>
             <div className="sci-card p-4 !bg-red-50 dark:!bg-red-900/20 border-red-200 dark:border-red-800/40">

@@ -249,14 +249,54 @@ export function DynamicStatsSummaryLine() {
       </>
     )
   }
-  const absD = Math.abs(stats.cohensD ?? 0)
-  const dStr = `${(stats.cohensD ?? 0) < 0 ? '−' : ''}${absD.toFixed(2)}`
-  const pStr = fmtPValue(stats.pValue)
-  const dLabel = absD < 0.2 ? 'negligible' : absD < 0.5 ? 'small' : absD < 0.8 ? 'medium' : 'large'
+  const d = stats.cohensD ?? 0
+  const absD = Math.abs(d)
+  const p = stats.pValue ?? 1
+  const dStr = `${d < 0 ? '−' : d > 0 ? '+' : ''}${absD.toFixed(2)}`
+  const pStr = fmtPValue(p)
+
+  // Direction
+  const direction =
+    d < 0
+      ? 'experimental converges in fewer generations (supports the hypothesis)'
+      : d > 0
+      ? 'experimental converges in MORE generations (counter to the hypothesis)'
+      : 'the two groups are tied'
+
+  // Significance verdict
+  const sigVerdict =
+    p < 0.001
+      ? 'yes, the difference is very unlikely to be chance'
+      : p < 0.05
+      ? 'yes, the difference is unlikely to be chance'
+      : p < 0.10
+      ? 'maybe — the result is suggestive but not conclusive'
+      : 'no — we cannot currently rule out chance'
+
+  // Effect-size label
+  const dLabel =
+    absD < 0.2
+      ? 'negligible'
+      : absD < 0.5
+      ? 'small'
+      : absD < 0.8
+      ? 'medium'
+      : 'large'
+
+  // Closing summary depends on whether the direction supports the hypothesis AND p is small
+  const closing =
+    d < 0 && p < 0.05
+      ? 'Together, they give us strong scientific confidence that adaptive mutation genuinely speeds up convergence to Nash equilibrium — and by a meaningful amount.'
+      : d > 0 && p < 0.05
+      ? 'Together, the live data currently runs counter to the hypothesis. As more experiments accumulate, this paragraph will reflect any change.'
+      : 'Together, the live data is currently inconclusive — we have a direction, but not enough evidence to call it. As more pairs come in, this updates automatically.'
 
   return (
     <>
-      The t-test says <strong>&quot;yes, the difference is real&quot;</strong> (p {pStr === '≈ 0' ? '≈ 0' : `= ${pStr}`}). Cohen&apos;s d says <strong>&quot;and the difference is {dLabel}&quot;</strong> (d = {dStr}). Together, they give us strong scientific confidence that adaptive mutation genuinely speeds up convergence to Nash equilibrium&mdash;and by a meaningful amount, not just a technicality.
+      The t-test asks &quot;is the difference real?&quot; &mdash;{' '}
+      <strong>{sigVerdict}</strong> (p {pStr === '≈ 0' ? '≈ 0' : `= ${pStr}`}). Cohen&apos;s d
+      asks &quot;how big is it, and in which direction?&quot; &mdash;{' '}
+      <strong>{dLabel}, with {direction}</strong> (d = {dStr}). {closing}
     </>
   )
 }
@@ -566,6 +606,281 @@ export function DynamicMatchedMeans() {
       adaptive run took <strong>{p.experimentalMeanGens.toFixed(0)} generations</strong>
     </>
   )
+}
+
+// ─── Dynamic narrative qualifiers ──────────────────────────────────────────
+// These render a *phrase* whose wording depends on the live data, so the
+// surrounding sentence stays accurate even if the data shifts direction.
+
+/**
+ * Describes the strength of a p-value in plain language.
+ * Replaces phrases like "essentially no chance" / "result is absolutely real".
+ */
+export function DynamicPValueStrength() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="20em" />
+  const p = stats?.pValue
+  if (p === null || p === undefined) return <>insufficient data to assess</>
+  if (p === 0 || p < 1e-50) return <>vanishingly small &mdash; the result is virtually certain not to be a fluke</>
+  if (p < 1e-10) return <>extremely small &mdash; the result is virtually certain to be real</>
+  if (p < 0.001) return <>well below 0.001 &mdash; very strong evidence the difference is real</>
+  if (p < 0.01) return <>below 0.01 &mdash; strong evidence the difference is real</>
+  if (p < 0.05) return <>below 0.05 &mdash; statistically significant, though not overwhelming</>
+  if (p < 0.10) return <>marginally significant &mdash; the result is suggestive but not conclusive</>
+  return <>not statistically significant &mdash; we cannot rule out chance from the current data</>
+}
+
+/**
+ * Describes Cohen's d magnitude qualitatively. Always uses |d|.
+ * Replaces phrases like "well past the large threshold".
+ */
+export function DynamicCohensDQualifier() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="14em" />
+  const d = stats?.cohensD
+  if (d === null || d === undefined) return <>insufficient data</>
+  const a = Math.abs(d)
+  if (a < 0.2) return <>in the &quot;negligible&quot; range (|d| &lt; 0.2)</>
+  if (a < 0.5) return <>in the &quot;small&quot; range (0.2 &le; |d| &lt; 0.5)</>
+  if (a < 0.8) return <>in the &quot;medium&quot; range (0.5 &le; |d| &lt; 0.8)</>
+  if (a < 1.2) return <>in the &quot;large&quot; range (|d| &ge; 0.8)</>
+  return <>well past the &quot;large&quot; threshold of |d| = 0.8</>
+}
+
+/**
+ * Describes Cohen's d_z (paired) magnitude.
+ */
+export function DynamicCohensDzQualifier() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="14em" />
+  const d = stats?.pairedStats?.cohensDz
+  if (d === null || d === undefined) return <>insufficient data</>
+  const a = Math.abs(d)
+  if (a < 0.2) return <>in the &quot;negligible&quot; range (d<sub>z</sub> &lt; 0.2)</>
+  if (a < 0.5) return <>in the &quot;small&quot; range</>
+  if (a < 0.8) return <>in the &quot;medium&quot; range</>
+  if (a < 1.2) return <>in the &quot;large&quot; range (d<sub>z</sub> &ge; 0.8)</>
+  return <>well into the &quot;large&quot; territory (d<sub>z</sub> &ge; 0.8)</>
+}
+
+/**
+ * Describes what the sign of Cohen's d means for the hypothesis.
+ * If d &lt; 0 the experimental group has lower convergence gen (faster) → supports hypothesis.
+ * If d &gt; 0 the experimental group has higher convergence gen (slower) → counter to hypothesis.
+ */
+export function DynamicCohensDDirection() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="22em" />
+  const d = stats?.cohensD
+  if (d === null || d === undefined) return <>The sign of d will tell us which group is faster.</>
+  if (d < 0) {
+    return <>The negative sign means the experimental group converges in <em>fewer</em> generations &mdash; supporting the hypothesis that adaptive mutation is faster.</>
+  }
+  if (d > 0) {
+    return <>The positive sign means the experimental group is converging in <em>more</em> generations than the control &mdash; <strong>counter to the hypothesis</strong>. As the experiment continues, this is the most important number to watch.</>
+  }
+  return <>d is currently zero &mdash; the two groups are tied on average.</>
+}
+
+/**
+ * Describes the sign-test direction in narrative terms.
+ */
+export function DynamicSignTestVerdict() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="20em" />
+  const p = stats?.pairedStats
+  if (!p) return <>not enough paired data yet to count</>
+  const ctrl = p.controlWins
+  const exp = p.adaptiveWins
+  const total = ctrl + exp
+  if (total === 0) return <>no decisive pairs yet</>
+  const winRate = exp / total
+  if (winRate >= 0.90) return <>overwhelmingly toward adaptive</>
+  if (winRate >= 0.75) return <>strongly toward adaptive</>
+  if (winRate >= 0.60) return <>leaning toward adaptive</>
+  if (winRate > 0.50) return <>slightly toward adaptive</>
+  if (winRate === 0.50) return <>evenly split &mdash; no direction</>
+  if (winRate >= 0.40) return <>slightly toward control</>
+  if (winRate >= 0.25) return <>leaning toward control</>
+  return <>strongly toward control &mdash; counter to the hypothesis</>
+}
+
+/**
+ * Describes how many generations above zero the lower bound of the paired-t CI is.
+ * Replaces phrases like "many generations above zero" or "comfortably ahead".
+ */
+export function DynamicCILowerStrength() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="20em" />
+  const p = stats?.pairedStats
+  if (!p || p.ciLower === null) return <>(insufficient paired data for CI)</>
+  const lo = p.ciLower
+  if (lo > 20) return <>many generations above zero &mdash; even the most pessimistic estimate has adaptive faster by a wide margin</>
+  if (lo > 10) return <>comfortably above zero &mdash; even the pessimistic estimate has adaptive faster by 10+ generations</>
+  if (lo > 3) return <>above zero &mdash; the floor is positive but tighter</>
+  if (lo > 0) return <>just above zero &mdash; the floor is positive but only marginally</>
+  if (lo === 0) return <>exactly at zero &mdash; the lower bound just touches the no-difference line</>
+  return <>below zero &mdash; we cannot rule out, with 95% confidence, that the true difference is zero or favors control</>
+}
+
+/**
+ * Describes the Wilson 95% CI for the win-rate proportion vs the 50% coin-flip line.
+ */
+export function DynamicWilsonStrength() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="22em" />
+  const p = stats?.pairedStats
+  if (!p) return <>(insufficient paired data)</>
+  const lo = p.wilsonCILower
+  if (lo > 0.80) return <>far above the 50% coin-flip line</>
+  if (lo > 0.65) return <>well above the 50% coin-flip line</>
+  if (lo > 0.50) return <>above the 50% coin-flip line, though closer than at peak data</>
+  if (lo === 0.50) return <>exactly at the 50% coin-flip line &mdash; we cannot rule out chance from the win-rate alone</>
+  return <>below the 50% coin-flip line &mdash; the win-rate by itself does not currently support adaptive</>
+}
+
+/**
+ * Describes the magnitude ratio (adaptive credit / control credit).
+ */
+export function DynamicMagnitudeVerdict() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="22em" />
+  const p = stats?.pairedStats
+  if (!p) return <>(insufficient paired data)</>
+  if (p.controlCreditTotal === 0) {
+    return <>adaptive contributed every generation of speedup; there are no losses to weigh against the wins</>
+  }
+  const r = p.magnitudeRatio
+  if (r === null || r === undefined) return <>(magnitude ratio unavailable)</>
+  if (r >= 10) return <>the wins dwarf the losses by roughly {r.toFixed(0)}&times; on raw magnitude</>
+  if (r >= 3) return <>the wins outweigh the losses by about {r.toFixed(1)}&times;</>
+  if (r > 1) return <>the wins exceed the losses by a factor of about {r.toFixed(1)}&times;, but the margin has tightened</>
+  if (r === 1) return <>wins and losses currently balance exactly on raw magnitude</>
+  return <>the losses currently exceed the wins on raw magnitude &mdash; counter to the hypothesis</>
+}
+
+/**
+ * Compares experimental mean vs control mean among matched seeds.
+ * Replaces "control side is taking longer than adaptive side" phrasing.
+ */
+export function DynamicMatchedDirection() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="22em" />
+  const p = stats?.pairedStats
+  if (!p) return null
+  const c = p.controlMeanGens
+  const e = p.experimentalMeanGens
+  if (Math.abs(c - e) < 0.5) {
+    return <>The two sides are converging at almost the same rate among matched seeds &mdash; no clear advantage in this slice of data.</>
+  }
+  if (e < c) {
+    return <>The control side is taking longer to reach equilibrium, on average, than the adaptive side &mdash; that is the very thing the paired t-test is detecting.</>
+  }
+  return <>The control side is currently converging faster, on average, than the adaptive side among matched seeds &mdash; counter to the hypothesis.</>
+}
+
+/**
+ * Compares best win vs worst loss in raw magnitude.
+ */
+export function DynamicExtremesComparison() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="22em" />
+  const p = stats?.pairedStats
+  if (!p) return null
+  const bestWin = p.bestWin
+  const worstLossMag = Math.abs(p.worstLoss)
+  if (bestWin > worstLossMag) {
+    return <>The biggest single adaptive win ({bestWin.toFixed(0)} gens) is larger in magnitude than the worst control win ({worstLossMag.toFixed(0)} gens).</>
+  }
+  if (bestWin < worstLossMag) {
+    return <>The biggest single control win ({worstLossMag.toFixed(0)} gens) currently exceeds the biggest adaptive win ({bestWin.toFixed(0)} gens) in magnitude.</>
+  }
+  return <>The biggest adaptive win and biggest control win are equal in magnitude.</>
+}
+
+/**
+ * Overall verdict box for section 18's "Putting it together" — picks the right
+ * framing based on whether all four tests agree, agree partially, or contradict.
+ */
+export function DynamicHypothesisVerdict() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="100%" />
+  const p = stats?.pairedStats
+  if (!p) {
+    return (
+      <>
+        Not enough paired data yet to deliver a full verdict. Watch the dashboard
+        as more seeds accumulate.
+      </>
+    )
+  }
+  const winRate = (p.adaptiveWins) / Math.max(1, p.adaptiveWins + p.controlWins)
+  const sigPaired = p.pValueTwoTailed < 0.05
+  const sigSign = p.signTestPValueOneTailed < 0.05 && winRate > 0.5
+  const ciAboveZero = p.ciLower !== null && p.ciLower > 0
+  const meanFavorsAdaptive = p.meanDiff > 0
+  const ratioFavorsAdaptive =
+    p.controlCreditTotal === 0 || (p.magnitudeRatio !== null && p.magnitudeRatio > 1)
+  const allAgree = sigPaired && sigSign && ciAboveZero && meanFavorsAdaptive && ratioFavorsAdaptive
+
+  if (allAgree) {
+    const strong = winRate >= 0.85 && (p.cohensDz ?? 0) > 0.8
+    return (
+      <>
+        <strong>The verdict:</strong> the hypothesis &quot;adaptive mutation reaches Nash
+        equilibrium faster than fixed mutation&quot; is{' '}
+        {strong ? 'supported under every test we ran' : 'currently supported by every test we ran'}.
+        The sign test rules out chance. The paired t-test rules out a small-effect-and-noise
+        explanation. The sensitivity analysis rules out an outlier-driven illusion. The
+        magnitude argument shows that even raw arithmetic agrees. And the lower bound of the
+        95% confidence interval is{' '}
+        {p.ciLower !== null && p.ciLower > 0 ? `${p.ciLower.toFixed(1)} generations above zero` : 'positive'}.
+        The losses on individual seeds are real and reported honestly, but they don&apos;t
+        change the conclusion &mdash; they make it more credible by showing that we are not
+        cherry-picking a clean &quot;100%&quot; story.
+      </>
+    )
+  }
+
+  // Mixed-evidence framing
+  const items: string[] = []
+  if (sigPaired) items.push('the paired t-test is significant'); else items.push('the paired t-test is no longer significant')
+  if (sigSign) items.push('the sign test points toward adaptive'); else items.push('the sign test no longer favors adaptive')
+  if (ciAboveZero) items.push('the 95% CI is above zero'); else items.push('the 95% CI now includes (or crosses) zero')
+  if (meanFavorsAdaptive) items.push('the mean per-pair gap favors adaptive'); else items.push('the mean per-pair gap no longer favors adaptive')
+
+  return (
+    <>
+      <strong>Current verdict:</strong> the evidence is mixed in the live data.{' '}
+      {items.join('; ')}.
+      Watch the dashboard as more pairs accumulate &mdash; one of the strengths of this design
+      is that the answer can shift in either direction as the sample grows, and the page will
+      reflect that.
+    </>
+  )
+}
+
+/**
+ * For the IQR/CI section's "CI does NOT include zero" box. The static text used to
+ * assert that "in this experiment, the CI is entirely above zero". Replace with a
+ * version that checks the live CI and reports it accurately.
+ */
+export function DynamicCIZeroAssertion() {
+  const { stats, loading } = useStats()
+  if (loading) return <Skeleton w="22em" />
+  const p = stats?.pairedStats
+  if (!p || p.ciLower === null || p.ciUpper === null) {
+    return <>(CI not available yet.)</>
+  }
+  const lo = p.ciLower
+  const hi = p.ciUpper
+  if (lo > 0) {
+    return <>In the live data, the CI is entirely above zero ([{lo.toFixed(1)}, {hi.toFixed(1)}] generations), meaning the experimental group is genuinely converging faster.</>
+  }
+  if (hi < 0) {
+    return <>In the live data, the CI is entirely below zero ([{lo.toFixed(1)}, {hi.toFixed(1)}] generations) &mdash; counter to the hypothesis.</>
+  }
+  return <>In the live data, the CI currently spans zero ([{lo.toFixed(1)}, {hi.toFixed(1)}] generations), so we cannot yet rule out a no-difference scenario from this analysis alone.</>
 }
 
 // ─── Shared fetch hook (deduplicated via module-level cache) ────────────────
