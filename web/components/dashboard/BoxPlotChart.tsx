@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+
 interface BoxPlotData {
   n: number
   mean: number | null
@@ -19,11 +21,19 @@ interface BoxPlotChartProps {
   title?: string
 }
 
+type HoverInfo =
+  | { kind: 'box'; group: 'control' | 'experimental'; x: number; y: number }
+  | { kind: 'outlier'; group: 'control' | 'experimental'; value: number; x: number; y: number }
+  | { kind: 'whisker'; group: 'control' | 'experimental'; label: string; value: number; x: number; y: number }
+  | null
+
 export default function BoxPlotChart({
   controlData,
   experimentalData,
   title = 'Distribution Comparison'
 }: BoxPlotChartProps) {
+  const [hover, setHover] = useState<HoverInfo>(null)
+
   if (!controlData && !experimentalData) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
@@ -78,7 +88,8 @@ export default function BoxPlotChart({
     x: number,
     color: string,
     fillColor: string,
-    label: string
+    label: string,
+    group: 'control' | 'experimental'
   ) => {
     if (!data || data.Q1 === null || data.Q3 === null || data.median === null) {
       return null
@@ -97,6 +108,8 @@ export default function BoxPlotChart({
     const yUpper = scaleY(upperWhisker)
     const yMean = mean !== null ? scaleY(mean) : null
 
+    const isBoxHover = hover?.kind === 'box' && hover.group === group
+
     return (
       <g key={label}>
         {/* Box (IQR) */}
@@ -107,8 +120,9 @@ export default function BoxPlotChart({
           height={y1 - y3}
           fill={fillColor}
           stroke={color}
-          strokeWidth={1.5}
+          strokeWidth={isBoxHover ? 2.5 : 1.5}
           rx={3}
+          style={{ transition: 'stroke-width 80ms' }}
         />
 
         {/* Median line */}
@@ -140,10 +154,61 @@ export default function BoxPlotChart({
         <line x1={x} y1={y3} x2={x} y2={yUpper} stroke={color} strokeWidth={1.5} strokeDasharray="3,2" />
         <line x1={x - boxWidth / 4} y1={yUpper} x2={x + boxWidth / 4} y2={yUpper} stroke={color} strokeWidth={1.5} strokeLinecap="round" />
 
-        {/* Outliers */}
-        {outliers.map((v, i) => (
-          <circle key={i} cx={x} cy={scaleY(v)} r={3} fill="none" stroke={color} strokeWidth={1.5} />
-        ))}
+        {/* Whisker hit targets */}
+        <rect
+          x={x - boxWidth / 3} y={yUpper - 4}
+          width={(boxWidth / 3) * 2} height={8}
+          fill="transparent"
+          style={{ cursor: 'pointer' }}
+          onMouseEnter={() => setHover({ kind: 'whisker', group, label: 'Upper whisker', value: upperWhisker, x, y: yUpper })}
+          onMouseLeave={() => setHover(prev => (prev?.kind === 'whisker' && prev.group === group ? null : prev))}
+        />
+        <rect
+          x={x - boxWidth / 3} y={yLower - 4}
+          width={(boxWidth / 3) * 2} height={8}
+          fill="transparent"
+          style={{ cursor: 'pointer' }}
+          onMouseEnter={() => setHover({ kind: 'whisker', group, label: 'Lower whisker', value: lowerWhisker, x, y: yLower })}
+          onMouseLeave={() => setHover(prev => (prev?.kind === 'whisker' && prev.group === group ? null : prev))}
+        />
+
+        {/* Outliers (rendered + hoverable) */}
+        {outliers.map((v, i) => {
+          const cy = scaleY(v)
+          const isOutlierHover =
+            hover?.kind === 'outlier' && hover.group === group && hover.value === v
+          return (
+            <g key={i}>
+              <circle
+                cx={x} cy={cy}
+                r={isOutlierHover ? 4.5 : 3}
+                fill="none"
+                stroke={color}
+                strokeWidth={isOutlierHover ? 2 : 1.5}
+                style={{ pointerEvents: 'none', transition: 'r 80ms, stroke-width 80ms' }}
+              />
+              <circle
+                cx={x} cy={cy} r={8}
+                fill="transparent"
+                style={{ cursor: 'pointer' }}
+                onMouseEnter={() => setHover({ kind: 'outlier', group, value: v, x, y: cy })}
+                onMouseLeave={() => setHover(prev => (prev?.kind === 'outlier' && prev.group === group && prev.value === v ? null : prev))}
+              />
+            </g>
+          )
+        })}
+
+        {/* Box hit target — covers whole box (Q1 to Q3) */}
+        <rect
+          x={x - boxWidth / 2}
+          y={y3}
+          width={boxWidth}
+          height={y1 - y3}
+          fill="transparent"
+          style={{ cursor: 'pointer' }}
+          onMouseEnter={() => setHover({ kind: 'box', group, x, y: yMedian })}
+          onMouseLeave={() => setHover(prev => (prev?.kind === 'box' && prev.group === group ? null : prev))}
+        />
 
         {/* Label */}
         <text x={x} y={svgHeight - 8} textAnchor="middle" className="text-[11px] fill-gray-700 dark:fill-gray-300 font-medium">
@@ -152,6 +217,89 @@ export default function BoxPlotChart({
         <text x={x} y={svgHeight - 22} textAnchor="middle" className="text-[10px] fill-gray-400 dark:fill-gray-500">
           n={data.n}
         </text>
+      </g>
+    )
+  }
+
+  const renderTooltip = () => {
+    if (!hover) return null
+    const data = hover.group === 'control' ? controlData : experimentalData
+    const groupLabel = hover.group === 'control' ? 'Control (Static ε)' : 'Experimental (Adaptive ε)'
+    const stroke = hover.group === 'control' ? '#3B82F6' : '#8B5CF6'
+
+    let lines: { left: string; right: string; bold?: boolean; color?: string }[] = []
+    let tipW = 188
+    let tipH = 28
+
+    if (hover.kind === 'box' && data) {
+      lines = [
+        { left: 'n converged:', right: data.n.toLocaleString(), bold: true },
+        { left: 'Mean:', right: `${data.mean?.toFixed(1) ?? '—'} gens` },
+        { left: 'Median:', right: `${data.median?.toFixed(1) ?? '—'} gens` },
+        { left: 'Std dev:', right: `${data.std?.toFixed(1) ?? '—'}` },
+        { left: 'Q1 (25%):', right: `${data.Q1?.toFixed(1) ?? '—'}` },
+        { left: 'Q3 (75%):', right: `${data.Q3?.toFixed(1) ?? '—'}` },
+        { left: 'IQR:', right: `${data.IQR?.toFixed(1) ?? '—'}` },
+        { left: 'Min — Max:', right: `${data.min?.toFixed(0) ?? '—'} — ${data.max?.toFixed(0) ?? '—'}` },
+      ]
+      tipH = 28 + lines.length * 14 + 6
+    } else if (hover.kind === 'outlier') {
+      lines = [
+        { left: 'Outlier value:', right: `${hover.value.toFixed(1)} gens`, bold: true, color: stroke },
+        { left: 'Status:', right: 'Outside 1.5 × IQR fences' },
+      ]
+      tipH = 28 + lines.length * 14 + 6
+    } else if (hover.kind === 'whisker') {
+      lines = [
+        { left: hover.label + ':', right: `${hover.value.toFixed(1)} gens`, bold: true, color: stroke },
+        { left: 'Definition:', right: 'Inner 1.5 × IQR fence' },
+      ]
+      tipH = 28 + lines.length * 14 + 6
+    }
+
+    // Smart placement
+    const placeRight = hover.x + 14 + tipW <= plotMargin.left + plotWidth + 4
+    const tipX = placeRight ? hover.x + 14 : hover.x - 14 - tipW
+    const placeBelow = hover.y - tipH < plotMargin.top
+    const tipY = placeBelow ? hover.y + 12 : hover.y - 8 - tipH
+
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        <rect
+          x={tipX} y={tipY}
+          width={tipW} height={tipH}
+          rx={6} ry={6}
+          fill="#ffffff"
+          stroke="#d1d5db"
+          strokeWidth={1}
+          style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.12))' }}
+        />
+        <text x={tipX + 10} y={tipY + 16} fontSize={10} fontWeight={700} fill={stroke}>
+          {groupLabel}
+        </text>
+        {lines.map((ln, i) => (
+          <g key={i}>
+            <text
+              x={tipX + 10}
+              y={tipY + 32 + i * 14}
+              fontSize={9}
+              fill="#6b7280"
+            >
+              {ln.left}
+            </text>
+            <text
+              x={tipX + tipW - 10}
+              y={tipY + 32 + i * 14}
+              fontSize={9}
+              fill={ln.color || '#111827'}
+              textAnchor="end"
+              fontFamily="ui-monospace, monospace"
+              fontWeight={ln.bold ? 700 : 400}
+            >
+              {ln.right}
+            </text>
+          </g>
+        ))}
       </g>
     )
   }
@@ -200,8 +348,11 @@ export default function BoxPlotChart({
             Generations to Nash
           </text>
 
-          {renderBoxPlot(controlData, controlX, '#3B82F6', '#DBEAFE', 'Control')}
-          {renderBoxPlot(experimentalData, experimentalX, '#8B5CF6', '#EDE9FE', 'Experimental')}
+          {renderBoxPlot(controlData, controlX, '#3B82F6', '#DBEAFE', 'Control', 'control')}
+          {renderBoxPlot(experimentalData, experimentalX, '#8B5CF6', '#EDE9FE', 'Experimental', 'experimental')}
+
+          {/* Tooltip — rendered last so it always layers on top */}
+          {renderTooltip()}
         </svg>
       </div>
 
