@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 interface PairedSeedScatterProps {
   convergenceData: { experimentId: string; group: string; seed: number; convergenceGeneration: number }[]
@@ -14,6 +14,7 @@ interface PairedSeedScatterProps {
 }
 
 export default function PairedSeedScatter({ convergenceData, pairedAnalysis }: PairedSeedScatterProps) {
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
   const pairs = useMemo(() => {
     // If pairedAnalysis provides pre-computed pairs, use them
     if (pairedAnalysis?.pairs && pairedAnalysis.pairs.length > 0) {
@@ -129,22 +130,38 @@ export default function PairedSeedScatter({ convergenceData, pairedAnalysis }: P
             fill="#6366f1" fillOpacity={0.04}
           />
 
-          {/* Data points */}
+          {/* Data points (visible) */}
           {pairs.map((p, i) => {
             const below = p.experimental < p.control
+            const isHover = hoverIdx === i
             return (
               <circle
-                key={i}
+                key={`pt-${i}`}
                 cx={scaleX(p.control)}
                 cy={scaleY(p.experimental)}
-                r={4}
+                r={isHover ? 6 : 4}
                 fill={below ? '#6366f1' : '#ef4444'}
-                fillOpacity={0.7}
+                fillOpacity={isHover ? 0.95 : 0.7}
                 stroke={below ? '#4f46e5' : '#dc2626'}
-                strokeWidth={0.5}
+                strokeWidth={isHover ? 1.5 : 0.5}
+                style={{ pointerEvents: 'none', transition: 'r 80ms, fill-opacity 80ms' }}
               />
             )
           })}
+
+          {/* Hit targets (invisible, larger — capture hover even on small dots) */}
+          {pairs.map((p, i) => (
+            <circle
+              key={`hit-${i}`}
+              cx={scaleX(p.control)}
+              cy={scaleY(p.experimental)}
+              r={10}
+              fill="transparent"
+              style={{ cursor: 'pointer' }}
+              onMouseEnter={() => setHoverIdx(i)}
+              onMouseLeave={() => setHoverIdx(prev => (prev === i ? null : prev))}
+            />
+          ))}
 
           {/* X-axis label */}
           <text x={margin.left + plotW / 2} y={chartH - 8} textAnchor="middle" fontSize={11} fill="#374151" fontWeight={600}>
@@ -154,6 +171,58 @@ export default function PairedSeedScatter({ convergenceData, pairedAnalysis }: P
           <text x={16} y={margin.top + plotH / 2} textAnchor="middle" fontSize={11} fill="#374151" fontWeight={600} transform={`rotate(-90, 16, ${margin.top + plotH / 2})`}>
             Experimental (Adaptive ε) — Conv. Gen.
           </text>
+
+          {/* Tooltip — rendered last so it always layers on top */}
+          {hoverIdx !== null && pairs[hoverIdx] && (() => {
+            const p = pairs[hoverIdx]
+            const below = p.experimental < p.control
+            const cx = scaleX(p.control)
+            const cy = scaleY(p.experimental)
+            // Smart placement: flip horizontally if near right edge,
+            // and vertically if near top.
+            const tipW = 168
+            const tipH = 78
+            const placeRight = cx + 14 + tipW <= margin.left + plotW
+            const tipX = placeRight ? cx + 14 : cx - 14 - tipW
+            const placeBelow = cy - 14 - tipH < margin.top
+            const tipY = placeBelow ? cy + 14 : cy - 14 - tipH
+            const diffStr = `${p.difference >= 0 ? '+' : '−'}${Math.abs(p.difference).toFixed(1)}`
+            const diffColor = below ? '#4f46e5' : '#dc2626'
+            return (
+              <g style={{ pointerEvents: 'none' }}>
+                <rect
+                  x={tipX} y={tipY}
+                  width={tipW} height={tipH}
+                  rx={6} ry={6}
+                  fill="#ffffff"
+                  stroke="#d1d5db"
+                  strokeWidth={1}
+                  style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.12))' }}
+                />
+                <text x={tipX + 10} y={tipY + 16} fontSize={11} fill="#111827" fontWeight={700}>
+                  Seed {p.seed}
+                </text>
+                <text x={tipX + 10} y={tipY + 33} fontSize={10} fill="#6b7280">
+                  Control:
+                </text>
+                <text x={tipX + tipW - 10} y={tipY + 33} fontSize={10} fill="#111827" textAnchor="end" fontFamily="ui-monospace, monospace">
+                  {p.control.toFixed(1)} gens
+                </text>
+                <text x={tipX + 10} y={tipY + 48} fontSize={10} fill="#6b7280">
+                  Adaptive:
+                </text>
+                <text x={tipX + tipW - 10} y={tipY + 48} fontSize={10} fill="#111827" textAnchor="end" fontFamily="ui-monospace, monospace">
+                  {p.experimental.toFixed(1)} gens
+                </text>
+                <text x={tipX + 10} y={tipY + 65} fontSize={10} fill="#6b7280">
+                  Δ (ctrl − adaptive):
+                </text>
+                <text x={tipX + tipW - 10} y={tipY + 65} fontSize={10} fill={diffColor} textAnchor="end" fontFamily="ui-monospace, monospace" fontWeight={700}>
+                  {diffStr}
+                </text>
+              </g>
+            )
+          })()}
         </svg>
       </div>
 
