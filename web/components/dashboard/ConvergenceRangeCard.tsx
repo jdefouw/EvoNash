@@ -488,28 +488,162 @@ export default function ConvergenceRangeCard({
             </div>
           </div>
 
-          {/* Key insight */}
-          <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800/40">
-            <p className="text-xs text-indigo-700 dark:text-indigo-300">
-              <span className="font-semibold">Key insight: </span>
-              {controlData?.max != null && experimentalData?.median != null &&
-               experimentalData.median < controlData.max ? (
-                <>
-                  The experimental group&apos;s slowest convergence
-                  ({fmt(experimentalData?.max)}) is still faster than the control group&apos;s
-                  median ({fmt(controlData?.median)}), demonstrating that adaptive mutation
-                  consistently accelerates convergence across the entire distribution.
-                </>
-              ) : (
-                <>
-                  Compare the ranges above to see how the two groups&apos; convergence
-                  generations overlap (or don&apos;t).
-                </>
-              )}
-            </p>
-          </div>
+          {/* Key insight — tiered, picks the strongest actually-true claim from live data */}
+          <KeyInsight controlData={controlData} experimentalData={experimentalData} />
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Picks the strongest claim that is actually true given the current live data
+ * and renders it. As experiments continue and the distributions shift, the
+ * claim shown will automatically promote or demote.
+ *
+ * Tiers (descending strength):
+ *   0  Total separation     exp max < ctrl min
+ *   1  IQR separation       exp Q3  < ctrl Q1
+ *   2  Slowest-vs-typical   exp max < ctrl median
+ *   3  Typical-vs-fastest   exp median < ctrl Q1
+ *   4  Median advantage     exp median < ctrl median
+ *   5  Mean advantage       exp mean   < ctrl mean
+ *   6  Neutral              no clear advantage in this card's stats
+ */
+function KeyInsight({
+  controlData,
+  experimentalData,
+}: {
+  controlData: DistributionStats | null
+  experimentalData: DistributionStats | null
+}) {
+  if (!controlData || !experimentalData || controlData.n === 0 || experimentalData.n === 0) {
+    return null
+  }
+  const c = controlData
+  const e = experimentalData
+  const fmt = (v: number | null | undefined, decimals = 0) =>
+    v != null ? v.toFixed(decimals) : '—'
+
+  // Two visual styles: "strong" (green) for tiers 0-2, "standard" (indigo) for tiers 3-5,
+  // and "neutral" (gray) for tier 6.
+  const wrap = (
+    style: 'strong' | 'standard' | 'neutral',
+    label: string,
+    body: React.ReactNode,
+  ) => {
+    const cls =
+      style === 'strong'
+        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800/40 text-green-700 dark:text-green-300'
+        : style === 'standard'
+        ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800/40 text-indigo-700 dark:text-indigo-300'
+        : 'bg-gray-50 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'
+    return (
+      <div className={`p-3 rounded-lg border ${cls}`}>
+        <p className="text-xs">
+          <span className="font-semibold">{label} </span>
+          {body}
+        </p>
+      </div>
+    )
+  }
+
+  // Tier 0: total separation
+  if (c.min != null && e.max != null && e.max < c.min) {
+    return wrap(
+      'strong',
+      'Total separation:',
+      <>
+        every experimental run ({fmt(e.min)}–{fmt(e.max)} gens) converged faster than every
+        control run ({fmt(c.min)}–{fmt(c.max)} gens). The two distributions don&apos;t overlap
+        at all — adaptive dominates fixed mutation across the entire converged sample.
+      </>,
+    )
+  }
+
+  // Tier 1: IQR separation
+  if (c.Q1 != null && e.Q3 != null && e.Q3 < c.Q1) {
+    return wrap(
+      'strong',
+      'IQR separation:',
+      <>
+        the middle 50% of experimental runs ({fmt(e.Q1)}–{fmt(e.Q3)} gens) all converged faster
+        than the middle 50% of control runs ({fmt(c.Q1)}–{fmt(c.Q3)} gens). The IQR boxes
+        don&apos;t overlap, so this isn&apos;t a few outliers — it&apos;s the bulk of each
+        distribution.
+      </>,
+    )
+  }
+
+  // Tier 2: slowest-vs-typical
+  if (c.median != null && e.max != null && e.max < c.median) {
+    return wrap(
+      'strong',
+      'Key insight:',
+      <>
+        even the experimental group&apos;s <strong>slowest</strong> converging run
+        ({fmt(e.max)} gens) finished faster than the <strong>typical</strong> (median) control
+        run ({fmt(c.median)} gens). Adaptive mutation outperforms fixed mutation across nearly
+        the entire distribution.
+      </>,
+    )
+  }
+
+  // Tier 3: typical-vs-fastest
+  if (c.Q1 != null && e.median != null && e.median < c.Q1) {
+    return wrap(
+      'standard',
+      'Key insight:',
+      <>
+        the <strong>median</strong> experimental run ({fmt(e.median)} gens) converged faster
+        than even the <strong>fastest 25%</strong> of control runs (Q1 = {fmt(c.Q1)} gens).
+        Half the experimental distribution beats the best quarter of the control distribution.
+      </>,
+    )
+  }
+
+  // Tier 4: median advantage
+  if (c.median != null && e.median != null && e.median < c.median) {
+    const gap = c.median - e.median
+    const pct = (gap / c.median) * 100
+    return wrap(
+      'standard',
+      'Key insight:',
+      <>
+        the median experimental run converges in <strong>{fmt(e.median)} generations</strong>{' '}
+        vs. <strong>{fmt(c.median)} for control</strong> — a {fmt(gap)}-generation gap
+        (~{pct.toFixed(1)}% faster). The full distributions still overlap
+        ({fmt(e.min)}–{fmt(e.max)} vs. {fmt(c.min)}–{fmt(c.max)}), so adaptive is faster on
+        average rather than universally — see the paired-seed comparison below for the
+        within-seed result.
+      </>,
+    )
+  }
+
+  // Tier 5: mean advantage only
+  if (c.mean != null && e.mean != null && e.mean < c.mean) {
+    const gap = c.mean - e.mean
+    return wrap(
+      'standard',
+      'Key insight:',
+      <>
+        the mean experimental convergence ({fmt(e.mean, 1)} gens) is {fmt(gap, 1)} generations
+        faster than the mean control convergence ({fmt(c.mean, 1)} gens). The medians are
+        close ({fmt(e.median)} vs. {fmt(c.median)}), so the advantage shows up in the average
+        more than the typical run. The paired-seed comparison below is a stronger test.
+      </>,
+    )
+  }
+
+  // Tier 6: neutral
+  return wrap(
+    'neutral',
+    'Current state:',
+    <>
+      the two groups have similar convergence distributions in the data so far
+      (control median = {fmt(c.median)}, experimental median = {fmt(e.median)}). As more runs
+      accumulate, paired analysis — which controls for seed-level variance — is the strongest
+      test of the adaptive-vs-static comparison.
+    </>,
   )
 }
