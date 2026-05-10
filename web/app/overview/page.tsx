@@ -167,6 +167,104 @@ export default function OverviewPage() {
           </div>
         </div>
 
+        {/* ════════════════════════════════════════════════════════════════ */}
+        {/* Live Data Preamble — declares the page's self-updating nature   */}
+        {/* ════════════════════════════════════════════════════════════════ */}
+        <section className="relative overflow-hidden rounded-2xl p-6 md:p-8 animate-fade-in border-2 border-indigo-200 dark:border-indigo-800/50 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-indigo-950/40 dark:via-purple-950/30 dark:to-pink-950/40">
+          {/* Decorative blobs */}
+          <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-64 h-64 bg-purple-400/10 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="relative">
+            {/* Live indicator */}
+            <div className="flex items-center gap-3 mb-3">
+              <div className="relative flex items-center justify-center w-3 h-3">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75 animate-ping" />
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
+              </div>
+              <span className="text-[11px] md:text-xs font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400">
+                Live &middot; self-updating &middot; driven by my data
+              </span>
+            </div>
+
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-4">
+              This entire page is alive.
+            </h2>
+
+            <div className="space-y-4 text-base md:text-lg text-gray-700 dark:text-gray-300 leading-relaxed">
+              <p>
+                Every number, every chart, every percentage, and{' '}
+                <strong>every conclusion</strong> you are about to read on this page &mdash; and
+                across the rest of the EvoNash dashboard &mdash; is computed live from my own
+                running PostgreSQL database the moment you open this page. Nothing on the page
+                is hardcoded. <strong>Refresh the tab and the page rewrites itself</strong>{' '}
+                using whatever the data says right now.
+              </p>
+              <p>
+                That includes the <em>narrative</em>, not just the numbers. The effect-size
+                label (&quot;negligible&quot; vs. &quot;medium&quot; vs. &quot;large&quot;),
+                the p-value verdict (&quot;not significant&quot; vs. &quot;essentially zero&quot;),
+                the sign-test description (&quot;evenly split&quot; vs. &quot;overwhelmingly
+                toward adaptive&quot;), the confidence-interval phrasing, even the final
+                verdict at the end of section 18 &mdash; the page&apos;s own code chooses the
+                wording based on what is actually true in the live data.{' '}
+                <strong>
+                  If my data ever shifted to disagree with my hypothesis, this page would say so
+                  honestly, without me touching a single line of text.
+                </strong>
+              </p>
+              <p>
+                That is unusual. Most science-fair projects &mdash; and even most published
+                research write-ups &mdash; have static prose with a few numbers placeholder-swapped
+                in. The author writes the conclusion before the data lands, and the conclusion
+                stays put even if the data later shifts. Here the conclusions are derived from
+                live aggregates of <DynamicExperimentCount /> experiments and{' '}
+                <DynamicGenerationRows />, with paired-seed analysis, sign tests, sensitivity
+                trims, and effect-size calculations all recomputed on every page load. You are
+                reading a <em>self-updating scientific document about an experiment that is
+                still running</em>, not a snapshot frozen at submission time.
+              </p>
+            </div>
+
+            {/* Three-pillar summary */}
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="bg-white/60 dark:bg-gray-900/40 rounded-lg p-3.5 border border-indigo-200/60 dark:border-indigo-800/40">
+                <div className="text-xs uppercase tracking-wider text-indigo-600 dark:text-indigo-400 font-bold mb-1.5">
+                  Numbers
+                </div>
+                <div className="text-sm text-gray-700 dark:text-gray-300 leading-snug">
+                  p-values, Cohen&apos;s d, win rate, mean per-pair difference, 95% CIs,
+                  sensitivity table &mdash; all recomputed live on every load.
+                </div>
+              </div>
+              <div className="bg-white/60 dark:bg-gray-900/40 rounded-lg p-3.5 border border-purple-200/60 dark:border-purple-800/40">
+                <div className="text-xs uppercase tracking-wider text-purple-600 dark:text-purple-400 font-bold mb-1.5">
+                  Narrative
+                </div>
+                <div className="text-sm text-gray-700 dark:text-gray-300 leading-snug">
+                  Effect-size labels, significance verdicts, direction-of-effect framing &mdash;
+                  auto-picked to match what the data actually shows.
+                </div>
+              </div>
+              <div className="bg-white/60 dark:bg-gray-900/40 rounded-lg p-3.5 border border-pink-200/60 dark:border-pink-800/40">
+                <div className="text-xs uppercase tracking-wider text-pink-600 dark:text-pink-400 font-bold mb-1.5">
+                  Conclusion
+                </div>
+                <div className="text-sm text-gray-700 dark:text-gray-300 leading-snug">
+                  The final verdict box reflects whatever the data says &mdash; even if it
+                  ever disagreed with the hypothesis, the page would say so.
+                </div>
+              </div>
+            </div>
+
+            {/* Closing line */}
+            <p className="mt-5 text-sm italic text-indigo-700 dark:text-indigo-300">
+              I designed it this way because real science is honest about its data &mdash; and
+              the only way to keep a dashboard honest is to let the data write the page.
+            </p>
+          </div>
+        </section>
+
         {/* About This Project — Feature Card */}
         <section className="sci-card p-6 md:p-8 animate-fade-in">
           <h2 className="section-heading">
