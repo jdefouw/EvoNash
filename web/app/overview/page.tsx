@@ -168,6 +168,96 @@ export default function OverviewPage() {
         </div>
 
         {/* ════════════════════════════════════════════════════════════════ */}
+        {/* Recognition & Resources — fair status, project board, scope     */}
+        {/* ════════════════════════════════════════════════════════════════ */}
+        <section className="rounded-2xl p-5 md:p-6 animate-fade-in border-2 border-amber-300 dark:border-amber-700/50 bg-gradient-to-br from-amber-50 via-yellow-50 to-emerald-50 dark:from-amber-950/30 dark:via-yellow-950/20 dark:to-emerald-950/30">
+          <div className="flex flex-col md:flex-row md:items-start gap-5">
+            {/* Trophy icon */}
+            <div className="flex-shrink-0 mx-auto md:mx-0">
+              <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                <svg className="w-8 h-8 md:w-9 md:h-9 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.539 1.118l-2.8-2.034a1 1 0 00-1.176 0l-2.8 2.034c-.783.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+              </div>
+            </div>
+
+            <div className="flex-1 text-center md:text-left">
+              <div className="text-xs font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400 mb-1">
+                CWSF 2026 &middot; Selected for Nationals
+              </div>
+              <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                Recognition &amp; Project Resources
+              </h2>
+              <p className="text-sm md:text-base text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
+                This project was judged at the{' '}
+                <a
+                  href="https://region.youthscience.ca/cariboo-mainline/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-amber-700 dark:text-amber-400 underline decoration-amber-400/50 underline-offset-2 hover:decoration-amber-500"
+                >
+                  Cariboo-Mainline Regional Science Fair
+                </a>{' '}
+                on <strong>April&nbsp;13, 2026</strong> and was selected to advance to the{' '}
+                <strong>Canada-Wide Science Fair (CWSF) 2026</strong>. The dashboard you are
+                viewing &mdash; <strong>sf.defouw.ca</strong> &mdash; is the core scientific
+                instrument and the entirety of the experimental platform: every simulation,
+                every statistical test, every chart, and every conclusion lives here.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Project board card */}
+                <a
+                  href="https://partner.projectboard.world/ysc/project/evonash-accelerating-convergence-to-nash-equilibrium"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-start gap-3 p-3.5 rounded-xl bg-white/70 dark:bg-gray-900/50 border border-amber-300/60 dark:border-amber-700/40 hover:bg-white dark:hover:bg-gray-900 hover:border-amber-400 dark:hover:border-amber-600 transition-all"
+                >
+                  <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center group-hover:bg-amber-200 dark:group-hover:bg-amber-900/60 transition-colors">
+                    <svg className="w-5 h-5 text-amber-700 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2a4 4 0 014-4h2a4 4 0 014 4v2M3 7l9-4 9 4M5 9v8a2 2 0 002 2h10a2 2 0 002-2V9" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">
+                      CWSF Digital Project Board
+                    </div>
+                    <div className="text-sm font-semibold text-gray-900 dark:text-white mb-0.5 truncate">
+                      partner.projectboard.world &rarr;
+                    </div>
+                    <div className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">
+                      A core CWSF requirement: my official project poster, abstract, and
+                      methodology hosted on Youth Science Canada&apos;s judging platform.
+                    </div>
+                  </div>
+                </a>
+
+                {/* Live dashboard card */}
+                <div className="flex items-start gap-3 p-3.5 rounded-xl bg-white/70 dark:bg-gray-900/50 border border-emerald-300/60 dark:border-emerald-700/40">
+                  <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-emerald-700 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-0.5">
+                      The Live Experiment
+                    </div>
+                    <div className="text-sm font-semibold text-gray-900 dark:text-white mb-0.5 truncate">
+                      sf.defouw.ca
+                    </div>
+                    <div className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">
+                      The complete experimental platform &mdash; simulation, database,
+                      worker pool, statistical analysis, and dashboard. You are reading it now.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ════════════════════════════════════════════════════════════════ */}
         {/* Live Data Preamble — declares the page's self-updating nature   */}
         {/* ════════════════════════════════════════════════════════════════ */}
         <section className="relative overflow-hidden rounded-2xl p-6 md:p-8 animate-fade-in border-2 border-indigo-200 dark:border-indigo-800/50 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-indigo-950/40 dark:via-purple-950/30 dark:to-pink-950/40">

@@ -265,9 +265,29 @@ export default function DashboardPage() {
       <div className="hero-banner px-5 sm:px-8 py-8 animate-fade-in">
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-6">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/15 backdrop-blur-sm rounded-full text-white/90 text-xs font-medium mb-3">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              CWSF 2026 Candidate
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <a
+                href="https://partner.projectboard.world/ysc/project/evonash-accelerating-convergence-to-nash-equilibrium"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold backdrop-blur-sm border border-amber-300/50 bg-gradient-to-r from-amber-500/30 via-yellow-500/30 to-emerald-500/30 text-white hover:from-amber-500/40 hover:via-yellow-500/40 hover:to-emerald-500/40 transition-colors"
+                title="View digital project board on Youth Science Canada"
+              >
+                <svg className="w-3.5 h-3.5 text-amber-200" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.539 1.118l-2.8-2.034a1 1 0 00-1.176 0l-2.8 2.034c-.783.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+                Selected for CWSF 2026
+              </a>
+              <a
+                href="https://region.youthscience.ca/cariboo-mainline/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 backdrop-blur-sm text-white/85 text-[11px] font-medium border border-white/15 hover:bg-white/20 transition-colors"
+                title="Cariboo-Mainline Regional Science Fair — judged April 13, 2026"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                via Cariboo-Mainline Regional Science Fair
+              </a>
             </div>
             <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
               EvoNash Scientific Dashboard

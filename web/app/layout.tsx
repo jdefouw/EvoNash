@@ -4,8 +4,8 @@ import MobileNav from '@/components/MobileNav'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'EvoNash - Science Fair Experiment',
-  description: 'Accelerating Convergence to Nash Equilibrium in Genetic Neural Networks via Adaptive Mutation Rates',
+  title: 'EvoNash — CWSF 2026 Project',
+  description: 'Accelerating Convergence to Nash Equilibrium in Genetic Neural Networks via Adaptive Mutation Rates. Selected for the Canada-Wide Science Fair 2026.',
 }
 
 export default function RootLayout({
