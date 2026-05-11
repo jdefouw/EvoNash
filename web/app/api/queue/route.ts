@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { queryOne, queryAll, query } from '@/lib/postgres'
 import { ExperimentConfig } from '@/types/protocol'
+import { CONVERGED_RUNS_CTES } from '@/lib/convergence-sql'
 import crypto from 'crypto'
 
 // Force dynamic rendering since we query the database
@@ -150,12 +151,16 @@ export async function POST(request: NextRequest) {
     // so workers don't waste time on the group that's already ahead.
     // =========================================================================
     const experiments = await queryAll(
-      `WITH seed_balance AS (
+      `WITH ${CONVERGED_RUNS_CTES},
+      seed_balance AS (
+        -- Count CONVERGED experiments per (seed, group). A completed-but-not-
+        -- converged experiment does NOT count toward the priority tier, so the
+        -- queue's notion of "done" matches the dashboard's "viable pair" tier.
         SELECT
           random_seed,
-          COUNT(*) FILTER (WHERE experiment_group = 'CONTROL' AND status IN ('COMPLETED', 'RUNNING')) as ctrl_done,
-          COUNT(*) FILTER (WHERE experiment_group = 'EXPERIMENTAL' AND status IN ('COMPLETED', 'RUNNING')) as exp_done
-        FROM experiments
+          COUNT(*) FILTER (WHERE experiment_group = 'CONTROL') as ctrl_done,
+          COUNT(*) FILTER (WHERE experiment_group = 'EXPERIMENTAL') as exp_done
+        FROM converged_runs
         GROUP BY random_seed
       )
       SELECT

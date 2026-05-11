@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+
 interface ConvergenceEntry {
   experimentId: string
   group: string
@@ -31,7 +33,83 @@ interface SeedRow {
   experimentalRunning: number
 }
 
+type TopupStatus =
+  | { kind: 'idle' }
+  | { kind: 'running' }
+  | { kind: 'success'; totalSpawned: number; shortfalls: number }
+  | { kind: 'error'; message: string }
+
 export default function SeedPairsCard({ convergenceData, activeSeedWorkers = [], totalSeeds }: SeedPairsCardProps) {
+  const [topupStatus, setTopupStatus] = useState<TopupStatus>({ kind: 'idle' })
+
+  const runTopup = async (dryRun: boolean) => {
+    // API key lookup (sessionStorage, then user prompt)
+    let key = typeof window !== 'undefined' ? sessionStorage.getItem('evonash_api_key') : null
+    if (!key) {
+      const entered = typeof window !== 'undefined'
+        ? window.prompt(
+            'Top-up endpoint requires the EvoNash admin API key.\n\n' +
+              'Paste it here (stored in this browser tab only):'
+          )
+        : null
+      if (!entered) return
+      key = entered.trim()
+      try { sessionStorage.setItem('evonash_api_key', key) } catch {}
+    }
+
+    setTopupStatus({ kind: 'running' })
+    try {
+      const res = await fetch('/api/experiments/topup-seeds', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${key}`,
+        },
+        body: JSON.stringify({ dryRun }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.status === 401 || res.status === 403) {
+        try { sessionStorage.removeItem('evonash_api_key') } catch {}
+        setTopupStatus({ kind: 'error', message: 'API key rejected. Click again to re-enter.' })
+        return
+      }
+      if (!res.ok) {
+        setTopupStatus({ kind: 'error', message: data?.error || `HTTP ${res.status}` })
+        return
+      }
+      if (dryRun) {
+        // Show the plan summary as a confirm dialog before doing it for real
+        const planLines = (data.plan as Array<{ seed: number; group: string; converged: number; inFlight: number; spawn: number }>)
+          .slice(0, 20)
+          .map(p => `  seed ${p.seed}  ${p.group}  converged=${p.converged}  inflight=${p.inFlight}  → spawn ${p.spawn}`)
+          .join('\n')
+        const more = data.plan.length > 20 ? `\n  …and ${data.plan.length - 20} more rows` : ''
+        const confirmed = window.confirm(
+          `Dry-run plan:\n` +
+          `  Target converged per side: ${data.targetConverged}\n` +
+          `  Buffer extras per side:   ${data.bufferExtra}\n` +
+          `  Total seeds with shortfall: ${data.totalShortfallSeeds}\n` +
+          `  Total experiments to spawn: ${data.plan.reduce((s: number, p: any) => s + p.spawn, 0)}\n\n` +
+          `First rows:\n${planLines}${more}\n\n` +
+          `Proceed and create these experiments?`
+        )
+        if (confirmed) {
+          await runTopup(false)
+          return
+        }
+        setTopupStatus({ kind: 'idle' })
+      } else {
+        setTopupStatus({
+          kind: 'success',
+          totalSpawned: data.totalSpawned ?? 0,
+          shortfalls: data.totalShortfallSeeds ?? 0,
+        })
+      }
+    } catch (err: any) {
+      setTopupStatus({ kind: 'error', message: err?.message || 'Network error' })
+    }
+  }
+
   // Build running counts lookup
   const runningMap = new Map<string, number>()
   for (const w of activeSeedWorkers) {
@@ -157,9 +235,33 @@ export default function SeedPairsCard({ convergenceData, activeSeedWorkers = [],
             Each seed needs ≥10 converged CTRL + ≥10 converged EXP to be a viable pair
           </p>
         </div>
-        <div className="text-right">
-          <div className="text-2xl font-bold text-indigo-500">{pairedCount}<span className="text-sm text-gray-400">/{totalSeedsInSystem}</span></div>
-          <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">Paired Seeds</div>
+        <div className="flex items-start gap-3">
+          {/* Top-up shortfalls button */}
+          <div className="flex flex-col items-end gap-1">
+            <button
+              type="button"
+              onClick={() => runTopup(true)}
+              disabled={topupStatus.kind === 'running'}
+              className="px-2.5 py-1 text-[11px] font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 rounded-full border border-indigo-300 dark:border-indigo-700 disabled:opacity-50 disabled:cursor-wait whitespace-nowrap"
+              title="Spawn PENDING experiments for seeds whose converged count is below the viable-pair threshold. Requires admin API key. Shows a dry-run plan first."
+            >
+              {topupStatus.kind === 'running' ? 'Working…' : '⚙ Top up shortfalls'}
+            </button>
+            {topupStatus.kind === 'success' && (
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                ✓ Spawned {topupStatus.totalSpawned} ({topupStatus.shortfalls} shortfalls)
+              </span>
+            )}
+            {topupStatus.kind === 'error' && (
+              <span className="text-[10px] text-red-600 dark:text-red-400 font-medium max-w-[14em] truncate" title={topupStatus.message}>
+                ✗ {topupStatus.message}
+              </span>
+            )}
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold text-indigo-500">{pairedCount}<span className="text-sm text-gray-400">/{totalSeedsInSystem}</span></div>
+            <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">Paired Seeds</div>
+          </div>
         </div>
       </div>
 
